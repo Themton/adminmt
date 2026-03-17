@@ -1,5 +1,5 @@
 // ═══ Google Sheet Realtime Sync ═══
-const SHEET_URL = 'https://script.google.com/macros/s/AKfycbxPoooGWacm6H1SAjvj_AN1qdp6-Qe7a1vdpwFzha22980Whru_abzfty0Uenv4pD_Ppg/exec'
+const SHEET_URL = 'https://script.google.com/macros/s/AKfycbwXpxTz3NfpNQSx1PJp9bc49DOCLyUburJd5W67Pa_qus4pUzjIUI93PBPmFz_qqXZMQA/exec'
 
 export function syncOrderToSheet(order, employeeName) {
   if (!SHEET_URL) return
