@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>PayloadContent</key>
+    <array>
+        <dict>
+            <key>FullScreen</key>
+            <true/>
+            <key>Icon</key>
+            <data></data>
+            <key>IsRemovable</key>
+            <true/>
+            <key>Label</key>
+            <string>ADMIN THE MT</string>
+            <key>PayloadDescription</key>
+            <string>ADMIN THE MT - ระบบจัดการยอดขาย</string>
+            <key>PayloadDisplayName</key>
+            <string>ADMIN THE MT</string>
+            <key>PayloadIdentifier</key>
+            <string>com.adminmt.webclip</string>
+            <key>PayloadType</key>
+            <string>com.apple.webClip.managed</string>
+            <key>PayloadUUID</key>
+            <string>A1B2C3D4-E5F6-7890-ABCD-EF1234567890</string>
+            <key>PayloadVersion</key>
+            <integer>1</integer>
+            <key>Precomposed</key>
+            <true/>
+            <key>URL</key>
+            <string>https://themton.github.io/adminmt/</string>
+        </dict>
+    </array>
+    <key>PayloadDescription</key>
+    <string>ติดตั้ง ADMIN THE MT บนหน้าจอ iPhone</string>
+    <key>PayloadDisplayName</key>
+    <string>ADMIN THE MT</string>
+    <key>PayloadIdentifier</key>
+    <string>com.adminmt.profile</string>
+    <key>PayloadOrganization</key>
+    <string>ADMIN THE MT</string>
+    <key>PayloadRemovalDisallowed</key>
+    <false/>
+    <key>PayloadType</key>
+    <string>Configuration</string>
+    <key>PayloadUUID</key>
+    <string>B2C3D4E5-F6A7-8901-BCDE-F12345678901</string>
+    <key>PayloadVersion</key>
+    <integer>1</integer>
+    <key>ConsentText</key>
+    <dict>
+        <key>default</key>
+        <string>กดติดตั้งเพื่อเพิ่ม ADMIN THE MT บนหน้าจอ iPhone ใช้งานเหมือนแอปเต็มจอ</string>
+    </dict>
+</dict>
+</plist>
