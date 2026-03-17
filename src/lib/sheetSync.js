@@ -1,6 +1,6 @@
 // ═══ Google Sheet Realtime Sync ═══
 // เปลี่ยน URL นี้เป็นของคุณ (ดูวิธีใน SETUP.md)
-const SHEET_URL = ''
+const SHEET_URL = 'https://script.google.com/macros/s/AKfycbwXpxTz3NfpNQSx1PJp9bc49DOCLyUburJd5W67Pa_qus4pUzjIUI93PBPmFz_qqXZMQA/exec'
 
 export function syncOrderToSheet(order, employeeName) {
   if (!SHEET_URL) return
