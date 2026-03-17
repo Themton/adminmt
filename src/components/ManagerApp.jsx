@@ -199,10 +199,10 @@ export default function ManagerApp({ profile, onLogout }) {
   // ลบ user
   const deleteUser = async (p) => {
     if (!confirm(`ลบผู้ใช้ "${p.full_name}" (${p.email})?\n\nออเดอร์ของผู้ใช้นี้จะยังอยู่`)) return
-    const { error } = await supabase.from('mt_profiles').delete().eq('id', p.id)
+    const { error } = await supabase.rpc('mt_delete_user', { user_id: p.id })
     if (error) { flash('❌ ' + error.message); return }
     setProfiles(prev => prev.filter(x => x.id !== p.id))
-    flash('🗑 ลบผู้ใช้สำเร็จ')
+    flash('🗑 ลบผู้ใช้สำเร็จ (ลบจาก Supabase แล้ว)')
   }
 
   const updateUserTeam = async () => {
