@@ -165,11 +165,20 @@ export default function ManagerApp({ profile, onLogout }) {
   const createUser = async () => {
     const f = userForm; if (!f.email || !f.password || !f.fullName) { flash('❌ กรอกให้ครบ'); return }
     if (f.password.length < 6) { flash('❌ รหัสผ่าน 6 ตัวขึ้นไป'); return }
+    // เก็บ session หัวหน้าก่อน
     const { data: { session: cur } } = await supabase.auth.getSession()
+    // สร้าง user ใหม่
     const { data, error } = await supabase.auth.signUp({ email: f.email, password: f.password })
     if (error) { flash('❌ ' + error.message); return }
-    await supabase.from('mt_profiles').insert({ id: data.user.id, full_name: f.fullName, role: f.role, team_id: f.teamId || null })
+    const newUserId = data.user?.id
+    if (!newUserId) { flash('❌ สร้าง user ไม่สำเร็จ'); return }
+    // กลับเป็น session หัวหน้าก่อน insert profile
     if (cur) await supabase.auth.setSession({ access_token: cur.access_token, refresh_token: cur.refresh_token })
+    // รอ session กลับ
+    await new Promise(r => setTimeout(r, 500))
+    // insert profile
+    const { error: profErr } = await supabase.from('mt_profiles').insert({ id: newUserId, full_name: f.fullName, role: f.role, team_id: f.teamId || null })
+    if (profErr) { flash('❌ สร้าง profile ไม่สำเร็จ: ' + profErr.message); return }
     const { data: profs } = await supabase.from('mt_profiles').select('*, mt_teams(id, name)').order('created_at', { ascending: false })
     setProfiles(profs || [])
     setShowUserModal(false); setUserForm({ email: '', password: '', fullName: '', role: 'employee', teamId: '' })

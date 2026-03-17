@@ -6,6 +6,6 @@ import react from '@vitejs/plugin-react'
 // เช่น repo ชื่อ my-sales → base: '/my-sales/'
 // ════════════════════════════════════════════
 export default defineConfig({
-  base: '/adminmt/',
+  base: '/saleshub/',
   plugins: [react()],
 })
