@@ -47,7 +47,20 @@ export default function ManagerApp({ profile, onLogout }) {
   const [editOrder, setEditOrder] = useState(null)
   const saveOrder = async () => {
     if (!editOrder) return
-    const { id, ...updates } = editOrder
+    const u = editOrder
+    // validate
+    const missing = []
+    if (!u.customer_name) missing.push('ชื่อ')
+    if (!u.customer_phone) missing.push('เบอร์โทร')
+    if (!u.customer_address) missing.push('ที่อยู่')
+    if (!u.sub_district) missing.push('ตำบล')
+    if (!u.district) missing.push('อำเภอ')
+    if (!u.zip_code) missing.push('รหัส ปณ.')
+    if (!u.province) missing.push('จังหวัด')
+    if (!u.sale_price || parseFloat(u.sale_price) <= 0) missing.push('ราคาขาย')
+    if (missing.length > 0) { flash('❌ กรุณากรอก: ' + missing.join(', ')); return }
+
+    const { id, ...updates } = u
     const { data: updated, error } = await supabase.from('mt_orders').update({
       customer_phone: updates.customer_phone, customer_name: updates.customer_name,
       customer_address: updates.customer_address, sub_district: updates.sub_district,
@@ -58,7 +71,6 @@ export default function ManagerApp({ profile, onLogout }) {
     if (error) { flash('❌ ' + error.message); return }
     setOrders(prev => prev.map(o => o.id === id ? { ...o, ...updates } : o))
     if (dateOrders) setDateOrders(prev => prev.map(o => o.id === id ? { ...o, ...updates } : o))
-    // Sync ไป Sheet — ลบเก่า แล้วเพิ่มใหม่
     if (updated?.order_number) {
       deleteOrderFromSheet(updated.order_number)
       setTimeout(() => syncOrderToSheet(updated), 500)
@@ -225,19 +237,39 @@ export default function ManagerApp({ profile, onLogout }) {
       {/* Edit Order Modal */}
       <Modal show={!!editOrder} onClose={() => setEditOrder(null)} title="✏️ แก้ไขออเดอร์">
         {editOrder && <>
-          <FI label="ชื่อลูกค้า" value={editOrder.customer_name} onChange={e => setEditOrder(p=>({...p,customer_name:e.target.value}))} />
-          <FI label="เบอร์โทร" value={editOrder.customer_phone} onChange={e => setEditOrder(p=>({...p,customer_phone:e.target.value}))} />
-          <FI label="ที่อยู่" value={editOrder.customer_address} onChange={e => setEditOrder(p=>({...p,customer_address:e.target.value}))} />
+          <FI label="ชื่อลูกค้า *" value={editOrder.customer_name} onChange={e => setEditOrder(p=>({...p,customer_name:e.target.value}))} />
+          <FI label="เบอร์โทร *" value={editOrder.customer_phone} onChange={e => setEditOrder(p=>({...p,customer_phone:e.target.value}))} />
+          <FI label="ที่อยู่ *" value={editOrder.customer_address} onChange={e => setEditOrder(p=>({...p,customer_address:e.target.value}))} />
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <FI label="ตำบล" value={editOrder.sub_district||''} onChange={e => setEditOrder(p=>({...p,sub_district:e.target.value}))} />
-            <FI label="อำเภอ" value={editOrder.district||''} onChange={e => setEditOrder(p=>({...p,district:e.target.value}))} />
+            <FI label="ตำบล *" value={editOrder.sub_district||''} onChange={e => setEditOrder(p=>({...p,sub_district:e.target.value}))} />
+            <FI label="อำเภอ *" value={editOrder.district||''} onChange={e => setEditOrder(p=>({...p,district:e.target.value}))} />
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <FI label="รหัส ปณ." value={editOrder.zip_code||''} onChange={e => setEditOrder(p=>({...p,zip_code:e.target.value}))} />
-            <FI label="จังหวัด" value={editOrder.province||''} onChange={e => setEditOrder(p=>({...p,province:e.target.value}))} />
+            <FI label="รหัส ปณ. *" value={editOrder.zip_code||''} onChange={e => setEditOrder(p=>({...p,zip_code:e.target.value}))} />
+            <FI label="จังหวัด *" value={editOrder.province||''} onChange={e => setEditOrder(p=>({...p,province:e.target.value}))} />
+          </div>
+          {/* ปุ่ม auto-fill จาก ตำบล/zip */}
+          {editOrder.sub_district && (!editOrder.district || !editOrder.province) && (
+            <button onClick={async () => {
+              try {
+                const mod = await import('../data/addresses.json')
+                const addrs = mod.default
+                const found = addrs.find(a => a.s === editOrder.sub_district) || addrs.find(a => a.z === editOrder.zip_code)
+                if (found) {
+                  setEditOrder(p => ({ ...p, sub_district: found.s, district: found.d, zip_code: found.z, province: found.p }))
+                  flash('✅ เติมที่อยู่อัตโนมัติ')
+                } else { flash('❌ ไม่พบข้อมูลตำบลนี้') }
+              } catch { flash('❌ โหลดข้อมูลไม่ได้') }
+            }} style={{ width: '100%', padding: '10px', marginBottom: 14, borderRadius: T.radiusSm, border: '1px solid rgba(184,134,11,0.2)', background: 'rgba(184,134,11,0.05)', color: T.gold, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>
+              🔍 เติมอำเภอ/จังหวัดอัตโนมัติ
+            </button>
+          )}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <FI label="📘 FB/Line" value={editOrder.customer_social||''} onChange={e => setEditOrder(p=>({...p,customer_social:e.target.value}))} />
+            <FI label="📦 เพจ" value={editOrder.sales_channel||''} onChange={e => setEditOrder(p=>({...p,sales_channel:e.target.value}))} />
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <FI label="ราคาขาย" type="number" value={editOrder.sale_price} onChange={e => setEditOrder(p=>({...p,sale_price:e.target.value}))} />
+            <FI label="ราคาขาย *" type="number" value={editOrder.sale_price} onChange={e => setEditOrder(p=>({...p,sale_price:e.target.value}))} />
             <FI label="COD" type="number" value={editOrder.cod_amount} onChange={e => setEditOrder(p=>({...p,cod_amount:e.target.value}))} />
           </div>
           <FI label="หมายเหตุ" value={editOrder.remark||''} onChange={e => setEditOrder(p=>({...p,remark:e.target.value}))} />

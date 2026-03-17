@@ -69,6 +69,16 @@ function parseSmartPaste(text, addressData = []) {
       const found = addressData.find(a => a.d.includes(result.district))
       if (found) { result.zipCode = found.z; result.subDistrict = found.s; if (!result.province) result.province = found.p }
     }
+    // เติมข้อมูลที่ขาด — ถ้ามี ตำบล หรือ zip แต่ อำเภอ/จังหวัด ว่าง
+    if (result.subDistrict && (!result.district || !result.province || !result.zipCode)) {
+      const found = addressData.find(a => a.s === result.subDistrict && (result.zipCode ? a.z === result.zipCode : true))
+      if (found) { if (!result.district) result.district = found.d; if (!result.province) result.province = found.p; if (!result.zipCode) result.zipCode = found.z }
+    }
+    if (result.zipCode && (!result.district || !result.subDistrict || !result.province)) {
+      const found = addressData.find(a => a.z === result.zipCode && (result.subDistrict ? a.s === result.subDistrict : true))
+      if (found) { if (!result.district) result.district = found.d; if (!result.subDistrict) result.subDistrict = found.s; if (!result.province) result.province = found.p }
+    }
+    // ตรวจสอบ zip กับ ตำบล ตรงกันไหม
     if (result.subDistrict && result.zipCode) {
       const verify = addressData.find(a => a.s === result.subDistrict && a.z === result.zipCode)
       if (!verify) {
