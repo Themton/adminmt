@@ -48,16 +48,21 @@ export default function ManagerApp({ profile, onLogout }) {
   const saveOrder = async () => {
     if (!editOrder) return
     const { id, ...updates } = editOrder
-    const { error } = await supabase.from('mt_orders').update({
+    const { data: updated, error } = await supabase.from('mt_orders').update({
       customer_phone: updates.customer_phone, customer_name: updates.customer_name,
       customer_address: updates.customer_address, sub_district: updates.sub_district,
       district: updates.district, zip_code: updates.zip_code, province: updates.province,
       customer_social: updates.customer_social, sales_channel: updates.sales_channel,
       sale_price: updates.sale_price, cod_amount: updates.cod_amount, remark: updates.remark,
-    }).eq('id', id)
+    }).eq('id', id).select().single()
     if (error) { flash('❌ ' + error.message); return }
     setOrders(prev => prev.map(o => o.id === id ? { ...o, ...updates } : o))
     if (dateOrders) setDateOrders(prev => prev.map(o => o.id === id ? { ...o, ...updates } : o))
+    // Sync ไป Sheet — ลบเก่า แล้วเพิ่มใหม่
+    if (updated?.order_number) {
+      deleteOrderFromSheet(updated.order_number)
+      setTimeout(() => syncOrderToSheet(updated), 500)
+    }
     setEditOrder(null)
     flash('✅ แก้ไขออเดอร์สำเร็จ')
   }
