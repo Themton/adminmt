@@ -614,10 +614,10 @@ export default function ManagerApp({ profile, onLogout }) {
                 </div>
 
                 {/* ปุ่ม */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: p.id === profile.id ? '1fr' : '1fr 1fr 1fr', gap: 6 }}>
                   <button onClick={() => { setTab('orders'); setUserFilter(p.id) }} style={{ padding: '8px', borderRadius: 8, border: `1px solid ${T.border}`, background: T.surfaceAlt, color: T.gold, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>📋 รายงาน</button>
-                  <button onClick={() => setEditUserData({...p})} style={{ padding: '8px', borderRadius: 8, border: `1px solid ${T.border}`, background: T.surfaceAlt, color: T.gold, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>✏️ แก้ไข</button>
-                  <button onClick={() => deleteUser(p)} style={{ padding: '8px', borderRadius: 8, border: '1px solid rgba(214,48,49,0.2)', background: 'rgba(214,48,49,0.04)', color: T.danger, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>🗑 ลบ</button>
+                  {p.id !== profile.id && <button onClick={() => setEditUserData({...p})} style={{ padding: '8px', borderRadius: 8, border: `1px solid ${T.border}`, background: T.surfaceAlt, color: T.gold, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>✏️ แก้ไข</button>}
+                  {p.id !== profile.id && <button onClick={() => deleteUser(p)} style={{ padding: '8px', borderRadius: 8, border: '1px solid rgba(214,48,49,0.2)', background: 'rgba(214,48,49,0.04)', color: T.danger, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>🗑 ลบ</button>}
                 </div>
               </div>
             )
