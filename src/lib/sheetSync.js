@@ -1,5 +1,6 @@
 // ═══ Google Sheet Realtime Sync ═══
-const SHEET_URL = 'https://script.google.com/macros/s/AKfycbwXpxTz3NfpNQSx1PJp9bc49DOCLyUburJd5W67Pa_qus4pUzjIUI93PBPmFz_qqXZMQA/exec'
+// เปลี่ยน URL นี้เป็นของคุณ (ดูวิธีใน SETUP.md)
+const SHEET_URL = ''
 
 export function syncOrderToSheet(order, employeeName) {
   if (!SHEET_URL) return
@@ -10,14 +11,21 @@ export function syncOrderToSheet(order, employeeName) {
       body: JSON.stringify({
         action: 'sync',
         orders: [{
-          phone: order.customer_phone, name: order.customer_name,
-          address: order.customer_address, sub_district: order.sub_district,
-          district: order.district, zip: order.zip_code,
-          fb: order.customer_social, channel: order.sales_channel,
+          phone: order.customer_phone,
+          name: order.customer_name,
+          address: order.customer_address,
+          sub_district: order.sub_district,
+          district: order.district,
+          zip: order.zip_code,
+          fb: order.customer_social,
+          channel: order.sales_channel,
           admin: order.employee_name || employeeName || '',
-          price: order.sale_price, cod: order.cod_amount,
-          remark: order.remark, province: order.province || '',
-          slip: order.slip_url || '', order_number: order.order_number,
+          price: order.sale_price,
+          cod: order.cod_amount,
+          remark: order.remark,
+          province: order.province || '',
+          slip: order.slip_url || '',
+          order_number: order.order_number,
         }]
       })
     })
