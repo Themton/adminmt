@@ -522,13 +522,51 @@ export default function ManagerApp({ profile, onLogout }) {
             </div>
             <div style={{ display: 'flex', gap: 10 }}><Btn full onClick={updateUserTeam} grad={T.grad1}>💾 บันทึก</Btn><Btn full outline onClick={() => setEditUser(null)}>ยกเลิก</Btn></div>
           </Modal>
-          {profiles.map(p => (
-            <div key={p.id} style={{ ...glass, padding: '16px 18px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 14 }}>
-              <div style={{ width: 42, height: 42, borderRadius: T.radiusSm, background: p.role === 'manager' ? T.grad3 : T.grad1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 800, color: '#fff' }}>{p.full_name?.[0]||'?'}</div>
-              <div style={{ flex: 1 }}><div style={{ fontWeight: 600, fontSize: 14 }}>{p.full_name}</div><div style={{ fontSize: 11, color: T.textDim }}>{p.role === 'manager' ? '🏢 หัวหน้า' : '👤 พนักงาน'}{p.mt_teams?.name && ` · ${p.mt_teams.name}`}</div></div>
-              <button onClick={() => { setEditUser(p); setEditUserTeam(p.team_id || '') }} style={{ padding: '6px 10px', borderRadius: 8, border: `1px solid ${T.border}`, background: T.surfaceAlt, color: T.textDim, fontSize: 12, cursor: 'pointer', fontFamily: T.font }}>✏️ ทีม</button>
-            </div>
-          ))}
+          {profiles.map(p => {
+            const userOrders = orders.filter(o => o.employee_id === p.id)
+            const todayOrd = userOrders.filter(o => sameDay(o.created_at, new Date()))
+            const monthOrd = userOrders.filter(o => thisMonth(o.created_at))
+            const todaySales = todayOrd.reduce((s, o) => s + (parseFloat(o.sale_price) || 0), 0)
+            const monthSales = monthOrd.reduce((s, o) => s + (parseFloat(o.sale_price) || 0), 0)
+            const codCount = monthOrd.filter(o => o.payment_type !== 'transfer').length
+            const transCount = monthOrd.filter(o => o.payment_type === 'transfer').length
+            return (
+              <div key={p.id} style={{ ...glass, padding: '16px 18px', marginBottom: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 10 }}>
+                  <div style={{ width: 46, height: 46, borderRadius: T.radiusSm, background: p.role === 'manager' ? T.grad3 : T.grad1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 800, color: '#fff' }}>{p.full_name?.[0]||'?'}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700, fontSize: 15 }}>{p.full_name}</div>
+                    <div style={{ fontSize: 11, color: T.textDim }}>{p.role === 'manager' ? '🏢 หัวหน้า' : '👤 พนักงาน'}{p.mt_teams?.name && ` · ${p.mt_teams.name}`}</div>
+                    <div style={{ fontSize: 10, color: T.textMuted, marginTop: 2 }}>ID: {p.id.substring(0, 8)}...</div>
+                  </div>
+                  <button onClick={() => { setEditUser(p); setEditUserTeam(p.team_id || '') }} style={{ padding: '8px 12px', borderRadius: 8, border: `1px solid ${T.border}`, background: T.surfaceAlt, color: T.gold, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>✏️ ทีม</button>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 6 }}>
+                  <div style={{ padding: '8px', borderRadius: T.radiusSm, background: 'rgba(184,134,11,0.04)', textAlign: 'center' }}>
+                    <div style={{ fontSize: 9, color: T.textMuted }}>วันนี้</div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: T.gold }}>{todayOrd.length}</div>
+                    <div style={{ fontSize: 10, color: T.textDim }}>฿{fmt(todaySales)}</div>
+                  </div>
+                  <div style={{ padding: '8px', borderRadius: T.radiusSm, background: 'rgba(45,138,78,0.04)', textAlign: 'center' }}>
+                    <div style={{ fontSize: 9, color: T.textMuted }}>เดือนนี้</div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: T.success }}>{monthOrd.length}</div>
+                    <div style={{ fontSize: 10, color: T.textDim }}>฿{fmt(monthSales)}</div>
+                  </div>
+                  <div style={{ padding: '8px', borderRadius: T.radiusSm, background: 'rgba(184,134,11,0.03)', textAlign: 'center' }}>
+                    <div style={{ fontSize: 9, color: T.textMuted }}>📦 COD</div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: T.gold }}>{codCount}</div>
+                  </div>
+                  <div style={{ padding: '8px', borderRadius: T.radiusSm, background: 'rgba(45,138,78,0.03)', textAlign: 'center' }}>
+                    <div style={{ fontSize: 9, color: T.textMuted }}>🏦 โอน</div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: T.success }}>{transCount}</div>
+                  </div>
+                </div>
+                <div style={{ marginTop: 8 }}>
+                  <button onClick={() => { setTab('orders'); setUserFilter(p.id) }} style={{ width: '100%', padding: '8px', borderRadius: 8, border: `1px solid ${T.border}`, background: T.surfaceAlt, color: T.gold, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>📋 ดูรายงานของ {p.full_name}</button>
+                </div>
+              </div>
+            )
+          })}
         </>}
 
         {/* ══ BACKUP ══ */}
