@@ -1,6 +1,6 @@
 // ═══ Google Sheet Realtime Sync ═══
 // Sync อัตโนมัติทุกครั้งที่สร้าง/ลบออเดอร์
-const SHEET_URL = 'https://script.google.com/macros/s/AKfycbwXpxTz3NfpNQSx1PJp9bc49DOCLyUburJd5W67Pa_qus4pUzjIUI93PBPmFz_qqXZMQA/exec'
+const SHEET_URL = 'https://script.google.com/macros/s/AKfycbz_CNi0LbvIN-WE9gNSWX8CbZ03kMNOiUlhBlxXmkt1hTABw8qI_eqtPzCNCBiX0JFaSg/exec'
 
 export function syncOrderToSheet(order, employeeName) {
   if (!SHEET_URL) return
