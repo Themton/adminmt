@@ -159,10 +159,6 @@ export default function ManagerApp({ profile, onLogout }) {
   const ts = { background: '#fff', border: `1px solid ${T.border}`, borderRadius: 12, fontFamily: T.font, fontSize: 13 }
 
   // ═══ Handlers ═══
-  const handleDateChange = (d) => {
-    setDateFilter(d)
-  }
-
   const saveTeam = async () => {
     const n = teamName.trim(); if (!n) return
     if (editTeam) {
@@ -410,78 +406,97 @@ export default function ManagerApp({ profile, onLogout }) {
 
         {/* ══ ORDERS ══ */}
         {tab === 'orders' && (() => {
-          // ค้นหา + กรอง — ทำงานบน orders ทั้งหมดเสมอ
-          const searchFilter = (list) => {
-            if (!searchQuery) return list
-            const q = searchQuery.toLowerCase()
-            return list.filter(o =>
+          const q = searchQuery.toLowerCase()
+          const filtered = orders.filter(o => {
+            if (dateFilter && (o.order_date||'').substring(0,10) !== dateFilter) return false
+            if (userFilter && o.employee_id !== userFilter) return false
+            if (q && !(
               (o.customer_name||'').toLowerCase().includes(q) ||
               (o.customer_phone||'').includes(q) ||
               (o.district||'').includes(q) ||
               (o.province||'').includes(q) ||
               (o.remark||'').toLowerCase().includes(q) ||
-              (o.customer_social||'').toLowerCase().includes(q) ||
               (o.employee_name||'').toLowerCase().includes(q)
-            )
-          }
-          const filterByUser = (list) => userFilter ? list.filter(o => o.employee_id === userFilter) : list
-          const filterByDate = (list) => dateFilter ? list.filter(o => (o.order_date||'').substring(0,10) === dateFilter) : list
-          const allFiltered = searchFilter(filterByUser(filterByDate(orders)))
-          console.log('orders total:', orders.length, '| filtered:', allFiltered.length, '| date:', dateFilter, '| user:', userFilter ? profiles.find(p=>p.id===userFilter)?.full_name : 'all')
-          const totalSales = allFiltered.reduce((s,o) => s+(parseFloat(o.sale_price)||0), 0)
-          const codOrders = allFiltered.filter(o => o.payment_type !== 'transfer')
-          const transOrders = allFiltered.filter(o => o.payment_type === 'transfer')
+            )) return false
+            return true
+          })
+          const total = filtered.reduce((s,o) => s+(parseFloat(o.sale_price)||0), 0)
+          const cod = filtered.filter(o => o.payment_type !== 'transfer')
+          const trans = filtered.filter(o => o.payment_type === 'transfer')
 
           return <>
-          <div style={{ ...glass, padding: 16, marginBottom: 12 }}>
-            {/* ค้นหา */}
-            <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="🔍 ค้นหา ชื่อ เบอร์ จังหวัด หมายเหตุ..."
-              style={{ width: '100%', padding: '12px 14px', borderRadius: T.radiusSm, border: `1px solid ${T.border}`, background: T.surfaceAlt, color: T.text, fontSize: 14, fontFamily: T.font, outline: 'none', boxSizing: 'border-box', marginBottom: 10 }} />
-
-            {/* วันที่ + พนักงาน */}
-            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-              <input type="date" value={dateFilter} onChange={e => handleDateChange(e.target.value)} style={{ flex: 1, padding: '10px 12px', borderRadius: T.radiusSm, background: T.surfaceAlt, border: `1px solid ${T.border}`, color: T.text, fontSize: 13, fontFamily: T.font, outline: 'none' }} />
-              <select value={userFilter} onChange={e => setUserFilter(e.target.value)} style={{ flex: 1, padding: '10px 12px', borderRadius: T.radiusSm, border: `1px solid ${T.border}`, background: T.surfaceAlt, color: T.text, fontSize: 13, fontFamily: T.font, outline: 'none' }}>
+          {/* ตัวกรอง */}
+          <div style={{ ...glass, padding: 14, marginBottom: 10 }}>
+            <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="🔍 ค้นหา ชื่อ เบอร์ จังหวัด..."
+              style={{ width: '100%', padding: '10px 12px', borderRadius: T.radiusSm, border: `1px solid ${T.border}`, background: T.surfaceAlt, color: T.text, fontSize: 13, fontFamily: T.font, outline: 'none', boxSizing: 'border-box', marginBottom: 8 }} />
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)}
+                style={{ flex: 1, padding: '8px 10px', borderRadius: T.radiusSm, background: T.surfaceAlt, border: `1px solid ${T.border}`, color: T.text, fontSize: 12, fontFamily: T.font, outline: 'none' }} />
+              <select value={userFilter} onChange={e => setUserFilter(e.target.value)}
+                style={{ flex: 1, padding: '8px 10px', borderRadius: T.radiusSm, border: `1px solid ${T.border}`, background: T.surfaceAlt, color: T.text, fontSize: 12, fontFamily: T.font, outline: 'none' }}>
                 <option value="">ทุกคน</option>
                 {profiles.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
               </select>
-              {(dateFilter || userFilter || searchQuery) && <Btn sm outline onClick={() => { handleDateChange(''); setUserFilter(''); setSearchQuery('') }}>ล้าง</Btn>}
+              {(dateFilter || userFilter || searchQuery) && <button onClick={() => { setDateFilter(todayStr); setUserFilter(''); setSearchQuery('') }}
+                style={{ padding: '8px 12px', borderRadius: T.radiusSm, border: `1px solid ${T.border}`, background: '#fff', color: T.textDim, fontSize: 11, cursor: 'pointer', fontFamily: T.font }}>ล้าง</button>}
             </div>
-
             {/* สรุป */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: T.textDim }}>
-              <span>{allFiltered.length} รายการ · ฿{fmt(totalSales)}</span>
-              <span>📦 {codOrders.length} · 🏦 {transOrders.length}</span>
+            <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: T.radiusSm, background: 'rgba(184,134,11,0.04)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                <span style={{ color: T.textDim }}>{filtered.length} รายการ</span>
+                <span style={{ fontWeight: 700, color: T.gold }}>฿{fmt(total)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginTop: 4, color: T.textMuted }}>
+                <span>📦 COD {cod.length} · ฿{fmt(cod.reduce((s,o)=>s+(parseFloat(o.cod_amount)||0),0))}</span>
+                <span>🏦 โอน {trans.length} · ฿{fmt(trans.reduce((s,o)=>s+(parseFloat(o.sale_price)||0),0))}</span>
+              </div>
             </div>
           </div>
 
-          {/* รายการ */}
-          <div style={{ maxHeight: '60vh', overflowY: 'auto' }}>
-            {allFiltered.map((o, i) => (
-              <div key={o.id} style={{ ...glass, padding: '12px 14px', marginBottom: 6 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                      <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'rgba(184,134,11,0.1)', color: T.gold, fontWeight: 700 }}>#{o.daily_seq || i+1}</span>
-                      <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: o.payment_type === 'transfer' ? 'rgba(45,138,78,0.1)' : 'rgba(184,134,11,0.08)', color: o.payment_type === 'transfer' ? T.success : T.gold, fontWeight: 600 }}>{o.payment_type === 'transfer' ? 'โอน' : 'COD'}</span>
-                      <span style={{ fontSize: 13, fontWeight: 600 }}>{o.customer_name}</span>
-                    </div>
-                    <div style={{ fontSize: 11, color: T.textDim }}>📱 {o.customer_phone} · {o.district||'—'} {o.province||''}</div>
-                    <div style={{ fontSize: 10, color: T.textMuted }}>{fmtDateTime(o.created_at)} · {o.employee_name||'—'}</div>
-                    {o.remark && <div style={{ fontSize: 10, color: T.textDim }}>💬 {o.remark}</div>}
-                  </div>
-                  <div style={{ textAlign: 'right', marginLeft: 10 }}>
-                    <div style={{ fontWeight: 800, fontSize: 15, color: T.success }}>฿{fmt(parseFloat(o.sale_price)||0)}</div>
-                    {o.slip_url && <a href={o.slip_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, color: T.success, textDecoration: 'none' }}>🧾 สลิป</a>}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-                  <button onClick={() => setEditOrder({...o})} style={{ flex: 1, padding: '6px', borderRadius: 6, border: `1px solid ${T.border}`, background: '#fff', color: T.gold, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>✏️ แก้ไข</button>
-                  <button onClick={() => deleteOrder(o)} style={{ flex: 1, padding: '6px', borderRadius: 6, border: '1px solid rgba(214,48,49,0.15)', background: '#fff', color: T.danger, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>🗑 ลบ</button>
-                </div>
-              </div>
-            ))}
-            {allFiltered.length === 0 && <Empty text={searchQuery ? 'ไม่พบผลลัพธ์' : 'ไม่มีออเดอร์'} />}
+          {/* ตาราง */}
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: T.font }}>
+              <thead>
+                <tr style={{ background: T.surfaceAlt, position: 'sticky', top: 0 }}>
+                  <th style={{ padding: '8px 6px', textAlign: 'left', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>#</th>
+                  <th style={{ padding: '8px 6px', textAlign: 'left', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>ชื่อ</th>
+                  <th style={{ padding: '8px 6px', textAlign: 'left', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>เบอร์</th>
+                  <th style={{ padding: '8px 6px', textAlign: 'left', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>ที่อยู่</th>
+                  <th style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>ยอด</th>
+                  <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>ประเภท</th>
+                  <th style={{ padding: '8px 6px', textAlign: 'left', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>แอดมิน</th>
+                  <th style={{ padding: '8px 6px', textAlign: 'left', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>เวลา</th>
+                  <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>จัดการ</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((o, i) => (
+                  <tr key={o.id} style={{ borderBottom: `1px solid ${T.border}` }}>
+                    <td style={{ padding: '8px 6px', fontWeight: 700, color: T.gold }}>{o.daily_seq || i+1}</td>
+                    <td style={{ padding: '8px 6px' }}>
+                      <div style={{ fontWeight: 600 }}>{o.customer_name}</div>
+                      {o.remark && <div style={{ fontSize: 10, color: T.textMuted }}>💬 {o.remark}</div>}
+                    </td>
+                    <td style={{ padding: '8px 6px', fontSize: 11, color: T.textDim }}>{o.customer_phone}</td>
+                    <td style={{ padding: '8px 6px', fontSize: 11, color: T.textDim }}>{o.district||''} {o.province||''}</td>
+                    <td style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 700, color: T.success }}>฿{fmt(parseFloat(o.sale_price)||0)}</td>
+                    <td style={{ padding: '8px 6px', textAlign: 'center' }}>
+                      <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: o.payment_type === 'transfer' ? 'rgba(45,138,78,0.1)' : 'rgba(184,134,11,0.08)', color: o.payment_type === 'transfer' ? T.success : T.gold, fontWeight: 600 }}>{o.payment_type === 'transfer' ? 'โอน' : 'COD'}</span>
+                      {o.slip_url && <a href={o.slip_url} target="_blank" rel="noopener noreferrer" style={{ marginLeft: 4, fontSize: 10, color: T.success }}>🧾</a>}
+                    </td>
+                    <td style={{ padding: '8px 6px', fontSize: 11, color: T.textDim }}>{o.employee_name||'—'}</td>
+                    <td style={{ padding: '8px 6px', fontSize: 10, color: T.textMuted }}>{fmtDateTime(o.created_at)}</td>
+                    <td style={{ padding: '8px 6px', textAlign: 'center' }}>
+                      <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
+                        <button onClick={() => setEditOrder({...o})} style={{ padding: '4px 8px', borderRadius: 4, border: `1px solid ${T.border}`, background: '#fff', color: T.gold, fontSize: 10, cursor: 'pointer', fontFamily: T.font }}>✏️</button>
+                        <button onClick={() => deleteOrder(o)} style={{ padding: '4px 8px', borderRadius: 4, border: '1px solid rgba(214,48,49,0.15)', background: '#fff', color: T.danger, fontSize: 10, cursor: 'pointer', fontFamily: T.font }}>🗑</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {filtered.length === 0 && <Empty text={searchQuery ? 'ไม่พบผลลัพธ์' : 'ไม่มีออเดอร์'} />}
           </div>
         </>
         })()}
