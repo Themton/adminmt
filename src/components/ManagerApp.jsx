@@ -425,8 +425,9 @@ export default function ManagerApp({ profile, onLogout }) {
             )
           }
           const filterByUser = (list) => userFilter ? list.filter(o => o.employee_id === userFilter) : list
-          const filterByDate = (list) => dateFilter ? list.filter(o => o.order_date === dateFilter) : list
+          const filterByDate = (list) => dateFilter ? list.filter(o => (o.order_date||'').substring(0,10) === dateFilter) : list
           const allFiltered = searchFilter(filterByUser(filterByDate(orders)))
+          console.log('orders total:', orders.length, '| filtered:', allFiltered.length, '| date:', dateFilter, '| user:', userFilter ? profiles.find(p=>p.id===userFilter)?.full_name : 'all')
           const totalSales = allFiltered.reduce((s,o) => s+(parseFloat(o.sale_price)||0), 0)
           const codOrders = allFiltered.filter(o => o.payment_type !== 'transfer')
           const transOrders = allFiltered.filter(o => o.payment_type === 'transfer')
