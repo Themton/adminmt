@@ -263,11 +263,11 @@ export default function EmployeeApp({ profile, onLogout }) {
     }
     fetchOrders()
 
-    // Realtime
+    // Realtime — เฉพาะออเดอร์ของตัวเอง
     const ch = supabase.channel('emp-orders-' + profile.id).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'mt_orders' },
       (payload) => {
         const o = payload.new
-        if ((profile.team_id && o.team_id === profile.team_id) || o.employee_id === profile.id) {
+        if (o.employee_id === profile.id) {
           setOrders(prev => [o, ...prev])
         }
       }
