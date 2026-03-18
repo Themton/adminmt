@@ -68,10 +68,11 @@ export function syncAllToSheet(orders, profiles) {
 export function resetSheet(orders, profiles) {
   if (!SHEET_URL) return
   try {
+    const sorted = [...orders].sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
     fetch(SHEET_URL, {
       method: 'POST', mode: 'no-cors',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'reset', orders: orders.map(o => orderToRow(o, profiles)) })
+      body: JSON.stringify({ action: 'reset', orders: sorted.map(o => orderToRow(o, profiles)) })
     })
   } catch {}
 }
