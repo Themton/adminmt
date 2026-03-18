@@ -362,6 +362,21 @@ export default function EmployeeApp({ profile, onLogout }) {
     setSubmitting(true)
     const amt = parseFloat(form.amount) || 0
 
+    // เช็คซ้ำ: เบอร์เดียวกัน + เพจเดียวกัน + วันเดียวกัน
+    const todayDate = new Date().toISOString().split('T')[0]
+    const { data: dupCheck } = await supabase.from('mt_orders')
+      .select('id, customer_name')
+      .eq('customer_phone', form.customerPhone)
+      .eq('order_date', todayDate)
+      .eq('sales_channel', form.salesChannel || '')
+    if (dupCheck && dupCheck.length > 0) {
+      const dupName = dupCheck[0].customer_name
+      if (!confirm(`⚠️ พบออเดอร์ซ้ำวันนี้!\n\nเบอร์: ${form.customerPhone}\nชื่อ: ${dupName}\nเพจ: ${form.salesChannel || '—'}\n\nต้องการบันทึกซ้ำหรือไม่?`)) {
+        setSubmitting(false)
+        return
+      }
+    }
+
     // อัพโหลดสลิป (ถ้ามี)
     let slipUrl = ''
     if (slipFile && paymentType === 'transfer') {
