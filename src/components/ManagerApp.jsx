@@ -15,7 +15,8 @@ export default function ManagerApp({ profile, onLogout }) {
   const [teams, setTeams] = useState([])
   const [profiles, setProfiles] = useState([])
   const [toast, setToast] = useState(null)
-  const [dateFilter, setDateFilter] = useState('')
+  const todayStr = new Date().toISOString().split('T')[0]
+  const [dateFilter, setDateFilter] = useState(todayStr)
   const [dateOrders, setDateOrders] = useState(null)
   const [userFilter, setUserFilter] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
@@ -91,6 +92,9 @@ export default function ManagerApp({ profile, onLogout }) {
         setOrders(ordersRes.data || [])
         setTeams(teamsRes.data || [])
         setProfiles(profilesRes.data || [])
+        // โหลดออเดอร์วันนี้
+        const { data: todayData } = await supabase.from('mt_orders').select('*').eq('order_date', todayStr).order('created_at', { ascending: false })
+        setDateOrders(todayData || [])
       } catch (e) { console.error('Load error:', e) }
     }
     load()
@@ -149,7 +153,7 @@ export default function ManagerApp({ profile, onLogout }) {
   // ═══ Handlers ═══
   const handleDateChange = async (d) => {
     setDateFilter(d)
-    if (d) { try { const { data } = await supabase.from('mt_orders').select('*').eq('order_date', d).order('daily_seq'); setDateOrders(data || []) } catch { setDateOrders([]) } }
+    if (d) { try { const { data } = await supabase.from('mt_orders').select('*').eq('order_date', d).order('created_at', { ascending: false }); setDateOrders(data || []) } catch { setDateOrders([]) } }
     else setDateOrders(null)
   }
 
