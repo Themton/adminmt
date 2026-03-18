@@ -18,6 +18,7 @@ export default function ManagerApp({ profile, onLogout }) {
   const [dateFilter, setDateFilter] = useState('')
   const [dateOrders, setDateOrders] = useState(null)
   const [userFilter, setUserFilter] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
 
   // Team modal
   const [showTeamModal, setShowTeamModal] = useState(false)
@@ -399,138 +400,77 @@ export default function ManagerApp({ profile, onLogout }) {
 
         {/* ══ ORDERS ══ */}
         {tab === 'orders' && (() => {
-          // กรองตาม user ที่เลือก
+          // ค้นหา + กรอง
+          const searchFilter = (list) => {
+            if (!searchQuery) return list
+            const q = searchQuery.toLowerCase()
+            return list.filter(o =>
+              (o.customer_name||'').toLowerCase().includes(q) ||
+              (o.customer_phone||'').includes(q) ||
+              (o.district||'').includes(q) ||
+              (o.province||'').includes(q) ||
+              (o.remark||'').toLowerCase().includes(q) ||
+              (o.customer_social||'').toLowerCase().includes(q) ||
+              (o.employee_name||'').toLowerCase().includes(q)
+            )
+          }
           const filterByUser = (list) => userFilter ? list.filter(o => o.employee_id === userFilter) : list
-          const filteredDateOrders = dateOrders ? filterByUser(dateOrders) : null
-          const filteredDisplayOrders = filterByUser(displayOrders)
+          const allFiltered = searchFilter(filterByUser(dateOrders || displayOrders))
+          const totalSales = allFiltered.reduce((s,o) => s+(parseFloat(o.sale_price)||0), 0)
+          const codOrders = allFiltered.filter(o => o.payment_type !== 'transfer')
+          const transOrders = allFiltered.filter(o => o.payment_type === 'transfer')
 
           return <>
-          <div style={{ ...glass, padding: 16, marginBottom: 14 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>📅 เลือกวันที่</div>
-            <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
-              <input type="date" value={dateFilter} onChange={e => handleDateChange(e.target.value)} style={{ flex: 1, padding: '11px 14px', borderRadius: T.radiusSm, background: T.surfaceAlt, border: `1px solid ${T.border}`, color: T.text, fontSize: 14, fontFamily: T.font, outline: 'none' }} />
-              {dateFilter && <Btn sm outline onClick={() => handleDateChange('')}>ล้าง</Btn>}
-            </div>
+          <div style={{ ...glass, padding: 16, marginBottom: 12 }}>
+            {/* ค้นหา */}
+            <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="🔍 ค้นหา ชื่อ เบอร์ จังหวัด หมายเหตุ..."
+              style={{ width: '100%', padding: '12px 14px', borderRadius: T.radiusSm, border: `1px solid ${T.border}`, background: T.surfaceAlt, color: T.text, fontSize: 14, fontFamily: T.font, outline: 'none', boxSizing: 'border-box', marginBottom: 10 }} />
 
-            {/* เลือก User */}
-            <div style={{ marginBottom: 10 }}>
-              <label style={{ display: 'block', fontSize: 12, color: T.textDim, fontWeight: 500, marginBottom: 6 }}>👤 เลือกพนักงาน</label>
-              <select value={userFilter} onChange={e => setUserFilter(e.target.value)} style={{ width: '100%', padding: '11px 14px', borderRadius: T.radiusSm, border: `1px solid ${T.border}`, background: T.surfaceAlt, color: T.text, fontSize: 14, fontFamily: T.font, outline: 'none', boxSizing: 'border-box' }}>
-                <option value="">— ทุกคน —</option>
-                {profiles.filter(p => p.role === 'employee').map(p => (
-                  <option key={p.id} value={p.id}>{p.full_name}{p.mt_teams?.name ? ` (${p.mt_teams.name})` : ''}</option>
-                ))}
-                {profiles.filter(p => p.role === 'manager').map(p => (
-                  <option key={p.id} value={p.id}>🏢 {p.full_name}</option>
-                ))}
+            {/* วันที่ + พนักงาน */}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+              <input type="date" value={dateFilter} onChange={e => handleDateChange(e.target.value)} style={{ flex: 1, padding: '10px 12px', borderRadius: T.radiusSm, background: T.surfaceAlt, border: `1px solid ${T.border}`, color: T.text, fontSize: 13, fontFamily: T.font, outline: 'none' }} />
+              <select value={userFilter} onChange={e => setUserFilter(e.target.value)} style={{ flex: 1, padding: '10px 12px', borderRadius: T.radiusSm, border: `1px solid ${T.border}`, background: T.surfaceAlt, color: T.text, fontSize: 13, fontFamily: T.font, outline: 'none' }}>
+                <option value="">ทุกคน</option>
+                {profiles.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
               </select>
+              {(dateFilter || userFilter || searchQuery) && <Btn sm outline onClick={() => { handleDateChange(''); setUserFilter(''); setSearchQuery('') }}>ล้าง</Btn>}
             </div>
 
-            {/* สรุปยอด */}
-            {dateFilter && filteredDateOrders && (() => {
-              const codOrders = filteredDateOrders.filter(o => o.payment_type !== 'transfer')
-              const transferOrders = filteredDateOrders.filter(o => o.payment_type === 'transfer')
-              const totalSales = filteredDateOrders.reduce((s,o) => s+(parseFloat(o.sale_price)||0), 0)
-              const codSum = codOrders.reduce((s,o) => s+(parseFloat(o.cod_amount)||0), 0)
-              const transferSum = transferOrders.reduce((s,o) => s+(parseFloat(o.sale_price)||0), 0)
-              return (
-                <div style={{ marginTop: 4, padding: 14, borderRadius: T.radiusSm, background: 'rgba(184,134,11,0.05)', border: '1px solid rgba(184,134,11,0.12)' }}>
-                  <div style={{ fontSize: 13, color: T.textDim, marginBottom: 8 }}>
-                    {fmtDateFull(dateFilter)}
-                    {userFilter && <span style={{ marginLeft: 8, padding: '2px 8px', borderRadius: 6, background: 'rgba(184,134,11,0.1)', fontSize: 11, fontWeight: 600, color: T.gold }}>{profiles.find(p=>p.id===userFilter)?.full_name}</span>}
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
-                    <div><div style={{ fontSize: 10, color: T.textMuted }}>ทั้งหมด</div><div style={{ fontSize: 20, fontWeight: 900, color: T.gold }}>{filteredDateOrders.length}</div></div>
-                    <div><div style={{ fontSize: 10, color: T.textMuted }}>ยอดรวม</div><div style={{ fontSize: 20, fontWeight: 900, color: T.success }}>฿{fmt(totalSales)}</div></div>
-                    <div><div style={{ fontSize: 10, color: T.textMuted }}>📦 COD ({codOrders.length})</div><div style={{ fontSize: 20, fontWeight: 900, color: T.gold }}>฿{fmt(codSum)}</div></div>
-                    <div><div style={{ fontSize: 10, color: T.textMuted }}>🏦 โอน ({transferOrders.length})</div><div style={{ fontSize: 20, fontWeight: 900, color: T.success }}>฿{fmt(transferSum)}</div></div>
-                  </div>
-                </div>
-              )
-            })()}
+            {/* สรุป */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: T.textDim }}>
+              <span>{allFiltered.length} รายการ · ฿{fmt(totalSales)}</span>
+              <span>📦 {codOrders.length} · 🏦 {transOrders.length}</span>
+            </div>
           </div>
 
-          {/* แยก COD / โอนเงิน */}
-          {dateFilter && filteredDateOrders && (() => {
-            const codOrders = filteredDateOrders.filter(o => o.payment_type !== 'transfer')
-            const transferOrders = filteredDateOrders.filter(o => o.payment_type === 'transfer')
-
-            const renderOrder = (o, idx) => (
-              <div key={o.id} style={{ ...glass, padding: '12px 16px', marginBottom: 6 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <div>
-                    <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700, background: 'rgba(184,134,11,0.1)', color: T.gold, marginRight: 6 }}>ลำดับที่ {o.daily_seq || (idx + 1)}</span>
-                    <span style={{ fontSize: 13, fontWeight: 600 }}>{o.customer_name}</span>
+          {/* รายการ */}
+          <div style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+            {allFiltered.map((o, i) => (
+              <div key={o.id} style={{ ...glass, padding: '12px 14px', marginBottom: 6 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                      <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: 'rgba(184,134,11,0.1)', color: T.gold, fontWeight: 700 }}>#{o.daily_seq || i+1}</span>
+                      <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: o.payment_type === 'transfer' ? 'rgba(45,138,78,0.1)' : 'rgba(184,134,11,0.08)', color: o.payment_type === 'transfer' ? T.success : T.gold, fontWeight: 600 }}>{o.payment_type === 'transfer' ? 'โอน' : 'COD'}</span>
+                      <span style={{ fontSize: 13, fontWeight: 600 }}>{o.customer_name}</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: T.textDim }}>📱 {o.customer_phone} · {o.district||'—'} {o.province||''}</div>
+                    <div style={{ fontSize: 10, color: T.textMuted }}>{fmtDateTime(o.created_at)} · {o.employee_name||'—'}</div>
+                    {o.remark && <div style={{ fontSize: 10, color: T.textDim }}>💬 {o.remark}</div>}
                   </div>
-                  <div style={{ fontWeight: 800, fontSize: 14, color: T.success }}>฿{fmt(parseFloat(o.sale_price)||0)}</div>
+                  <div style={{ textAlign: 'right', marginLeft: 10 }}>
+                    <div style={{ fontWeight: 800, fontSize: 15, color: T.success }}>฿{fmt(parseFloat(o.sale_price)||0)}</div>
+                    {o.slip_url && <a href={o.slip_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 10, color: T.success, textDecoration: 'none' }}>🧾 สลิป</a>}
+                  </div>
                 </div>
-                <div style={{ fontSize: 11, color: T.textDim }}>📱 {o.customer_phone} · 📍 {o.district||'—'} {o.sales_channel && `· 📦 ${o.sales_channel}`} · 👤 {o.employee_name || profiles.find(p=>p.id===o.employee_id)?.full_name || '—'}</div>
-                <div style={{ fontSize: 10, color: T.textMuted, marginTop: 2 }}>🕐 {fmtDateTime(o.created_at)}</div>
-                {o.remark && <div style={{ fontSize: 11, color: T.textDim }}>💬 {o.remark}</div>}
-                {o.slip_url && <a href={o.slip_url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 4, padding: '3px 8px', borderRadius: 6, background: 'rgba(45,138,78,0.06)', border: '1px solid rgba(45,138,78,0.15)', fontSize: 11, color: T.success, fontWeight: 600, textDecoration: 'none' }}>🧾 ดูสลิป</a>}
-                <div style={{ display: 'flex', gap: 8, marginTop: 8, borderTop: `1px solid ${T.border}`, paddingTop: 8 }}>
-                  <button onClick={() => setEditOrder({...o})} style={{ flex: 1, padding: '8px', borderRadius: 8, border: `1px solid ${T.border}`, background: T.surfaceAlt, color: T.gold, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>✏️ แก้ไข</button>
-                  <button onClick={() => deleteOrder(o)} style={{ flex: 1, padding: '8px', borderRadius: 8, border: '1px solid rgba(214,48,49,0.2)', background: 'rgba(214,48,49,0.04)', color: T.danger, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>🗑 ลบ</button>
+                <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                  <button onClick={() => setEditOrder({...o})} style={{ flex: 1, padding: '6px', borderRadius: 6, border: `1px solid ${T.border}`, background: '#fff', color: T.gold, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>✏️ แก้ไข</button>
+                  <button onClick={() => deleteOrder(o)} style={{ flex: 1, padding: '6px', borderRadius: 6, border: '1px solid rgba(214,48,49,0.15)', background: '#fff', color: T.danger, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>🗑 ลบ</button>
                 </div>
               </div>
-            )
-
-            return (
-              <div style={{ maxHeight: '55vh', overflowY: 'auto' }}>
-                {/* COD Section */}
-                {codOrders.length > 0 && (
-                  <div style={{ marginBottom: 16 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', marginBottom: 6 }}>
-                      <div style={{ fontSize: 14, fontWeight: 700 }}>📦 เก็บเงินปลายทาง (COD)</div>
-                      <div style={{ fontSize: 13, fontWeight: 800, color: T.gold }}>{codOrders.length} รายการ · ฿{fmt(codOrders.reduce((s,o)=>s+(parseFloat(o.cod_amount)||0),0))}</div>
-                    </div>
-                    {codOrders.map((o, i) => renderOrder(o, i))}
-                  </div>
-                )}
-
-                {/* Transfer Section */}
-                {transferOrders.length > 0 && (
-                  <div style={{ marginBottom: 16 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', marginBottom: 6 }}>
-                      <div style={{ fontSize: 14, fontWeight: 700 }}>🏦 โอนเงิน</div>
-                      <div style={{ fontSize: 13, fontWeight: 800, color: T.success }}>{transferOrders.length} รายการ · ฿{fmt(transferOrders.reduce((s,o)=>s+(parseFloat(o.sale_price)||0),0))}</div>
-                    </div>
-                    {transferOrders.map((o, i) => renderOrder(o, i))}
-                  </div>
-                )}
-
-                {filteredDateOrders.length === 0 && <Empty text="ไม่มีออเดอร์" />}
-              </div>
-            )
-          })()}
-
-          {!dateFilter && (
-            <div style={{ maxHeight: '55vh', overflowY: 'auto' }}>
-              {filteredDisplayOrders.map((o, i) => (
-                <div key={o.id} style={{ ...glass, padding: '12px 16px', marginBottom: 6 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <div>
-                      <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700, background: 'rgba(184,134,11,0.1)', color: T.gold, marginRight: 6 }}>ลำดับที่ {o.daily_seq || (i + 1)}</span>
-                      <span style={{ display: 'inline-block', padding: '2px 6px', borderRadius: 6, fontSize: 10, fontWeight: 600, background: o.payment_type === 'transfer' ? 'rgba(45,138,78,0.1)' : 'rgba(184,134,11,0.08)', color: o.payment_type === 'transfer' ? T.success : T.gold }}>
-                        {o.payment_type === 'transfer' ? '🏦 โอน' : '📦 COD'}
-                      </span>
-                      <div style={{ fontSize: 13, fontWeight: 600, marginTop: 2 }}>{o.customer_name}</div>
-                    </div>
-                    <div style={{ fontWeight: 800, fontSize: 14, color: T.success }}>฿{fmt(parseFloat(o.sale_price)||0)}</div>
-                  </div>
-                  <div style={{ fontSize: 11, color: T.textDim }}>📱 {o.customer_phone} · 📍 {o.district||'—'} · 👤 {o.employee_name || profiles.find(p=>p.id===o.employee_id)?.full_name || '—'}</div>
-                  <div style={{ fontSize: 10, color: T.textMuted, marginTop: 2 }}>🕐 {fmtDateTime(o.created_at)}</div>
-                  {o.remark && <div style={{ fontSize: 11, color: T.textDim }}>💬 {o.remark}</div>}
-                  {o.slip_url && <a href={o.slip_url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 4, padding: '3px 8px', borderRadius: 6, background: 'rgba(45,138,78,0.06)', border: '1px solid rgba(45,138,78,0.15)', fontSize: 11, color: T.success, fontWeight: 600, textDecoration: 'none' }}>🧾 ดูสลิป</a>}
-                  <div style={{ display: 'flex', gap: 8, marginTop: 8, borderTop: `1px solid ${T.border}`, paddingTop: 8 }}>
-                    <button onClick={() => setEditOrder({...o})} style={{ flex: 1, padding: '8px', borderRadius: 8, border: `1px solid ${T.border}`, background: T.surfaceAlt, color: T.gold, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>✏️ แก้ไข</button>
-                    <button onClick={() => deleteOrder(o)} style={{ flex: 1, padding: '8px', borderRadius: 8, border: '1px solid rgba(214,48,49,0.2)', background: 'rgba(214,48,49,0.04)', color: T.danger, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>🗑 ลบ</button>
-                  </div>
-                </div>
-              ))}
-              {filteredDisplayOrders.length === 0 && <Empty text="เลือกวันที่เพื่อดูรายงาน" />}
-            </div>
-          )}
+            ))}
+            {allFiltered.length === 0 && <Empty text={searchQuery ? 'ไม่พบผลลัพธ์' : 'ไม่มีออเดอร์'} />}
+          </div>
         </>
         })()}
 
