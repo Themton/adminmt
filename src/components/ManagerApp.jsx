@@ -84,7 +84,7 @@ export default function ManagerApp({ profile, onLogout }) {
     const load = async () => {
       try {
         const [ordersRes, teamsRes, profilesRes] = await Promise.all([
-          supabase.from('mt_orders').select('*').order('created_at', { ascending: false }).limit(200),
+          supabase.from('mt_orders').select('*').order('created_at', { ascending: false }),
           supabase.from('mt_teams').select('*').order('name'),
           supabase.from('mt_profiles').select('*, mt_teams(id, name)').order('created_at', { ascending: false }),
         ])
@@ -143,7 +143,7 @@ export default function ManagerApp({ profile, onLogout }) {
     return Object.values(m).map(e => ({ ...e, teamName: teams.find(t => t.id === e.team_id)?.name || '—' })).sort((a, b) => b.monthSales - a.monthSales)
   }, [orders, profiles, teams])
 
-  const displayOrders = dateOrders || orders.slice(0, 60)
+  const displayOrders = dateOrders || orders
   const ts = { background: '#fff', border: `1px solid ${T.border}`, borderRadius: 12, fontFamily: T.font, fontSize: 13 }
 
   // ═══ Handlers ═══
