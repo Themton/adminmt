@@ -410,7 +410,7 @@ export default function ManagerApp({ profile, onLogout }) {
 
         {/* ══ ORDERS ══ */}
         {tab === 'orders' && (() => {
-          // ค้นหา + กรอง
+          // ค้นหา + กรอง — ทำงานบน orders ทั้งหมดเสมอ
           const searchFilter = (list) => {
             if (!searchQuery) return list
             const q = searchQuery.toLowerCase()
@@ -425,8 +425,8 @@ export default function ManagerApp({ profile, onLogout }) {
             )
           }
           const filterByUser = (list) => userFilter ? list.filter(o => o.employee_id === userFilter) : list
-          const baseOrders = dateFilter && dateOrders ? dateOrders : orders
-          const allFiltered = searchFilter(filterByUser(baseOrders))
+          const filterByDate = (list) => dateFilter ? list.filter(o => o.order_date === dateFilter) : list
+          const allFiltered = searchFilter(filterByUser(filterByDate(orders)))
           const totalSales = allFiltered.reduce((s,o) => s+(parseFloat(o.sale_price)||0), 0)
           const codOrders = allFiltered.filter(o => o.payment_type !== 'transfer')
           const transOrders = allFiltered.filter(o => o.payment_type === 'transfer')
