@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { supabase } from '../lib/supabase'
-import { syncOrderToSheet, deleteOrderFromSheet, syncAllToSheet, resetSheet } from '../lib/sheetSync'
+import { syncOrderToSheet, updateOrderInSheet, deleteOrderFromSheet, syncAllToSheet, resetSheet } from '../lib/sheetSync'
 import OrderForm from './OrderForm'
 import { T, glass, fmt, fmtDate, fmtDateFull, fmtDateTime, sameDay, withinDays, thisMonth, Stat, Tabs, Btn, Toast, Modal, Empty, LiveDot } from './ui'
 
@@ -72,8 +72,7 @@ export default function ManagerApp({ profile, onLogout }) {
     setOrders(prev => prev.map(o => o.id === id ? { ...o, ...updates } : o))
     if (dateOrders) setDateOrders(prev => prev.map(o => o.id === id ? { ...o, ...updates } : o))
     if (updated?.order_number) {
-      deleteOrderFromSheet(updated.order_number)
-      setTimeout(() => syncOrderToSheet(updated), 500)
+      updateOrderInSheet(updated)
     }
     setEditOrder(null)
     flash('✅ แก้ไขออเดอร์สำเร็จ')

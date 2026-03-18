@@ -32,6 +32,17 @@ export function syncOrderToSheet(order, employeeName) {
   } catch {}
 }
 
+export function updateOrderInSheet(order) {
+  if (!SHEET_URL) return
+  try {
+    fetch(SHEET_URL, {
+      method: 'POST', mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'update', orders: [orderToRow(order)] })
+    })
+  } catch {}
+}
+
 export function deleteOrderFromSheet(orderNumber) {
   if (!SHEET_URL || !orderNumber) return
   try {
@@ -54,7 +65,6 @@ export function syncAllToSheet(orders, profiles) {
   } catch {}
 }
 
-// ลบ Sheet ทั้งหมด แล้วดึงจาก Supabase ใส่ใหม่
 export function resetSheet(orders, profiles) {
   if (!SHEET_URL) return
   try {
