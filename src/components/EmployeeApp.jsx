@@ -325,7 +325,8 @@ export default function EmployeeApp({ profile, onLogout }) {
   const handleAddressSelect = (a) => {
     const newForm = { ...form, subDistrict: a.s, district: a.d, zipCode: a.z, province: a.p }
     setForm(newForm)
-    setAddressWarning('') // เลือกจาก dropdown ถูกต้องเสมอ
+    setAddressWarning('')
+    setFieldErrors(prev => { const n = {...prev}; delete n.subDistrict; delete n.district; delete n.zipCode; delete n.province; return n })
   }
 
   const clearForm = () => { setForm({ customerPhone: '', customerName: '', customerAddress: '', subDistrict: '', district: '', zipCode: '', province: '', customerSocial: '', salesChannel: '', amount: '', remark: '' }); setPhoneError(''); setAddressWarning(''); setPasteText(''); setPaymentType('cod'); setSlipFile(null); setSlipPreview(null); setFieldErrors({}) }
@@ -339,10 +340,18 @@ export default function EmployeeApp({ profile, onLogout }) {
     else if (!validatePhone(form.customerPhone).valid) errs.customerPhone = validatePhone(form.customerPhone).msg
     if (!form.customerName) errs.customerName = 'กรุณากรอกชื่อ'
     if (!form.customerAddress) errs.customerAddress = 'กรุณากรอกที่อยู่'
+    if (!form.subDistrict) errs.subDistrict = 'กรุณากรอกตำบล'
+    if (!form.district) errs.district = 'กรุณากรอกอำเภอ'
+    if (!form.zipCode) errs.zipCode = 'กรุณากรอกรหัส ปณ.'
+    if (!form.province) errs.province = 'กรุณากรอกจังหวัด'
     if (!form.amount) errs.amount = 'กรุณากรอกยอดเงิน'
     if (paymentType === 'transfer' && !slipFile) errs.slip = 'กรุณาอัพโหลดสลิป'
     setFieldErrors(errs)
-    if (Object.keys(errs).length > 0) { setToast('❌ กรุณากรอกข้อมูลให้ครบ'); setTimeout(() => setToast(null), 2500); return }
+    if (Object.keys(errs).length > 0) {
+      const labels = { customerPhone: 'เบอร์โทร', customerName: 'ชื่อ', customerAddress: 'ที่อยู่', subDistrict: 'ตำบล', district: 'อำเภอ', zipCode: 'รหัส ปณ.', province: 'จังหวัด', amount: 'ยอดเงิน', slip: 'สลิป' }
+      const missing = Object.keys(errs).map(k => labels[k] || k).join(', ')
+      setToast('❌ กรุณากรอก: ' + missing); setTimeout(() => setToast(null), 3000); return
+    }
     setSubmitting(true)
     const amt = parseFloat(form.amount) || 0
 
@@ -494,12 +503,12 @@ export default function EmployeeApp({ profile, onLogout }) {
             <AddressSearch onSelect={handleAddressSelect} addresses={addresses} currentValue={form.subDistrict ? `${form.subDistrict} > ${form.district} > ${form.province} ${form.zipCode}` : ''} />
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <FI label="ตำบล" value={form.subDistrict} onChange={set('subDistrict')} placeholder="ตำบล" />
-              <FI label="อำเภอ" value={form.district} onChange={set('district')} placeholder="อำเภอ" />
+              <FI label="ตำบล *" value={form.subDistrict} onChange={set('subDistrict')} placeholder="ตำบล" error={fieldErrors.subDistrict} />
+              <FI label="อำเภอ *" value={form.district} onChange={set('district')} placeholder="อำเภอ" error={fieldErrors.district} />
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <FI label="รหัส ปณ." value={form.zipCode} onChange={set('zipCode')} placeholder="10500" />
-              <FI label="จังหวัด" value={form.province} onChange={set('province')} placeholder="กรุงเทพ" />
+              <FI label="รหัส ปณ. *" value={form.zipCode} onChange={set('zipCode')} placeholder="10500" error={fieldErrors.zipCode} />
+              <FI label="จังหวัด *" value={form.province} onChange={set('province')} placeholder="กรุงเทพ" error={fieldErrors.province} />
             </div>
             {addressWarning && (
               <div style={{ padding: '10px 14px', borderRadius: T.radiusSm, marginBottom: 14, background: 'rgba(214,48,49,0.05)', border: '1px solid rgba(214,48,49,0.15)', fontSize: 12, color: T.danger, lineHeight: 1.7 }}>
