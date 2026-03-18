@@ -1,5 +1,5 @@
 // ═══ Google Sheet Realtime Sync ═══
-const SHEET_URL = 'https://script.google.com/macros/s/AKfycbwvYeK51MfcADKKBPVuUBrjo22fdTQB1pdocWSCjGwBaJt0Oa5pYqa5l5KjlTpaMe1U/exec'
+const SHEET_URL = 'https://script.google.com/macros/s/AKfycbwKi1cYjJ4hFGQlXUaa8R3C5fWNApFhgWFfKQ0pptD2CSwKRGqkLpgAiKfVzsupc-le/exec'
 
 function toThaiTime(d) {
   if (!d) return ''
