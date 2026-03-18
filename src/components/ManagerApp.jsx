@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { supabase } from '../lib/supabase'
-import { syncOrderToSheet, deleteOrderFromSheet } from '../lib/sheetSync'
+import { syncOrderToSheet, deleteOrderFromSheet, syncAllToSheet } from '../lib/sheetSync'
 import OrderForm from './OrderForm'
 import { T, glass, fmt, fmtDate, fmtDateFull, fmtDateTime, sameDay, withinDays, thisMonth, Stat, Tabs, Btn, Toast, Modal, Empty, LiveDot } from './ui'
 
@@ -284,7 +284,15 @@ export default function ManagerApp({ profile, onLogout }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><img src="./logo.png" alt="" style={{ height: 32 }} /> <span style={{ fontSize: 18, fontWeight: 900 }}>ADMIN THE MT</span><LiveDot /></div>
           <div style={{ fontSize: 11, color: T.textDim }}>{profile.full_name} — หัวหน้า</div>
         </div>
-        <button onClick={onLogout} style={{ padding: '8px 14px', borderRadius: 8, border: `1px solid ${T.border}`, background: 'transparent', color: T.textDim, fontSize: 12, cursor: 'pointer', fontFamily: T.font }}>ออก</button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button onClick={async () => {
+            if (!confirm('ส่งออเดอร์ทั้งหมดไป Sheet?\n(ข้อมูลซ้ำจะถูกข้าม)')) return
+            flash('⏳ กำลัง Sync...')
+            syncAllToSheet(orders, profiles)
+            setTimeout(() => flash('✅ Sync ไป Sheet เรียบร้อย!'), 1000)
+          }} style={{ padding: '8px 14px', borderRadius: 8, border: `1px solid rgba(184,134,11,0.2)`, background: 'rgba(184,134,11,0.05)', color: T.gold, fontSize: 12, cursor: 'pointer', fontFamily: T.font, fontWeight: 600 }}>🔄 Sync</button>
+          <button onClick={onLogout} style={{ padding: '8px 14px', borderRadius: 8, border: `1px solid ${T.border}`, background: 'transparent', color: T.textDim, fontSize: 12, cursor: 'pointer', fontFamily: T.font }}>ออก</button>
+        </div>
       </div>
 
       <div style={{ padding: '16px 16px 0' }}>
