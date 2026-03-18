@@ -231,8 +231,9 @@ export default function EmployeeApp({ profile, onLogout }) {
   const [paymentType, setPaymentType] = useState('cod')
   const [slipFile, setSlipFile] = useState(null)
   const [slipPreview, setSlipPreview] = useState(null)
-  const [dateFilter, setDateFilter] = useState('')
-  const [dateOrders, setDateOrders] = useState(null)
+  const todayStr = new Date().toISOString().split('T')[0]
+  const [dateFilter, setDateFilter] = useState(todayStr)
+  
   const [submitting, setSubmitting] = useState(false)
   const [toast, setToast] = useState(null)
   const [pasteDetected, setPasteDetected] = useState(false)
@@ -244,14 +245,20 @@ export default function EmployeeApp({ profile, onLogout }) {
   useEffect(() => {
     getAddresses().then(setAddresses).catch(() => {})
 
-    // ดึง orders ของทีม (ถ้ามี team_id)
+    // ดึง orders ทั้งหมดของ user
     const fetchOrders = async () => {
       try {
-        let q = supabase.from('mt_orders').select('*').order('created_at', { ascending: false }).limit(100)
-        if (profile.team_id) q = q.eq('team_id', profile.team_id)
-        else q = q.eq('employee_id', profile.id)
-        const { data } = await q
-        setOrders(data || [])
+        let allOrders = []
+        let from = 0
+        while (true) {
+          let q = supabase.from('mt_orders').select('*').eq('employee_id', profile.id).order('created_at', { ascending: false }).range(from, from + 999)
+          const { data } = await q
+          if (!data || data.length === 0) break
+          allOrders = [...allOrders, ...data]
+          if (data.length < 1000) break
+          from += 1000
+        }
+        setOrders(allOrders)
       } catch {}
     }
     fetchOrders()
@@ -384,17 +391,8 @@ export default function EmployeeApp({ profile, onLogout }) {
     setSubmitting(false); setTimeout(() => setToast(null), 2500)
   }
 
-  const handleDateChange = async (d) => {
+  const handleDateChange = (d) => {
     setDateFilter(d)
-    if (d) {
-      try {
-        let q = supabase.from('mt_orders').select('*').eq('order_date', d).order('daily_seq')
-        if (profile.team_id) q = q.eq('team_id', profile.team_id)
-        else q = q.eq('employee_id', profile.id)
-        const { data } = await q
-        setDateOrders(data || [])
-      } catch { setDateOrders([]) }
-    } else setDateOrders(null)
   }
 
   const todayOrders = orders.filter(o => sameDay(o.created_at, new Date()))
@@ -402,7 +400,7 @@ export default function EmployeeApp({ profile, onLogout }) {
   const weekSum = orders.filter(o => withinDays(o.created_at, 7)).reduce((s, o) => s + (parseFloat(o.sale_price) || 0), 0)
   const monthSum = orders.filter(o => thisMonth(o.created_at)).reduce((s, o) => s + (parseFloat(o.sale_price) || 0), 0)
   const chart7 = useMemo(() => { const a = []; for (let i = 6; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); a.push({ date: fmtDate(d), ยอดขาย: orders.filter(o => sameDay(o.created_at, d)).reduce((s, o) => s + (parseFloat(o.sale_price) || 0), 0) }) } return a }, [orders])
-  const displayOrders = dateOrders || orders.slice(0, 50)
+  const filteredOrders = dateFilter ? orders.filter(o => (o.order_date||'').substring(0,10) === dateFilter) : orders
   const ts = { background: '#fff', border: `1px solid ${T.border}`, borderRadius: 12, fontFamily: T.font, fontSize: 13 }
   const phoneOk = form.customerPhone.length === 10 && !phoneError
   const amt = parseFloat(form.amount) || 0
@@ -679,14 +677,14 @@ export default function EmployeeApp({ profile, onLogout }) {
               <input type="date" value={dateFilter} onChange={e => handleDateChange(e.target.value)} style={{ flex: 1, padding: '11px 14px', borderRadius: T.radiusSm, background: T.surfaceAlt, border: `1px solid ${T.border}`, color: T.text, fontSize: 14, fontFamily: T.font, outline: 'none' }} />
               {dateFilter && <Btn sm outline onClick={() => handleDateChange('')}>ล้าง</Btn>}
             </div>
-            {dateFilter && dateOrders && (() => {
-              const codOrd = dateOrders.filter(o => o.payment_type !== 'transfer')
-              const transOrd = dateOrders.filter(o => o.payment_type === 'transfer')
+            {dateFilter && filteredOrders.length > 0 && (() => {
+              const codOrd = filteredOrders.filter(o => o.payment_type !== 'transfer')
+              const transOrd = filteredOrders.filter(o => o.payment_type === 'transfer')
               return (
                 <div style={{ marginTop: 12, padding: 14, borderRadius: T.radiusSm, background: 'rgba(184,134,11,0.05)', border: '1px solid rgba(184,134,11,0.12)' }}>
                   <div style={{ fontSize: 13, color: T.textDim, marginBottom: 6 }}>{fmtDateFull(dateFilter)}</div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-                    <div><div style={{ fontSize: 10, color: T.textMuted }}>ทั้งหมด</div><div style={{ fontSize: 20, fontWeight: 900, color: T.gold }}>{dateOrders.length}</div><div style={{ fontSize: 18, fontWeight: 900, color: T.success }}>฿{fmt(dateOrders.reduce((s,o)=>s+(parseFloat(o.sale_price)||0),0))}</div></div>
+                    <div><div style={{ fontSize: 10, color: T.textMuted }}>ทั้งหมด</div><div style={{ fontSize: 20, fontWeight: 900, color: T.gold }}>{filteredOrders.length}</div><div style={{ fontSize: 18, fontWeight: 900, color: T.success }}>฿{fmt(filteredOrders.reduce((s,o)=>s+(parseFloat(o.sale_price)||0),0))}</div></div>
                     <div><div style={{ fontSize: 10, color: T.textMuted }}>📦 COD ({codOrd.length})</div><div style={{ fontSize: 18, fontWeight: 900, color: T.gold }}>฿{fmt(codOrd.reduce((s,o)=>s+(parseFloat(o.cod_amount)||0),0))}</div></div>
                     <div><div style={{ fontSize: 10, color: T.textMuted }}>🏦 โอน ({transOrd.length})</div><div style={{ fontSize: 18, fontWeight: 900, color: T.success }}>฿{fmt(transOrd.reduce((s,o)=>s+(parseFloat(o.sale_price)||0),0))}</div></div>
                   </div>
@@ -695,9 +693,9 @@ export default function EmployeeApp({ profile, onLogout }) {
             })()}
           </div>
 
-          {dateFilter && dateOrders ? (() => {
-            const codOrd = dateOrders.filter(o => o.payment_type !== 'transfer')
-            const transOrd = dateOrders.filter(o => o.payment_type === 'transfer')
+          {dateFilter ? (() => {
+            const codOrd = filteredOrders.filter(o => o.payment_type !== 'transfer')
+            const transOrd = filteredOrders.filter(o => o.payment_type === 'transfer')
             const renderOrd = (o, idx) => (
               <div key={o.id} style={{ ...glass, padding: '12px 16px', marginBottom: 6 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
@@ -728,12 +726,12 @@ export default function EmployeeApp({ profile, onLogout }) {
                   </div>
                   {transOrd.map((o,i) => renderOrd(o,i))}
                 </>}
-                {dateOrders.length === 0 && <Empty text="ไม่มีออเดอร์วันนี้" />}
+                {filteredOrders.length === 0 && <Empty text="ไม่มีออเดอร์วันนี้" />}
               </div>
             )
           })() : (
             <div style={{ maxHeight: '55vh', overflowY: 'auto' }}>
-              {displayOrders.length ? displayOrders.map((o,i) => (
+              {filteredOrders.length ? filteredOrders.map((o,i) => (
                 <div key={o.id} style={{ ...glass, padding: '12px 16px', marginBottom: 6 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                     <div>
