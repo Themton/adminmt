@@ -9,6 +9,7 @@ function toThaiTime(d) {
 
 function orderToRow(o, profiles) {
   return {
+    seq: o.daily_seq || '',
     phone: o.customer_phone, name: o.customer_name,
     address: o.customer_address, sub_district: o.sub_district,
     district: o.district, zip: o.zip_code,
