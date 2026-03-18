@@ -85,7 +85,7 @@ export default function ManagerApp({ profile, onLogout }) {
     const load = async () => {
       try {
         const [ordersRes, teamsRes, profilesRes] = await Promise.all([
-          supabase.from('mt_orders').select('*').order('created_at', { ascending: false }),
+          supabase.from('mt_orders').select('*').order('created_at', { ascending: false }).range(0, 9999),
           supabase.from('mt_teams').select('*').order('name'),
           supabase.from('mt_profiles').select('*, mt_teams(id, name)').order('created_at', { ascending: false }),
         ])
@@ -93,7 +93,7 @@ export default function ManagerApp({ profile, onLogout }) {
         setTeams(teamsRes.data || [])
         setProfiles(profilesRes.data || [])
         // โหลดออเดอร์วันนี้
-        const { data: todayData } = await supabase.from('mt_orders').select('*').eq('order_date', todayStr).order('created_at', { ascending: false })
+        const { data: todayData } = await supabase.from('mt_orders').select('*').eq('order_date', todayStr).order('created_at', { ascending: false }).range(0, 9999)
         setDateOrders(todayData || [])
       } catch (e) { console.error('Load error:', e) }
     }
@@ -153,8 +153,14 @@ export default function ManagerApp({ profile, onLogout }) {
   // ═══ Handlers ═══
   const handleDateChange = async (d) => {
     setDateFilter(d)
-    if (d) { try { const { data } = await supabase.from('mt_orders').select('*').eq('order_date', d).order('created_at', { ascending: false }); setDateOrders(data || []) } catch { setDateOrders([]) } }
-    else setDateOrders(null)
+    if (d) {
+      try {
+        const { data } = await supabase.from('mt_orders').select('*').eq('order_date', d).order('created_at', { ascending: false }).range(0, 9999)
+        setDateOrders(data || [])
+      } catch { setDateOrders([]) }
+    } else {
+      setDateOrders(null)
+    }
   }
 
   const saveTeam = async () => {
@@ -419,7 +425,8 @@ export default function ManagerApp({ profile, onLogout }) {
             )
           }
           const filterByUser = (list) => userFilter ? list.filter(o => o.employee_id === userFilter) : list
-          const allFiltered = searchFilter(filterByUser(dateOrders || displayOrders))
+          const baseOrders = dateFilter && dateOrders ? dateOrders : orders
+          const allFiltered = searchFilter(filterByUser(baseOrders))
           const totalSales = allFiltered.reduce((s,o) => s+(parseFloat(o.sale_price)||0), 0)
           const codOrders = allFiltered.filter(o => o.payment_type !== 'transfer')
           const transOrders = allFiltered.filter(o => o.payment_type === 'transfer')
