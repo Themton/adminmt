@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { supabase } from '../lib/supabase'
-import { syncOrderToSheet, deleteOrderFromSheet, syncAllToSheet } from '../lib/sheetSync'
+import { syncOrderToSheet, deleteOrderFromSheet, syncAllToSheet, resetSheet } from '../lib/sheetSync'
 import OrderForm from './OrderForm'
 import { T, glass, fmt, fmtDate, fmtDateFull, fmtDateTime, sameDay, withinDays, thisMonth, Stat, Tabs, Btn, Toast, Modal, Empty, LiveDot } from './ui'
 
@@ -286,11 +286,11 @@ export default function ManagerApp({ profile, onLogout }) {
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <button onClick={async () => {
-            if (!confirm('ส่งออเดอร์ทั้งหมดไป Sheet?\n(ข้อมูลซ้ำจะถูกข้าม)')) return
-            flash('⏳ กำลัง Sync...')
-            syncAllToSheet(orders, profiles)
-            setTimeout(() => flash('✅ Sync ไป Sheet เรียบร้อย!'), 1000)
-          }} style={{ padding: '8px 14px', borderRadius: 8, border: `1px solid rgba(184,134,11,0.2)`, background: 'rgba(184,134,11,0.05)', color: T.gold, fontSize: 12, cursor: 'pointer', fontFamily: T.font, fontWeight: 600 }}>🔄 Sync</button>
+            if (!confirm('⚠️ ลบข้อมูลใน Sheet ทั้งหมด แล้วดึงจาก Supabase ใส่ใหม่?\n\nข้อมูลใน Sheet จะตรงกับระบบ 100%')) return
+            flash('⏳ กำลัง Reset Sheet...')
+            resetSheet(orders, profiles)
+            setTimeout(() => flash('✅ Reset Sheet เรียบร้อย! ข้อมูลตรงกับ Supabase'), 2000)
+          }} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid rgba(184,134,11,0.2)', background: 'rgba(184,134,11,0.05)', color: T.gold, fontSize: 12, cursor: 'pointer', fontFamily: T.font, fontWeight: 600 }}>🔄 Reset Sheet</button>
           <button onClick={onLogout} style={{ padding: '8px 14px', borderRadius: 8, border: `1px solid ${T.border}`, background: 'transparent', color: T.textDim, fontSize: 12, cursor: 'pointer', fontFamily: T.font }}>ออก</button>
         </div>
       </div>
