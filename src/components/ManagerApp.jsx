@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { supabase } from '../lib/supabase'
-import { syncOrderToSheet, deleteOrderFromSheet, syncAllToSheet } from '../lib/sheetSync'
+import { syncOrderToSheet, deleteOrderFromSheet } from '../lib/sheetSync'
 import OrderForm from './OrderForm'
 import { T, glass, fmt, fmtDate, fmtDateFull, fmtDateTime, sameDay, withinDays, thisMonth, Stat, Tabs, Btn, Toast, Modal, Empty, LiveDot } from './ui'
 
@@ -79,7 +79,7 @@ export default function ManagerApp({ profile, onLogout }) {
     flash('✅ แก้ไขออเดอร์สำเร็จ')
   }
 
-  // ═══ โหลดข้อมูล + Auto Sync ═══
+  // ═══ โหลดข้อมูล ═══
   useEffect(() => {
     const load = async () => {
       try {
@@ -88,26 +88,24 @@ export default function ManagerApp({ profile, onLogout }) {
           supabase.from('mt_teams').select('*').order('name'),
           supabase.from('mt_profiles').select('*, mt_teams(id, name)').order('created_at', { ascending: false }),
         ])
-        const loadedOrders = ordersRes.data || []
-        setOrders(loadedOrders)
+        setOrders(ordersRes.data || [])
         setTeams(teamsRes.data || [])
         setProfiles(profilesRes.data || [])
-        // Auto sync ไป Sheet
-        syncAllToSheet(loadedOrders, profilesRes.data || [])
       } catch (e) { console.error('Load error:', e) }
     }
     load()
 
     // Realtime
+    // Realtime — อัพเดท UI เท่านั้น (sync ไป Sheet ทำจาก client ที่สร้าง/ลบ/แก้ไข)
     const ch = supabase.channel('mgr-orders')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'mt_orders' },
-        (payload) => {
-          setOrders(prev => [payload.new, ...prev])
-          syncOrderToSheet(payload.new)
-        }
+        (payload) => { setOrders(prev => [payload.new, ...prev]) }
       )
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'mt_orders' },
         (payload) => { setOrders(prev => prev.filter(o => o.id !== payload.old.id)) }
+      )
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'mt_orders' },
+        (payload) => { setOrders(prev => prev.map(o => o.id === payload.new.id ? payload.new : o)) }
       )
       .subscribe()
     return () => supabase.removeChannel(ch)
