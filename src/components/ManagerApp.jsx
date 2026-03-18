@@ -17,7 +17,7 @@ export default function ManagerApp({ profile, onLogout }) {
   const [toast, setToast] = useState(null)
   const todayStr = new Date().toISOString().split('T')[0]
   const [dateFilter, setDateFilter] = useState(todayStr)
-  const [dateOrders, setDateOrders] = useState(null)
+  
   const [userFilter, setUserFilter] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -40,7 +40,7 @@ export default function ManagerApp({ profile, onLogout }) {
     const { error } = await supabase.from('mt_orders').delete().eq('id', order.id)
     if (error) { flash('❌ ' + error.message); return }
     setOrders(prev => prev.filter(o => o.id !== order.id))
-    if (dateOrders) setDateOrders(prev => prev.filter(o => o.id !== order.id))
+    
     deleteOrderFromSheet(order.order_number)
     flash('🗑 ลบออเดอร์สำเร็จ')
   }
@@ -72,7 +72,7 @@ export default function ManagerApp({ profile, onLogout }) {
     }).eq('id', id).select().single()
     if (error) { flash('❌ ' + error.message); return }
     setOrders(prev => prev.map(o => o.id === id ? { ...o, ...updates } : o))
-    if (dateOrders) setDateOrders(prev => prev.map(o => o.id === id ? { ...o, ...updates } : o))
+    
     if (updated?.order_number) {
       updateOrderInSheet(updated)
     }
@@ -82,22 +82,30 @@ export default function ManagerApp({ profile, onLogout }) {
 
   // ═══ โหลดข้อมูล ═══
   useEffect(() => {
-    const load = async () => {
+    const loadAll = async () => {
       try {
-        const [ordersRes, teamsRes, profilesRes] = await Promise.all([
-          supabase.from('mt_orders').select('*').order('created_at', { ascending: false }).range(0, 9999),
+        // โหลดออเดอร์ทั้งหมด (ไม่จำกัด)
+        let allOrders = []
+        let from = 0
+        while (true) {
+          const { data } = await supabase.from('mt_orders').select('*').order('created_at', { ascending: false }).range(from, from + 999)
+          if (!data || data.length === 0) break
+          allOrders = [...allOrders, ...data]
+          if (data.length < 1000) break
+          from += 1000
+        }
+        setOrders(allOrders)
+        console.log('โหลดออเดอร์ทั้งหมด:', allOrders.length, 'รายการ')
+
+        const [teamsRes, profilesRes] = await Promise.all([
           supabase.from('mt_teams').select('*').order('name'),
           supabase.from('mt_profiles').select('*, mt_teams(id, name)').order('created_at', { ascending: false }),
         ])
-        setOrders(ordersRes.data || [])
         setTeams(teamsRes.data || [])
         setProfiles(profilesRes.data || [])
-        // โหลดออเดอร์วันนี้
-        const { data: todayData } = await supabase.from('mt_orders').select('*').eq('order_date', todayStr).order('created_at', { ascending: false }).range(0, 9999)
-        setDateOrders(todayData || [])
       } catch (e) { console.error('Load error:', e) }
     }
-    load()
+    loadAll()
 
     // Realtime
     // Realtime — อัพเดท UI เท่านั้น (sync ไป Sheet ทำจาก client ที่สร้าง/ลบ/แก้ไข)
@@ -147,20 +155,12 @@ export default function ManagerApp({ profile, onLogout }) {
     return Object.values(m).map(e => ({ ...e, teamName: teams.find(t => t.id === e.team_id)?.name || '—' })).sort((a, b) => b.monthSales - a.monthSales)
   }, [orders, profiles, teams])
 
-  const displayOrders = dateOrders || orders
+  
   const ts = { background: '#fff', border: `1px solid ${T.border}`, borderRadius: 12, fontFamily: T.font, fontSize: 13 }
 
   // ═══ Handlers ═══
-  const handleDateChange = async (d) => {
+  const handleDateChange = (d) => {
     setDateFilter(d)
-    if (d) {
-      try {
-        const { data } = await supabase.from('mt_orders').select('*').eq('order_date', d).order('created_at', { ascending: false }).range(0, 9999)
-        setDateOrders(data || [])
-      } catch { setDateOrders([]) }
-    } else {
-      setDateOrders(null)
-    }
   }
 
   const saveTeam = async () => {
