@@ -153,17 +153,16 @@ function parseSmartPaste(text, addressData = []) {
 
       if (passedName && line.length >= 3) {
         let addr = line
-        // ลบส่วน ตำบล/อำเภอ/จังหวัด/zip ที่ติดมา
         if (result.subDistrict) addr = addr.replace(new RegExp('(?:ต\\.|ตำบล|แขวง)\\s*' + result.subDistrict, 'g'), '')
         if (result.district) addr = addr.replace(new RegExp('(?:อ\\.|อำเภอ|เขต)\\s*' + result.district, 'g'), '')
-        addr = addr.replace(/จ[.\s]*[ก-๙ะ-์]+/gu, '').replace(/\d{5}/, '').replace(/[,.\s]+$/, '').trim()
+        addr = addr.replace(/(?:จ\.|จังหวัด)\s*[ก-๙ะ-์]+/gu, '').replace(/\d{5}/, '').replace(/[,.\s]+$/, '').trim()
         if (addr.length >= 2) addrParts.push(addr)
-      } else if (!passedName && /บ้านเลขที่|บ้านเลข|\d+\/\d|ซอย|ซ\.|หมู่|ม\.|ถนน|ถ\.|ร้าน/.test(line)) {
+      } else if (!passedName && /บ้านเลขที่|บ้านเลข|\d+\/\d|ซอย|ซ\.|หมู่|ม\.|ถนน|ถ\.|ร้าน|\d+/.test(line)) {
         passedName = true
         let addr = line
         if (result.subDistrict) addr = addr.replace(new RegExp('(?:ต\\.|ตำบล|แขวง)\\s*' + result.subDistrict, 'g'), '')
         if (result.district) addr = addr.replace(new RegExp('(?:อ\\.|อำเภอ|เขต)\\s*' + result.district, 'g'), '')
-        addr = addr.replace(/จ[.\s]*[ก-๙ะ-์]+/gu, '').replace(/\d{5}/, '').replace(/[,.\s]+$/, '').trim()
+        addr = addr.replace(/(?:จ\.|จังหวัด)\s*[ก-๙ะ-์]+/gu, '').replace(/\d{5}/, '').replace(/[,.\s]+$/, '').trim()
         if (addr.length >= 2) addrParts.push(addr)
       }
     }
@@ -327,7 +326,12 @@ export default function OrderForm({ profile, onSuccess }) {
 
       <FI label="📱 เบอร์มือถือ * (10 หลัก)" type="tel" maxLength={10} value={form.customerPhone} onChange={set('customerPhone')} placeholder="08xxxxxxxx" error={fieldErrors.customerPhone || phoneError} success={phoneOk ? '✅ เบอร์ถูกต้อง' : ''} style={{ fontSize: 18, fontWeight: 700, letterSpacing: 2 }} />
       <FI label="👤 ชื่อลูกค้า *" value={form.customerName} onChange={set('customerName')} placeholder="ชื่อลูกค้า" error={fieldErrors.customerName} />
-      <FI label="📍 ที่อยู่ *" value={form.customerAddress} onChange={set('customerAddress')} placeholder="บ้านเลขที่ ซอย ถนน..." error={fieldErrors.customerAddress} />
+      <div style={{ marginBottom: 14 }}>
+        <label style={{ display: 'block', fontSize: 12, color: fieldErrors.customerAddress ? T.danger : T.textDim, fontWeight: 500, marginBottom: 6 }}>📍 ที่อยู่ *</label>
+        <textarea value={form.customerAddress} onChange={set('customerAddress')} placeholder="บ้านเลขที่ ซอย ถนน..." rows={2}
+          style={{ width: '100%', padding: '13px 16px', borderRadius: T.radiusSm, border: `1px solid ${fieldErrors.customerAddress ? 'rgba(214,48,49,0.4)' : T.border}`, background: fieldErrors.customerAddress ? 'rgba(214,48,49,0.03)' : T.surfaceAlt, color: T.text, fontSize: 15, fontFamily: T.font, outline: 'none', boxSizing: 'border-box', resize: 'vertical' }} />
+        {fieldErrors.customerAddress && <div style={{ fontSize: 11, color: T.danger, marginTop: 4 }}>{fieldErrors.customerAddress}</div>}
+      </div>
 
       <AddressSearch onSelect={handleAddressSelect} addresses={addresses} currentValue={form.subDistrict ? `${form.subDistrict} > ${form.district} > ${form.province} ${form.zipCode}` : ''} />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>

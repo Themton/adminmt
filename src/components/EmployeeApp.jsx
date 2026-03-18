@@ -135,7 +135,7 @@ function parseSmartPaste(text, addressData = []) {
           let addr = split[2].trim()
           if (result.subDistrict) addr = addr.replace(new RegExp('(?:ต\\.|ตำบล)\\s*' + result.subDistrict, 'g'), '')
           if (result.district) addr = addr.replace(new RegExp('(?:อ\\.|อำเภอ)\\s*' + result.district, 'g'), '')
-          addr = addr.replace(/จ[.\s]*[ก-๙ะ-์]+/gu, '').replace(/\d{5}/, '').replace(/[,.\s]+$/, '').trim()
+          addr = addr.replace(/(?:จ\.|จังหวัด)\s*[ก-๙ะ-์]+/gu, '').replace(/\d{5}/, '').replace(/[,.\s]+$/, '').trim()
           if (addr.length >= 3 && !result.customerAddress) result.customerAddress = addr
           break
         }
@@ -153,7 +153,7 @@ function parseSmartPaste(text, addressData = []) {
         let addr = line
         if (result.subDistrict) addr = addr.replace(new RegExp('(?:ต\\.|ตำบล)\\s*' + result.subDistrict, 'g'), '')
         if (result.district) addr = addr.replace(new RegExp('(?:อ\\.|อำเภอ)\\s*' + result.district, 'g'), '')
-        addr = addr.replace(/จ[.\s]*[ก-๙ะ-์]+/gu, '').replace(/\d{5}/, '').replace(/[,.\s]+$/, '').trim()
+        addr = addr.replace(/(?:จ\.|จังหวัด)\s*[ก-๙ะ-์]+/gu, '').replace(/\d{5}/, '').replace(/[,.\s]+$/, '').trim()
         if (addr.length >= 2) addrParts.push(addr)
       }
     }
@@ -496,7 +496,12 @@ export default function EmployeeApp({ profile, onLogout }) {
 
             <FI label="📱 เบอร์มือถือ * (10 หลัก)" type="tel" maxLength={10} value={form.customerPhone} onChange={set('customerPhone')} placeholder="08xxxxxxxx" error={fieldErrors.customerPhone || phoneError} success={phoneOk ? '✅ เบอร์ถูกต้อง' : ''} style={{ fontSize: 18, fontWeight: 700, letterSpacing: 2 }} />
             <FI label="👤 ชื่อลูกค้า *" value={form.customerName} onChange={set('customerName')} placeholder="คุณลูกค้า" error={fieldErrors.customerName} />
-            <FI label="📍 ที่อยู่ *" value={form.customerAddress} onChange={set('customerAddress')} placeholder="29 หมู่ที่ 1 ถนน..." error={fieldErrors.customerAddress} />
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ display: 'block', fontSize: 12, color: fieldErrors.customerAddress ? T.danger : T.textDim, fontWeight: 500, marginBottom: 6 }}>📍 ที่อยู่ *</label>
+              <textarea value={form.customerAddress} onChange={set('customerAddress')} placeholder="29 หมู่ที่ 1 ถนน..." rows={2}
+                style={{ width: '100%', padding: '13px 16px', borderRadius: T.radiusSm, border: `1px solid ${fieldErrors.customerAddress ? 'rgba(214,48,49,0.4)' : T.border}`, background: fieldErrors.customerAddress ? 'rgba(214,48,49,0.03)' : T.surfaceAlt, color: T.text, fontSize: 15, fontFamily: T.font, outline: 'none', boxSizing: 'border-box', resize: 'vertical' }} />
+              {fieldErrors.customerAddress && <div style={{ fontSize: 11, color: T.danger, marginTop: 4 }}>{fieldErrors.customerAddress}</div>}
+            </div>
 
             <AddressSearch onSelect={handleAddressSelect} addresses={addresses} currentValue={form.subDistrict ? `${form.subDistrict} > ${form.district} > ${form.province} ${form.zipCode}` : ''} />
 
