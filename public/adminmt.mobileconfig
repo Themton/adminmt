@@ -28,7 +28,7 @@
             <key>Precomposed</key>
             <true/>
             <key>URL</key>
-            <string>https://themton.github.io/adminmt/</string>
+            <string>https://themton.github.io/adminmt/?v=2</string>
         </dict>
     </array>
     <key>PayloadDescription</key>
