@@ -315,95 +315,134 @@ export default function ManagerApp({ profile, onLogout }) {
 
         {/* ══ DASHBOARD ══ */}
         {tab === 'dashboard' && (() => {
-          const todayCodOrd = today.filter(o => o.payment_type !== 'transfer')
-          const todayTransOrd = today.filter(o => o.payment_type === 'transfer')
-          const todayCodSum = todayCodOrd.reduce((s,o) => s+(parseFloat(o.cod_amount)||0), 0)
-          const todayTransSum = todayTransOrd.reduce((s,o) => s+(parseFloat(o.sale_price)||0), 0)
           const monthOrders = orders.filter(o => thisMonth(o.created_at))
-          const monthCodOrd = monthOrders.filter(o => o.payment_type !== 'transfer')
-          const monthTransOrd = monthOrders.filter(o => o.payment_type === 'transfer')
-          const monthCodSum = monthCodOrd.reduce((s,o) => s+(parseFloat(o.cod_amount)||0), 0)
-          const monthTransSum = monthTransOrd.reduce((s,o) => s+(parseFloat(o.sale_price)||0), 0)
+          const todayCod = today.filter(o => o.payment_type !== 'transfer')
+          const todayTrans = today.filter(o => o.payment_type === 'transfer')
+          const monthCod = monthOrders.filter(o => o.payment_type !== 'transfer')
+          const monthTrans = monthOrders.filter(o => o.payment_type === 'transfer')
+
+          // สถิติรายทีม
+          const teamData = teams.map(t => {
+            const tOrders = orders.filter(o => o.team_id === t.id)
+            const tToday = tOrders.filter(o => sameDay(o.created_at, new Date()))
+            const tMonth = tOrders.filter(o => thisMonth(o.created_at))
+            return { ...t, todayCount: tToday.length, todaySales: tToday.reduce((s,o) => s+(parseFloat(o.sale_price)||0), 0), monthCount: tMonth.length, monthSales: tMonth.reduce((s,o) => s+(parseFloat(o.sale_price)||0), 0) }
+          })
+
+          // สถิติรายคน
+          const personData = profiles.filter(p => p.role === 'employee').map(p => {
+            const pOrders = orders.filter(o => o.employee_id === p.id)
+            const pToday = pOrders.filter(o => sameDay(o.created_at, new Date()))
+            const pMonth = pOrders.filter(o => thisMonth(o.created_at))
+            return { ...p, team: p.mt_teams?.name || '—', todayCount: pToday.length, todaySales: pToday.reduce((s,o) => s+(parseFloat(o.sale_price)||0), 0), monthCount: pMonth.length, monthSales: pMonth.reduce((s,o) => s+(parseFloat(o.sale_price)||0), 0) }
+          }).sort((a,b) => b.monthSales - a.monthSales)
+
           return <>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
-            <Stat label="วันนี้" value={todaySum} icon="🔥" gradient={T.grad3} sub={`${today.length} ออเดอร์`} />
-            <Stat label="7 วัน" value={weekSum} icon="📊" gradient={T.grad1} />
-            <Stat label="เดือนนี้" value={monthSum} icon="🏆" gradient={T.grad2} />
-            <Stat label="เฉลี่ย/วัน" value={Math.round(monthSum / Math.max(new Date().getDate(), 1))} icon="📉" gradient={T.grad4} />
-          </div>
-
-          {/* แยก COD / โอน — วันนี้ */}
-          <div style={{ ...glass, padding: 16, marginBottom: 14 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12 }}>📊 วันนี้ — แยกประเภท</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <div style={{ padding: 14, borderRadius: T.radiusSm, background: 'rgba(184,134,11,0.04)', border: '1px solid rgba(184,134,11,0.12)', textAlign: 'center' }}>
-                <div style={{ fontSize: 11, color: T.textDim }}>📦 COD ({todayCodOrd.length})</div>
-                <div style={{ fontSize: 22, fontWeight: 900, color: T.gold }}>฿{fmt(todayCodSum)}</div>
+          {/* ═══ สรุปรวม ═══ */}
+          <div style={{ ...glass, padding: 16, marginBottom: 10 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>📊 สรุปรวม</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 10 }}>
+              <div style={{ padding: 10, borderRadius: T.radiusSm, background: 'rgba(184,134,11,0.04)', textAlign: 'center' }}>
+                <div style={{ fontSize: 10, color: T.textMuted }}>วันนี้</div>
+                <div style={{ fontSize: 20, fontWeight: 900, color: T.gold }}>{today.length}</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: T.success }}>฿{fmt(todaySum)}</div>
               </div>
-              <div style={{ padding: 14, borderRadius: T.radiusSm, background: 'rgba(45,138,78,0.04)', border: '1px solid rgba(45,138,78,0.12)', textAlign: 'center' }}>
-                <div style={{ fontSize: 11, color: T.textDim }}>🏦 โอนเงิน ({todayTransOrd.length})</div>
-                <div style={{ fontSize: 22, fontWeight: 900, color: T.success }}>฿{fmt(todayTransSum)}</div>
+              <div style={{ padding: 10, borderRadius: T.radiusSm, background: 'rgba(45,138,78,0.04)', textAlign: 'center' }}>
+                <div style={{ fontSize: 10, color: T.textMuted }}>7 วัน</div>
+                <div style={{ fontSize: 20, fontWeight: 900, color: T.success }}>{orders.filter(o => withinDays(o.created_at, 7)).length}</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: T.success }}>฿{fmt(weekSum)}</div>
+              </div>
+              <div style={{ padding: 10, borderRadius: T.radiusSm, background: 'rgba(184,134,11,0.04)', textAlign: 'center' }}>
+                <div style={{ fontSize: 10, color: T.textMuted }}>เดือนนี้</div>
+                <div style={{ fontSize: 20, fontWeight: 900, color: T.gold }}>{monthOrders.length}</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: T.success }}>฿{fmt(monthSum)}</div>
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <div style={{ padding: 8, borderRadius: T.radiusSm, background: 'rgba(184,134,11,0.03)', textAlign: 'center', fontSize: 11 }}>
+                <span style={{ color: T.textDim }}>📦 COD วันนี้ </span><strong style={{ color: T.gold }}>{todayCod.length}</strong> · ฿{fmt(todayCod.reduce((s,o)=>s+(parseFloat(o.cod_amount)||0),0))}
+              </div>
+              <div style={{ padding: 8, borderRadius: T.radiusSm, background: 'rgba(45,138,78,0.03)', textAlign: 'center', fontSize: 11 }}>
+                <span style={{ color: T.textDim }}>🏦 โอน วันนี้ </span><strong style={{ color: T.success }}>{todayTrans.length}</strong> · ฿{fmt(todayTrans.reduce((s,o)=>s+(parseFloat(o.sale_price)||0),0))}
               </div>
             </div>
           </div>
 
-          {/* แยก COD / โอน — เดือนนี้ */}
-          <div style={{ ...glass, padding: 16, marginBottom: 14 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12 }}>📊 เดือนนี้ — แยกประเภท</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <div style={{ padding: 14, borderRadius: T.radiusSm, background: 'rgba(184,134,11,0.04)', border: '1px solid rgba(184,134,11,0.12)', textAlign: 'center' }}>
-                <div style={{ fontSize: 11, color: T.textDim }}>📦 COD ({monthCodOrd.length})</div>
-                <div style={{ fontSize: 22, fontWeight: 900, color: T.gold }}>฿{fmt(monthCodSum)}</div>
-              </div>
-              <div style={{ padding: 14, borderRadius: T.radiusSm, background: 'rgba(45,138,78,0.04)', border: '1px solid rgba(45,138,78,0.12)', textAlign: 'center' }}>
-                <div style={{ fontSize: 11, color: T.textDim }}>🏦 โอนเงิน ({monthTransOrd.length})</div>
-                <div style={{ fontSize: 22, fontWeight: 900, color: T.success }}>฿{fmt(monthTransSum)}</div>
-              </div>
-            </div>
-          </div>
-          <div style={{ ...glass, padding: '18px 14px 10px', marginBottom: 14 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14 }}>📈 ยอดขาย 7 วัน</div>
-            <ResponsiveContainer width="100%" height={200}>
+          {/* ═══ กราฟ 7 วัน ═══ */}
+          <div style={{ ...glass, padding: '14px 14px 6px', marginBottom: 10 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>📈 ยอดขาย 7 วัน</div>
+            <ResponsiveContainer width="100%" height={180}>
               <AreaChart data={chart7}>
                 <defs><linearGradient id="gA" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={T.accent} stopOpacity={0.35}/><stop offset="100%" stopColor={T.accent} stopOpacity={0}/></linearGradient></defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" /><XAxis dataKey="date" stroke={T.textMuted} fontSize={11} tickLine={false} /><YAxis stroke={T.textMuted} fontSize={11} tickLine={false} tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.04)" /><XAxis dataKey="date" stroke={T.textMuted} fontSize={10} tickLine={false} /><YAxis stroke={T.textMuted} fontSize={10} tickLine={false} tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
                 <Tooltip contentStyle={ts} formatter={v => [`฿${fmt(v)}`, 'ยอดขาย']} /><Area type="monotone" dataKey="ยอดขาย" stroke={T.accent} strokeWidth={2.5} fill="url(#gA)" dot={{ r: 3, fill: T.accent }} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
-          {/* ยอดทีม + พนักงาน */}
-          <div style={{ ...glass, padding: 18, marginBottom: 14 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14 }}>👥 ยอดขายรายทีม</div>
-            {teamStats.map((t, i) => (
-              <div key={t.id} style={{ padding: '12px 0', borderBottom: i < teamStats.length - 1 ? `1px solid ${T.border}` : 'none' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ width: 32, height: 32, borderRadius: 8, background: [T.grad1, T.grad2, T.grad3, T.grad4][i%4], display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 800, color: '#fff' }}>{i+1}</div>
-                    <div><div style={{ fontWeight: 700, fontSize: 14 }}>{t.name}</div><div style={{ fontSize: 11, color: T.textDim }}>วันนี้ {t.todayCount} · เดือน {t.count} ออเดอร์</div></div>
-                  </div>
-                  <div style={{ textAlign: 'right' }}><div style={{ fontSize: 16, fontWeight: 900, color: T.gold }}>฿{fmt(t.sales)}</div><div style={{ fontSize: 10, color: T.textDim }}>วันนี้ ฿{fmt(t.todaySales)}</div></div>
-                </div>
-                <div style={{ paddingLeft: 42 }}>
-                  {empStats.filter(e => e.team_id === t.id).map(e => (
-                    <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', fontSize: 12 }}>
-                      <span style={{ color: T.textDim }}>👤 {e.name}</span>
-                      <span>วันนี้ <strong>฿{fmt(e.todaySales)}</strong> · เดือน <strong style={{ color: T.gold }}>฿{fmt(e.monthSales)}</strong></span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
+
+          {/* ═══ ยอดรายทีม ═══ */}
+          <div style={{ ...glass, padding: 16, marginBottom: 10 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>👥 ยอดรายทีม</div>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: T.font }}>
+              <thead>
+                <tr style={{ background: T.surfaceAlt }}>
+                  <th style={{ padding: '8px 6px', textAlign: 'left', fontWeight: 600, color: T.textDim }}>ทีม</th>
+                  <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, color: T.textDim }}>วันนี้</th>
+                  <th style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 600, color: T.textDim }}>ยอดวันนี้</th>
+                  <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, color: T.textDim }}>เดือนนี้</th>
+                  <th style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 600, color: T.textDim }}>ยอดเดือน</th>
+                </tr>
+              </thead>
+              <tbody>
+                {teamData.map(t => (
+                  <tr key={t.id} style={{ borderBottom: `1px solid ${T.border}` }}>
+                    <td style={{ padding: '8px 6px', fontWeight: 600 }}>{t.name}</td>
+                    <td style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 700, color: T.gold }}>{t.todayCount}</td>
+                    <td style={{ padding: '8px 6px', textAlign: 'right', color: T.success }}>฿{fmt(t.todaySales)}</td>
+                    <td style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 700, color: T.gold }}>{t.monthCount}</td>
+                    <td style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 700, color: T.success }}>฿{fmt(t.monthSales)}</td>
+                  </tr>
+                ))}
+                <tr style={{ background: 'rgba(184,134,11,0.05)' }}>
+                  <td style={{ padding: '8px 6px', fontWeight: 800 }}>รวม</td>
+                  <td style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 800, color: T.gold }}>{today.length}</td>
+                  <td style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 800, color: T.success }}>฿{fmt(todaySum)}</td>
+                  <td style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 800, color: T.gold }}>{monthOrders.length}</td>
+                  <td style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 800, color: T.success }}>฿{fmt(monthSum)}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
-          {/* อันดับพนักงาน */}
-          <div style={{ ...glass, padding: 18 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14 }}>🏆 อันดับพนักงาน (เดือนนี้)</div>
-            {empStats.map((e, i) => (
-              <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: i < empStats.length - 1 ? `1px solid ${T.border}` : 'none' }}>
-                <div style={{ width: 28, height: 28, borderRadius: 8, background: i < 3 ? [T.grad1, T.grad4, T.grad2][i] : T.surfaceAlt, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: i < 3 ? '#fff' : T.textDim }}>{i+1}</div>
-                <div style={{ flex: 1 }}><div style={{ fontWeight: 600, fontSize: 13 }}>{e.name}</div><div style={{ fontSize: 11, color: T.textDim }}>{e.teamName} · {e.monthCount} ออเดอร์</div></div>
-                <div style={{ textAlign: 'right' }}><div style={{ fontWeight: 800, fontSize: 14, color: T.gold }}>฿{fmt(e.monthSales)}</div><div style={{ fontSize: 10, color: T.textDim }}>วันนี้ ฿{fmt(e.todaySales)}</div></div>
-              </div>
-            ))}
+
+          {/* ═══ ยอดรายคน ═══ */}
+          <div style={{ ...glass, padding: 16 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>🏆 ยอดรายคน (เดือนนี้)</div>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: T.font }}>
+              <thead>
+                <tr style={{ background: T.surfaceAlt }}>
+                  <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, color: T.textDim, width: 30 }}>#</th>
+                  <th style={{ padding: '8px 6px', textAlign: 'left', fontWeight: 600, color: T.textDim }}>ชื่อ</th>
+                  <th style={{ padding: '8px 6px', textAlign: 'left', fontWeight: 600, color: T.textDim }}>ทีม</th>
+                  <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, color: T.textDim }}>วันนี้</th>
+                  <th style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 600, color: T.textDim }}>ยอดวันนี้</th>
+                  <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, color: T.textDim }}>เดือน</th>
+                  <th style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 600, color: T.textDim }}>ยอดเดือน</th>
+                </tr>
+              </thead>
+              <tbody>
+                {personData.map((p, i) => (
+                  <tr key={p.id} style={{ borderBottom: `1px solid ${T.border}`, background: i < 3 ? 'rgba(184,134,11,0.03)' : 'transparent' }}>
+                    <td style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 800, color: i < 3 ? T.gold : T.textDim }}>{i+1}</td>
+                    <td style={{ padding: '8px 6px', fontWeight: 600 }}>{p.full_name}</td>
+                    <td style={{ padding: '8px 6px', fontSize: 11, color: T.textDim }}>{p.team}</td>
+                    <td style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 700, color: T.gold }}>{p.todayCount}</td>
+                    <td style={{ padding: '8px 6px', textAlign: 'right', color: T.success }}>฿{fmt(p.todaySales)}</td>
+                    <td style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 700, color: T.gold }}>{p.monthCount}</td>
+                    <td style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 800, color: T.success }}>฿{fmt(p.monthSales)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </>
         })()}
