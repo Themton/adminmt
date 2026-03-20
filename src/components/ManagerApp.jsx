@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { supabase } from '../lib/supabase'
 import { syncOrderToSheet, updateOrderInSheet, deleteOrderFromSheet, syncAllToSheet, resetSheet } from '../lib/sheetSync'
+import { createFlashOrder, trackFlashOrder } from '../lib/flashApi'
 import OrderForm from './OrderForm'
 import { T, glass, fmt, fmtDate, fmtDateFull, fmtDateTime, sameDay, withinDays, thisMonth, Stat, Tabs, Btn, Toast, Modal, Empty, LiveDot } from './ui'
 
@@ -80,6 +81,47 @@ export default function ManagerApp({ profile, onLogout }) {
     flash('✅ แก้ไขออเดอร์สำเร็จ')
   }
 
+  // ═══ Flash Express ═══
+  const [flashModal, setFlashModal] = useState(null) // { order, result, tracking }
+  const [flashSrcInfo, setFlashSrcInfo] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('flash_src') || '{}') } catch { return {} }
+  })
+  const [showFlashSrc, setShowFlashSrc] = useState(false)
+
+  const sendToFlash = async (order) => {
+    if (!confirm(`📦 ส่งออเดอร์ไป Flash Express?\n\n${order.customer_name}\n${order.customer_phone}\n${order.district} ${order.province}`)) return
+    flash('⏳ กำลังส่งไป Flash...')
+    const result = await createFlashOrder(order, flashSrcInfo)
+    if (result.code === 1 && result.data?.pno) {
+      // บันทึก tracking number ใน Supabase
+      await supabase.from('mt_orders').update({ flash_pno: result.data.pno, flash_status: 'created' }).eq('id', order.id)
+      setOrders(prev => prev.map(o => o.id === order.id ? { ...o, flash_pno: result.data.pno, flash_status: 'created' } : o))
+      flash('✅ ส่ง Flash สำเร็จ! ' + result.data.pno)
+      setFlashModal({ order, result: result.data })
+    } else {
+      flash('❌ ส่ง Flash ไม่สำเร็จ: ' + (result.message || 'Unknown error'))
+      setFlashModal({ order, error: result.message })
+    }
+  }
+
+  const trackFlash = async (pno) => {
+    flash('⏳ กำลังเช็คสถานะ...')
+    const result = await trackFlashOrder(pno)
+    if (result.code === 1) {
+      setFlashModal({ pno, tracking: result.data })
+      flash('✅ โหลดสถานะสำเร็จ')
+    } else {
+      flash('❌ ' + (result.message || 'ไม่พบข้อมูล'))
+    }
+  }
+
+  const saveFlashSrc = (info) => {
+    setFlashSrcInfo(info)
+    try { localStorage.setItem('flash_src', JSON.stringify(info)) } catch {}
+    setShowFlashSrc(false)
+    flash('✅ บันทึกข้อมูลผู้ส่งสำเร็จ')
+  }
+
   // ═══ โหลดข้อมูล ═══
   useEffect(() => {
     const loadAll = async () => {
@@ -111,7 +153,7 @@ export default function ManagerApp({ profile, onLogout }) {
     // Realtime — อัพเดท UI เท่านั้น (sync ไป Sheet ทำจาก client ที่สร้าง/ลบ/แก้ไข)
     const ch = supabase.channel('mgr-orders')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'mt_orders' },
-        (payload) => { setOrders(prev => [payload.new, ...prev]) }
+        (payload) => { setOrders(prev => prev.some(o => o.id === payload.new.id) ? prev : [payload.new, ...prev]) }
       )
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'mt_orders' },
         (payload) => { setOrders(prev => prev.filter(o => o.id !== payload.old.id)) }
@@ -238,6 +280,46 @@ export default function ManagerApp({ profile, onLogout }) {
     <div style={{ fontFamily: T.font, minHeight: '100vh', background: T.bg, color: T.text, paddingBottom: 40 }}>
       <Toast message={toast} />
 
+      {/* Flash Express Modal */}
+      <Modal show={!!flashModal} onClose={() => setFlashModal(null)} title="📦 Flash Express">
+        {flashModal && <>
+          {flashModal.result && <div style={{ padding: 14, borderRadius: T.radiusSm, background: 'rgba(45,138,78,0.05)', border: '1px solid rgba(45,138,78,0.15)', marginBottom: 12 }}>
+            <div style={{ fontWeight: 700, color: T.success, marginBottom: 4 }}>✅ สร้างออเดอร์สำเร็จ!</div>
+            <div style={{ fontSize: 13 }}>Tracking: <strong style={{ fontFamily: 'monospace', fontSize: 15 }}>{flashModal.result.pno}</strong></div>
+            {flashModal.result.sortCode && <div style={{ fontSize: 12, color: T.textDim }}>Sort Code: {flashModal.result.sortCode}</div>}
+          </div>}
+          {flashModal.error && <div style={{ padding: 14, borderRadius: T.radiusSm, background: 'rgba(214,48,49,0.05)', border: '1px solid rgba(214,48,49,0.15)', marginBottom: 12 }}>
+            <div style={{ fontWeight: 700, color: T.danger }}>❌ ไม่สำเร็จ</div>
+            <div style={{ fontSize: 13, color: T.textDim }}>{flashModal.error}</div>
+          </div>}
+          {flashModal.tracking && <div>
+            <div style={{ fontWeight: 700, marginBottom: 8 }}>📍 สถานะ: {flashModal.pno}</div>
+            {Array.isArray(flashModal.tracking) ? flashModal.tracking.map((r, i) => (
+              <div key={i} style={{ padding: '8px 10px', borderLeft: `3px solid ${T.gold}`, marginBottom: 6, background: T.surfaceAlt, borderRadius: '0 8px 8px 0', fontSize: 12 }}>
+                <div style={{ fontWeight: 600 }}>{r.message}</div>
+                <div style={{ fontSize: 10, color: T.textMuted }}>{r.routedAt ? new Date(r.routedAt * 1000).toLocaleString('th-TH') : ''}</div>
+              </div>
+            )) : <div style={{ fontSize: 13, color: T.textDim }}>ไม่พบข้อมูลการติดตาม</div>}
+          </div>}
+        </>}
+      </Modal>
+
+      {/* Flash Sender Info Modal */}
+      <Modal show={showFlashSrc} onClose={() => setShowFlashSrc(false)} title="⚙️ ข้อมูลผู้ส่ง Flash Express">
+        <FI label="ชื่อผู้ส่ง" value={flashSrcInfo.name||''} onChange={e => setFlashSrcInfo(p=>({...p,name:e.target.value}))} placeholder="THE MT" />
+        <FI label="เบอร์โทร" value={flashSrcInfo.phone||''} onChange={e => setFlashSrcInfo(p=>({...p,phone:e.target.value}))} placeholder="08xxxxxxxx" />
+        <FI label="ที่อยู่" value={flashSrcInfo.address||''} onChange={e => setFlashSrcInfo(p=>({...p,address:e.target.value}))} placeholder="บ้านเลขที่..." />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <FI label="ตำบล" value={flashSrcInfo.district||''} onChange={e => setFlashSrcInfo(p=>({...p,district:e.target.value}))} />
+          <FI label="อำเภอ" value={flashSrcInfo.city||''} onChange={e => setFlashSrcInfo(p=>({...p,city:e.target.value}))} />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <FI label="จังหวัด" value={flashSrcInfo.province||''} onChange={e => setFlashSrcInfo(p=>({...p,province:e.target.value}))} />
+          <FI label="รหัส ปณ." value={flashSrcInfo.zip||''} onChange={e => setFlashSrcInfo(p=>({...p,zip:e.target.value}))} />
+        </div>
+        <Btn full onClick={() => saveFlashSrc(flashSrcInfo)} grad={T.grad2}>💾 บันทึก</Btn>
+      </Modal>
+
       {/* Edit Order Modal */}
       <Modal show={!!editOrder} onClose={() => setEditOrder(null)} title="✏️ แก้ไขออเดอร์">
         {editOrder && <>
@@ -295,6 +377,7 @@ export default function ManagerApp({ profile, onLogout }) {
           <div style={{ fontSize: 11, color: T.textDim }}>{profile.full_name} — {profile.role === 'manager' ? 'หัวหน้า' : 'แอดมิน'}</div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button onClick={() => setShowFlashSrc(true)} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid rgba(255,165,0,0.2)', background: 'rgba(255,165,0,0.05)', color: '#e67e00', fontSize: 12, cursor: 'pointer', fontFamily: T.font, fontWeight: 600 }}>⚡ Flash</button>
           {profile.role === 'manager' && <button onClick={async () => {
             if (!confirm('⚠️ ลบข้อมูลใน Sheet ทั้งหมด แล้วดึงจาก Supabase ใส่ใหม่?\n\nข้อมูลใน Sheet จะตรงกับระบบ 100%')) return
             flash('⏳ กำลัง Reset Sheet...')
@@ -311,7 +394,12 @@ export default function ManagerApp({ profile, onLogout }) {
 
       <div style={{ padding: 16 }}>
         {/* ══ CREATE ORDER ══ */}
-        {tab === 'create' && <OrderForm profile={profile} />}
+        {tab === 'create' && <OrderForm profile={profile} onSuccess={(newOrder) => {
+          setOrders(prev => {
+            if (prev.some(o => o.id === newOrder.id)) return prev
+            return [newOrder, ...prev]
+          })
+        }} />}
 
         {/* ══ DASHBOARD ══ */}
         {tab === 'dashboard' && (() => {
@@ -510,6 +598,7 @@ export default function ManagerApp({ profile, onLogout }) {
                   <th style={{ padding: '8px 6px', textAlign: 'left', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>แอดมิน</th>
                   <th style={{ padding: '8px 6px', textAlign: 'left', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>เวลา</th>
                   <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>จัดการ</th>
+                  <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>Flash</th>
                 </tr>
               </thead>
               <tbody>
@@ -534,6 +623,13 @@ export default function ManagerApp({ profile, onLogout }) {
                         <button onClick={() => setEditOrder({...o})} style={{ padding: '4px 8px', borderRadius: 4, border: `1px solid ${T.border}`, background: '#fff', color: T.gold, fontSize: 10, cursor: 'pointer', fontFamily: T.font }}>✏️</button>
                         <button onClick={() => deleteOrder(o)} style={{ padding: '4px 8px', borderRadius: 4, border: '1px solid rgba(214,48,49,0.15)', background: '#fff', color: T.danger, fontSize: 10, cursor: 'pointer', fontFamily: T.font }}>🗑</button>
                       </div>
+                    </td>
+                    <td style={{ padding: '8px 6px', textAlign: 'center' }}>
+                      {o.flash_pno ? (
+                        <button onClick={() => trackFlash(o.flash_pno)} style={{ padding: '4px 6px', borderRadius: 4, border: '1px solid rgba(45,138,78,0.2)', background: 'rgba(45,138,78,0.05)', color: T.success, fontSize: 9, cursor: 'pointer', fontFamily: T.font }}>{o.flash_pno.substring(0,12)}</button>
+                      ) : (
+                        <button onClick={() => sendToFlash(o)} style={{ padding: '4px 6px', borderRadius: 4, border: '1px solid rgba(255,165,0,0.3)', background: 'rgba(255,165,0,0.05)', color: '#e67e00', fontSize: 9, cursor: 'pointer', fontFamily: T.font }}>📦 ส่ง</button>
+                      )}
                     </td>
                   </tr>
                 ))}
