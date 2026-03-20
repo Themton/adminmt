@@ -352,10 +352,13 @@ export default function EmployeeApp({ profile, onLogout }) {
     if (!form.zipCode) errs.zipCode = 'กรุณากรอกรหัส ปณ.'
     if (!form.province) errs.province = 'กรุณากรอกจังหวัด'
     if (!form.amount) errs.amount = 'กรุณากรอกยอดเงิน'
+    if (!form.remark) errs.remark = 'กรุณากรอกหมายเหตุ'
+    if (!form.customerSocial) errs.customerSocial = 'กรุณากรอกชื่อเฟส/ไลน์'
+    if (!form.salesChannel) errs.salesChannel = 'กรุณากรอกชื่อเพจ'
     if (paymentType === 'transfer' && !slipFile) errs.slip = 'กรุณาอัพโหลดสลิป'
     setFieldErrors(errs)
     if (Object.keys(errs).length > 0) {
-      const labels = { customerPhone: 'เบอร์โทร', customerName: 'ชื่อ', customerAddress: 'ที่อยู่', subDistrict: 'ตำบล', district: 'อำเภอ', zipCode: 'รหัส ปณ.', province: 'จังหวัด', amount: 'ยอดเงิน', slip: 'สลิป' }
+      const labels = { customerPhone: 'เบอร์โทร', customerName: 'ชื่อ', customerAddress: 'ที่อยู่', subDistrict: 'ตำบล', district: 'อำเภอ', zipCode: 'รหัส ปณ.', province: 'จังหวัด', amount: 'ยอดเงิน', remark: 'หมายเหตุ', customerSocial: 'ชื่อเฟส/ไลน์', salesChannel: 'ชื่อเพจ', slip: 'สลิป' }
       const missing = Object.keys(errs).map(k => labels[k] || k).join(', ')
       setToast('❌ กรุณากรอก: ' + missing); setTimeout(() => setToast(null), 3000); return
     }
@@ -537,8 +540,8 @@ export default function EmployeeApp({ profile, onLogout }) {
               <div style={{ fontSize: 11, color: T.success, marginTop: -10, marginBottom: 14 }}>✅ ที่อยู่ถูกต้อง</div>
             )}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <FI label="📘 ชื่อเฟสบุค" value={form.customerSocial} onChange={set('customerSocial')} placeholder="ชื่อ Facebook" />
-              <FI label="📦 ชื่อเพจ (จาก P:)" value={form.salesChannel} onChange={set('salesChannel')} placeholder="เช่น ครีมหลงเลย หน้าขาว เพจหลักบริษัท" />
+              <FI label="📘 ชื่อเฟส/ไลน์ *" value={form.customerSocial} onChange={set('customerSocial')} placeholder="ชื่อ Facebook" error={fieldErrors.customerSocial} />
+              <FI label="📦 ชื่อเพจ *" value={form.salesChannel} onChange={set('salesChannel')} placeholder="เช่น ครีมหลงเลย หน้าขาว" error={fieldErrors.salesChannel} />
             </div>
 
             <FI label="💰 ยอดเงิน (฿) *" type="number" value={form.amount} onChange={set('amount')} placeholder="0" error={fieldErrors.amount} style={{ fontSize: 22, fontWeight: 800, textAlign: 'center' }} />
@@ -621,7 +624,7 @@ export default function EmployeeApp({ profile, onLogout }) {
               </div>
             )}
 
-            <FI label="💬 หมายเหตุ" value={form.remark} onChange={set('remark')} placeholder="สินค้า / รายละเอียดเพิ่มเติม" />
+            <FI label="💬 หมายเหตุ *" value={form.remark} onChange={set('remark')} placeholder="สินค้า / รายละเอียดเพิ่มเติม" error={fieldErrors.remark} />
             <Btn full grad={T.grad2} onClick={submit} disabled={submitting || !!phoneError}>{submitting ? '⏳ กำลังบันทึก...' : '✅ บันทึกออเดอร์'}</Btn>
             <div style={{ textAlign: 'center', marginTop: 14, fontSize: 11, color: T.textMuted }}>🔒 ไม่สามารถแก้ไขหรือลบได้หลังบันทึก</div>
           </div>
