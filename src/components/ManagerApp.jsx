@@ -416,13 +416,20 @@ export default function ManagerApp({ profile, onLogout }) {
             const tMonth = tOrders.filter(o => thisMonth(o.created_at))
             return { ...t, todayCount: tToday.length, todaySales: tToday.reduce((s,o) => s+(parseFloat(o.sale_price)||0), 0), monthCount: tMonth.length, monthSales: tMonth.reduce((s,o) => s+(parseFloat(o.sale_price)||0), 0) }
           })
+          // ออเดอร์ที่ไม่มีทีม (หัวหน้า/แอดมิน)
+          const noTeamOrders = orders.filter(o => !o.team_id)
+          if (noTeamOrders.length > 0) {
+            const ntToday = noTeamOrders.filter(o => sameDay(o.created_at, new Date()))
+            const ntMonth = noTeamOrders.filter(o => thisMonth(o.created_at))
+            teamData.push({ id: '__noteam', name: 'ไม่มีทีม (หัวหน้า/แอดมิน)', todayCount: ntToday.length, todaySales: ntToday.reduce((s,o) => s+(parseFloat(o.sale_price)||0), 0), monthCount: ntMonth.length, monthSales: ntMonth.reduce((s,o) => s+(parseFloat(o.sale_price)||0), 0) })
+          }
 
           // สถิติรายคน
-          const personData = profiles.filter(p => p.role === 'employee').map(p => {
+          const personData = profiles.map(p => {
             const pOrders = orders.filter(o => o.employee_id === p.id)
             const pToday = pOrders.filter(o => sameDay(o.created_at, new Date()))
             const pMonth = pOrders.filter(o => thisMonth(o.created_at))
-            return { ...p, team: p.mt_teams?.name || '—', todayCount: pToday.length, todaySales: pToday.reduce((s,o) => s+(parseFloat(o.sale_price)||0), 0), monthCount: pMonth.length, monthSales: pMonth.reduce((s,o) => s+(parseFloat(o.sale_price)||0), 0) }
+            return { ...p, team: p.mt_teams?.name || (p.role === 'manager' ? '🏢 หัวหน้า' : p.role === 'admin' ? '🔑 แอดมิน' : '—'), todayCount: pToday.length, todaySales: pToday.reduce((s,o) => s+(parseFloat(o.sale_price)||0), 0), monthCount: pMonth.length, monthSales: pMonth.reduce((s,o) => s+(parseFloat(o.sale_price)||0), 0) }
           }).sort((a,b) => b.monthSales - a.monthSales)
 
           return <>
