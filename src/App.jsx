@@ -68,7 +68,7 @@ export default function App() {
     <ErrorBoundary>
       <GlobalStyles />
       <Suspense fallback={<Splash text="กำลังเปิด..." />}>
-        {profile.role === 'manager'
+        {(profile.role === 'manager' || profile.role === 'admin')
           ? <ManagerApp profile={profile} onLogout={handleLogout} />
           : <EmployeeApp profile={profile} onLogout={handleLogout} />}
       </Suspense>
