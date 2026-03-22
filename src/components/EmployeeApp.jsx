@@ -99,6 +99,22 @@ function parseSmartPaste(text, addressData = []) {
         if (correct) { result.zipCode = correct.z; result.district = correct.d; result.province = correct.p }
       }
     }
+    // ═══ ZIP เป็นตัวหลัก — ถ้า ตำบล/อำเภอ ไม่ตรง zip ให้แก้ตาม zip ═══
+    if (result.zipCode) {
+      const zipMatches = addressData.filter(a => a.z === result.zipCode)
+      if (zipMatches.length > 0) {
+        const exactMatch = zipMatches.find(a => a.s === result.subDistrict)
+        if (exactMatch) {
+          result.district = exactMatch.d
+          result.province = exactMatch.p
+        } else {
+          const best = zipMatches.find(a => all.includes(a.s)) || zipMatches[0]
+          result.subDistrict = best.s
+          result.district = best.d
+          result.province = best.p
+        }
+      }
+    }
   }
 
   // 9. ชื่อ — จับบรรทัดแรกที่เป็นชื่อ (ไทย/อังกฤษ)

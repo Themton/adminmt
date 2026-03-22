@@ -111,11 +111,23 @@ function parseSmartPaste(text, addressData = []) {
       const found = addressData.find(a => a.z === result.zipCode && (result.subDistrict ? a.s === result.subDistrict : true))
       if (found) { if (!result.district) result.district = found.d; if (!result.subDistrict) result.subDistrict = found.s; if (!result.province) result.province = found.p }
     }
-    if (result.subDistrict && result.zipCode) {
-      const verify = addressData.find(a => a.s === result.subDistrict && a.z === result.zipCode)
-      if (!verify) {
-        const correct = addressData.find(a => a.s === result.subDistrict && (result.district ? a.d.includes(result.district) : true))
-        if (correct) { result.zipCode = correct.z; result.district = correct.d; result.province = correct.p }
+    // ═══ ZIP เป็นตัวหลัก — ถ้า ตำบล/อำเภอ ไม่ตรง zip ให้แก้ตาม zip ═══
+    if (result.zipCode) {
+      const zipMatches = addressData.filter(a => a.z === result.zipCode)
+      if (zipMatches.length > 0) {
+        // เช็คว่า ตำบลที่จับได้ ตรงกับ zip ไหม
+        const exactMatch = zipMatches.find(a => a.s === result.subDistrict)
+        if (exactMatch) {
+          // ตำบลตรง → เติมอำเภอ/จังหวัดให้ถูก
+          result.district = exactMatch.d
+          result.province = exactMatch.p
+        } else {
+          // ตำบลไม่ตรงกับ zip → ใช้ข้อมูลจาก zip แทน
+          const best = zipMatches.find(a => all.includes(a.s)) || zipMatches[0]
+          result.subDistrict = best.s
+          result.district = best.d
+          result.province = best.p
+        }
       }
     }
   }
