@@ -591,6 +591,41 @@ export default function ManagerApp({ profile, onLogout }) {
             </div>
           </div>
 
+          {/* จัดอันดับเพจขายดี */}
+          <div style={{ ...glass, padding: 14, marginBottom: 10 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>🏆 เพจขายดี</div>
+            {(() => {
+              const pageMap = {}
+              filtered.forEach(o => {
+                const page = o.sales_channel || '—'
+                if (!pageMap[page]) pageMap[page] = { count: 0, sales: 0 }
+                pageMap[page].count++
+                pageMap[page].sales += parseFloat(o.sale_price) || 0
+              })
+              const pageRank = Object.entries(pageMap).map(([name, d]) => ({ name, ...d })).sort((a, b) => b.count - a.count)
+              return <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: T.font }}>
+                <thead>
+                  <tr style={{ background: T.surfaceAlt }}>
+                    <th style={{ padding: '6px', textAlign: 'center', fontWeight: 600, color: T.textDim, width: 30 }}>#</th>
+                    <th style={{ padding: '6px', textAlign: 'left', fontWeight: 600, color: T.textDim }}>ชื่อเพจ</th>
+                    <th style={{ padding: '6px', textAlign: 'center', fontWeight: 600, color: T.textDim }}>จำนวน</th>
+                    <th style={{ padding: '6px', textAlign: 'right', fontWeight: 600, color: T.textDim }}>ยอดขาย</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageRank.map((p, i) => (
+                    <tr key={p.name} style={{ borderBottom: `1px solid ${T.border}`, background: i < 3 ? 'rgba(184,134,11,0.03)' : 'transparent' }}>
+                      <td style={{ padding: '6px', textAlign: 'center', fontWeight: 800, color: i < 3 ? T.gold : T.textDim }}>{i + 1}</td>
+                      <td style={{ padding: '6px', fontWeight: 600 }}>{p.name}</td>
+                      <td style={{ padding: '6px', textAlign: 'center', fontWeight: 700, color: T.gold }}>{p.count}</td>
+                      <td style={{ padding: '6px', textAlign: 'right', fontWeight: 700, color: T.success }}>฿{fmt(p.sales)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            })()}
+          </div>
+
           {/* ตาราง */}
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: T.font }}>
