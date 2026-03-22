@@ -570,6 +570,17 @@ export default function ManagerApp({ profile, onLogout }) {
           <div style={{ ...glass, padding: 14, marginBottom: 10 }}>
             <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="🔍 ค้นหา ชื่อ เบอร์ จังหวัด..."
               style={{ width: '100%', padding: '10px 12px', borderRadius: T.radiusSm, border: `1px solid ${T.border}`, background: T.surfaceAlt, color: T.text, fontSize: 13, fontFamily: T.font, outline: 'none', boxSizing: 'border-box', marginBottom: 8 }} />
+            {/* ปุ่มเลือกช่วงเวลา */}
+            <div style={{ display: 'flex', gap: 4, marginBottom: 8, flexWrap: 'wrap' }}>
+              {[
+                { label: 'วันนี้', fn: () => { setDateFilter(todayStr); setDateFilterEnd(todayStr) } },
+                { label: 'เดือนนี้', fn: () => { const d = new Date(); setDateFilter(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-01'); setDateFilterEnd(todayStr) } },
+                { label: 'เดือนก่อน', fn: () => { const d = new Date(); d.setMonth(d.getMonth()-1); const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'); setDateFilter(`${y}-${m}-01`); const last = new Date(y, d.getMonth()+1, 0); setDateFilterEnd(`${y}-${m}-${String(last.getDate()).padStart(2,'0')}`) } },
+                { label: 'ทั้งหมด', fn: () => { setDateFilter(''); setDateFilterEnd('') } },
+              ].map(b => (
+                <button key={b.label} onClick={b.fn} style={{ padding: '5px 10px', borderRadius: 6, border: `1px solid ${T.border}`, background: '#fff', color: T.gold, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>{b.label}</button>
+              ))}
+            </div>
             <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
               <input type="date" value={dateFilter} onChange={e => { setDateFilter(e.target.value); if (!dateFilterEnd || e.target.value > dateFilterEnd) setDateFilterEnd(e.target.value) }}
                 style={{ flex: 1, padding: '8px 10px', borderRadius: T.radiusSm, background: T.surfaceAlt, border: `1px solid ${T.border}`, color: T.text, fontSize: 12, fontFamily: T.font, outline: 'none' }} />
@@ -633,6 +644,63 @@ export default function ManagerApp({ profile, onLogout }) {
               </table>
             })()}
           </div>
+
+          {/* แจกแจงรายวัน */}
+          {filtered.length > 0 && (() => {
+            const dayMap = {}
+            filtered.forEach(o => {
+              const d = (o.order_date||'').substring(0,10)
+              if (!d) return
+              if (!dayMap[d]) dayMap[d] = { count: 0, sales: 0, cod: 0, codAmt: 0, trans: 0, transAmt: 0 }
+              dayMap[d].count++
+              dayMap[d].sales += parseFloat(o.sale_price) || 0
+              if (o.payment_type === 'transfer') { dayMap[d].trans++; dayMap[d].transAmt += parseFloat(o.sale_price) || 0 }
+              else { dayMap[d].cod++; dayMap[d].codAmt += parseFloat(o.cod_amount) || 0 }
+            })
+            const dayList = Object.entries(dayMap).sort((a,b) => b[0].localeCompare(a[0]))
+            const totalCount = dayList.reduce((s,d) => s+d[1].count, 0)
+            const totalSales = dayList.reduce((s,d) => s+d[1].sales, 0)
+            return <div style={{ ...glass, padding: 14, marginBottom: 10 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>📅 แจกแจงรายวัน ({dayList.length} วัน)</div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, fontFamily: T.font }}>
+                <thead>
+                  <tr style={{ background: T.surfaceAlt }}>
+                    <th style={{ padding: '6px', textAlign: 'left', fontWeight: 600, color: T.textDim }}>วันที่</th>
+                    <th style={{ padding: '6px', textAlign: 'center', fontWeight: 600, color: T.textDim }}>ออเดอร์</th>
+                    <th style={{ padding: '6px', textAlign: 'right', fontWeight: 600, color: T.textDim }}>ยอดขาย</th>
+                    <th style={{ padding: '6px', textAlign: 'center', fontWeight: 600, color: T.textDim }}>📦 COD</th>
+                    <th style={{ padding: '6px', textAlign: 'right', fontWeight: 600, color: T.textDim }}>ยอด COD</th>
+                    <th style={{ padding: '6px', textAlign: 'center', fontWeight: 600, color: T.textDim }}>🏦 โอน</th>
+                    <th style={{ padding: '6px', textAlign: 'right', fontWeight: 600, color: T.textDim }}>ยอดโอน</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dayList.map(([d, v]) => {
+                    const dt = new Date(d)
+                    const dayName = dt.toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short' })
+                    return <tr key={d} style={{ borderBottom: `1px solid ${T.border}` }}>
+                      <td style={{ padding: '6px', fontWeight: 600 }}>{dayName}</td>
+                      <td style={{ padding: '6px', textAlign: 'center', fontWeight: 700, color: T.gold }}>{v.count}</td>
+                      <td style={{ padding: '6px', textAlign: 'right', fontWeight: 700, color: T.success }}>฿{fmt(v.sales)}</td>
+                      <td style={{ padding: '6px', textAlign: 'center', color: T.gold }}>{v.cod}</td>
+                      <td style={{ padding: '6px', textAlign: 'right', color: T.gold }}>฿{fmt(v.codAmt)}</td>
+                      <td style={{ padding: '6px', textAlign: 'center', color: T.success }}>{v.trans}</td>
+                      <td style={{ padding: '6px', textAlign: 'right', color: T.success }}>฿{fmt(v.transAmt)}</td>
+                    </tr>
+                  })}
+                  <tr style={{ background: 'rgba(184,134,11,0.05)' }}>
+                    <td style={{ padding: '6px', fontWeight: 800 }}>รวม</td>
+                    <td style={{ padding: '6px', textAlign: 'center', fontWeight: 800, color: T.gold }}>{totalCount}</td>
+                    <td style={{ padding: '6px', textAlign: 'right', fontWeight: 800, color: T.success }}>฿{fmt(totalSales)}</td>
+                    <td style={{ padding: '6px', textAlign: 'center', fontWeight: 700, color: T.gold }}>{dayList.reduce((s,d)=>s+d[1].cod,0)}</td>
+                    <td style={{ padding: '6px', textAlign: 'right', fontWeight: 700, color: T.gold }}>฿{fmt(dayList.reduce((s,d)=>s+d[1].codAmt,0))}</td>
+                    <td style={{ padding: '6px', textAlign: 'center', fontWeight: 700, color: T.success }}>{dayList.reduce((s,d)=>s+d[1].trans,0)}</td>
+                    <td style={{ padding: '6px', textAlign: 'right', fontWeight: 700, color: T.success }}>฿{fmt(dayList.reduce((s,d)=>s+d[1].transAmt,0))}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          })()}
 
           {/* ตาราง */}
           <div style={{ overflowX: 'auto' }}>
