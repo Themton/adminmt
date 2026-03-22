@@ -18,6 +18,7 @@ export default function ManagerApp({ profile, onLogout }) {
   const [toast, setToast] = useState(null)
   const todayStr = new Date().toISOString().split('T')[0]
   const [dateFilter, setDateFilter] = useState(todayStr)
+  const [dateFilterEnd, setDateFilterEnd] = useState(todayStr)
   
   const [userFilter, setUserFilter] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
@@ -546,7 +547,9 @@ export default function ManagerApp({ profile, onLogout }) {
         {tab === 'orders' && (() => {
           const q = searchQuery.toLowerCase()
           const filtered = orders.filter(o => {
-            if (dateFilter && (o.order_date||'').substring(0,10) !== dateFilter) return false
+            const od = (o.order_date||'').substring(0,10)
+            if (dateFilter && od < dateFilter) return false
+            if (dateFilterEnd && od > dateFilterEnd) return false
             if (userFilter && o.employee_id !== userFilter) return false
             if (q && !(
               (o.customer_name||'').toLowerCase().includes(q) ||
@@ -567,15 +570,20 @@ export default function ManagerApp({ profile, onLogout }) {
           <div style={{ ...glass, padding: 14, marginBottom: 10 }}>
             <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="🔍 ค้นหา ชื่อ เบอร์ จังหวัด..."
               style={{ width: '100%', padding: '10px 12px', borderRadius: T.radiusSm, border: `1px solid ${T.border}`, background: T.surfaceAlt, color: T.text, fontSize: 13, fontFamily: T.font, outline: 'none', boxSizing: 'border-box', marginBottom: 8 }} />
-            <div style={{ display: 'flex', gap: 6 }}>
-              <input type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)}
+            <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+              <input type="date" value={dateFilter} onChange={e => { setDateFilter(e.target.value); if (!dateFilterEnd || e.target.value > dateFilterEnd) setDateFilterEnd(e.target.value) }}
                 style={{ flex: 1, padding: '8px 10px', borderRadius: T.radiusSm, background: T.surfaceAlt, border: `1px solid ${T.border}`, color: T.text, fontSize: 12, fontFamily: T.font, outline: 'none' }} />
+              <span style={{ display: 'flex', alignItems: 'center', fontSize: 12, color: T.textDim }}>ถึง</span>
+              <input type="date" value={dateFilterEnd} onChange={e => setDateFilterEnd(e.target.value)}
+                style={{ flex: 1, padding: '8px 10px', borderRadius: T.radiusSm, background: T.surfaceAlt, border: `1px solid ${T.border}`, color: T.text, fontSize: 12, fontFamily: T.font, outline: 'none' }} />
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
               <select value={userFilter} onChange={e => setUserFilter(e.target.value)}
                 style={{ flex: 1, padding: '8px 10px', borderRadius: T.radiusSm, border: `1px solid ${T.border}`, background: T.surfaceAlt, color: T.text, fontSize: 12, fontFamily: T.font, outline: 'none' }}>
                 <option value="">ทุกคน</option>
                 {profiles.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
               </select>
-              {(dateFilter || userFilter || searchQuery) && <button onClick={() => { setDateFilter(todayStr); setUserFilter(''); setSearchQuery('') }}
+              {(dateFilter || userFilter || searchQuery) && <button onClick={() => { setDateFilter(todayStr); setDateFilterEnd(todayStr); setUserFilter(''); setSearchQuery('') }}
                 style={{ padding: '8px 12px', borderRadius: T.radiusSm, border: `1px solid ${T.border}`, background: '#fff', color: T.textDim, fontSize: 11, cursor: 'pointer', fontFamily: T.font }}>ล้าง</button>}
             </div>
             {/* สรุป */}
