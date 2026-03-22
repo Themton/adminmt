@@ -646,6 +646,41 @@ export default function ManagerApp({ profile, onLogout }) {
             })()}
           </div>
 
+          {/* จัดอันดับโปรขายดี */}
+          <div style={{ ...glass, padding: 14, marginBottom: 10 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>🎯 โปรขายดี</div>
+            {(() => {
+              const promoMap = {}
+              filtered.forEach(o => {
+                const promo = o.remark || '—'
+                if (!promoMap[promo]) promoMap[promo] = { count: 0, sales: 0 }
+                promoMap[promo].count++
+                promoMap[promo].sales += parseFloat(o.sale_price) || 0
+              })
+              const promoRank = Object.entries(promoMap).map(([name, d]) => ({ name, ...d })).sort((a, b) => b.count - a.count)
+              return <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: T.font }}>
+                <thead>
+                  <tr style={{ background: T.surfaceAlt }}>
+                    <th style={{ padding: '6px', textAlign: 'center', fontWeight: 600, color: T.textDim, width: 30 }}>#</th>
+                    <th style={{ padding: '6px', textAlign: 'left', fontWeight: 600, color: T.textDim }}>โปร/สินค้า</th>
+                    <th style={{ padding: '6px', textAlign: 'center', fontWeight: 600, color: T.textDim }}>จำนวน</th>
+                    <th style={{ padding: '6px', textAlign: 'right', fontWeight: 600, color: T.textDim }}>ยอดขาย</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {promoRank.map((p, i) => (
+                    <tr key={p.name} style={{ borderBottom: `1px solid ${T.border}`, background: i < 3 ? 'rgba(184,134,11,0.03)' : 'transparent' }}>
+                      <td style={{ padding: '6px', textAlign: 'center', fontWeight: 800, color: i < 3 ? T.gold : T.textDim }}>{i + 1}</td>
+                      <td style={{ padding: '6px', fontWeight: 600 }}>{p.name}</td>
+                      <td style={{ padding: '6px', textAlign: 'center', fontWeight: 700, color: T.gold }}>{p.count}</td>
+                      <td style={{ padding: '6px', textAlign: 'right', fontWeight: 700, color: T.success }}>฿{fmt(p.sales)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            })()}
+          </div>
+
           {/* แจกแจงรายวัน */}
           {filtered.length > 0 && (() => {
             const dayMap = {}
