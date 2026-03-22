@@ -19,6 +19,7 @@ export default function ManagerApp({ profile, onLogout }) {
   const todayStr = new Date().toISOString().split('T')[0]
   const [dateFilter, setDateFilter] = useState(todayStr)
   const [dateFilterEnd, setDateFilterEnd] = useState(todayStr)
+  const [quickFilter, setQuickFilter] = useState('today')
   
   const [userFilter, setUserFilter] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
@@ -573,19 +574,19 @@ export default function ManagerApp({ profile, onLogout }) {
             {/* ปุ่มเลือกช่วงเวลา */}
             <div style={{ display: 'flex', gap: 4, marginBottom: 8, flexWrap: 'wrap' }}>
               {[
-                { label: 'วันนี้', fn: () => { setDateFilter(todayStr); setDateFilterEnd(todayStr) } },
-                { label: 'เดือนนี้', fn: () => { const d = new Date(); setDateFilter(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-01'); setDateFilterEnd(todayStr) } },
-                { label: 'เดือนก่อน', fn: () => { const d = new Date(); d.setMonth(d.getMonth()-1); const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'); setDateFilter(`${y}-${m}-01`); const last = new Date(y, d.getMonth()+1, 0); setDateFilterEnd(`${y}-${m}-${String(last.getDate()).padStart(2,'0')}`) } },
-                { label: 'ทั้งหมด', fn: () => { setDateFilter(''); setDateFilterEnd('') } },
+                { id: 'today', label: 'วันนี้', fn: () => { setDateFilter(todayStr); setDateFilterEnd(todayStr); setQuickFilter('today') } },
+                { id: 'month', label: 'เดือนนี้', fn: () => { const d = new Date(); setDateFilter(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-01'); setDateFilterEnd(todayStr); setQuickFilter('month') } },
+                { id: 'prevMonth', label: 'เดือนก่อน', fn: () => { const d = new Date(); d.setMonth(d.getMonth()-1); const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'); setDateFilter(`${y}-${m}-01`); const last = new Date(y, d.getMonth()+1, 0); setDateFilterEnd(`${y}-${m}-${String(last.getDate()).padStart(2,'0')}`); setQuickFilter('prevMonth') } },
+                { id: 'all', label: 'ทั้งหมด', fn: () => { setDateFilter(''); setDateFilterEnd(''); setQuickFilter('all') } },
               ].map(b => (
-                <button key={b.label} onClick={b.fn} style={{ padding: '5px 10px', borderRadius: 6, border: `1px solid ${T.border}`, background: '#fff', color: T.gold, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>{b.label}</button>
+                <button key={b.id} onClick={b.fn} style={{ padding: '6px 14px', borderRadius: 8, border: quickFilter === b.id ? 'none' : `1px solid ${T.border}`, background: quickFilter === b.id ? 'linear-gradient(135deg, #B8860B, #DAA520)' : '#fff', color: quickFilter === b.id ? '#fff' : T.gold, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: T.font, boxShadow: quickFilter === b.id ? '0 2px 8px rgba(184,134,11,0.3)' : 'none' }}>{b.label}</button>
               ))}
             </div>
             <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-              <input type="date" value={dateFilter} onChange={e => { setDateFilter(e.target.value); if (!dateFilterEnd || e.target.value > dateFilterEnd) setDateFilterEnd(e.target.value) }}
+              <input type="date" value={dateFilter} onChange={e => { setDateFilter(e.target.value); if (!dateFilterEnd || e.target.value > dateFilterEnd) setDateFilterEnd(e.target.value); setQuickFilter('') }}
                 style={{ flex: 1, padding: '8px 10px', borderRadius: T.radiusSm, background: T.surfaceAlt, border: `1px solid ${T.border}`, color: T.text, fontSize: 12, fontFamily: T.font, outline: 'none' }} />
               <span style={{ display: 'flex', alignItems: 'center', fontSize: 12, color: T.textDim }}>ถึง</span>
-              <input type="date" value={dateFilterEnd} onChange={e => setDateFilterEnd(e.target.value)}
+              <input type="date" value={dateFilterEnd} onChange={e => { setDateFilterEnd(e.target.value); setQuickFilter('') }}
                 style={{ flex: 1, padding: '8px 10px', borderRadius: T.radiusSm, background: T.surfaceAlt, border: `1px solid ${T.border}`, color: T.text, fontSize: 12, fontFamily: T.font, outline: 'none' }} />
             </div>
             <div style={{ display: 'flex', gap: 6 }}>
@@ -594,7 +595,7 @@ export default function ManagerApp({ profile, onLogout }) {
                 <option value="">ทุกคน</option>
                 {profiles.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
               </select>
-              {(dateFilter || userFilter || searchQuery) && <button onClick={() => { setDateFilter(todayStr); setDateFilterEnd(todayStr); setUserFilter(''); setSearchQuery('') }}
+              {(dateFilter || userFilter || searchQuery) && <button onClick={() => { setDateFilter(todayStr); setDateFilterEnd(todayStr); setUserFilter(''); setSearchQuery(''); setQuickFilter('today') }}
                 style={{ padding: '8px 12px', borderRadius: T.radiusSm, border: `1px solid ${T.border}`, background: '#fff', color: T.textDim, fontSize: 11, cursor: 'pointer', fontFamily: T.font }}>ล้าง</button>}
             </div>
             {/* สรุป */}
