@@ -575,6 +575,7 @@ export default function ManagerApp({ profile, onLogout }) {
             <div style={{ display: 'flex', gap: 4, marginBottom: 8, flexWrap: 'wrap' }}>
               {[
                 { id: 'today', label: 'วันนี้', fn: () => { setDateFilter(todayStr); setDateFilterEnd(todayStr); setQuickFilter('today') } },
+                { id: 'yesterday', label: 'เมื่อวาน', fn: () => { const y = new Date(); y.setDate(y.getDate()-1); const ys = y.toISOString().split('T')[0]; setDateFilter(ys); setDateFilterEnd(ys); setQuickFilter('yesterday') } },
                 { id: 'month', label: 'เดือนนี้', fn: () => { const d = new Date(); setDateFilter(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-01'); setDateFilterEnd(todayStr); setQuickFilter('month') } },
                 { id: 'prevMonth', label: 'เดือนก่อน', fn: () => { const d = new Date(); d.setMonth(d.getMonth()-1); const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'); setDateFilter(`${y}-${m}-01`); const last = new Date(y, d.getMonth()+1, 0); setDateFilterEnd(`${y}-${m}-${String(last.getDate()).padStart(2,'0')}`); setQuickFilter('prevMonth') } },
                 { id: 'all', label: 'ทั้งหมด', fn: () => { setDateFilter(''); setDateFilterEnd(''); setQuickFilter('all') } },
