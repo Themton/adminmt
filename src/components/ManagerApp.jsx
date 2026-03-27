@@ -739,6 +739,61 @@ export default function ManagerApp({ profile, onLogout }) {
             </div>
           })()}
 
+          {/* แจกแจงรายคน */}
+          {filtered.length > 0 && (() => {
+            const empMap = {}
+            filtered.forEach(o => {
+              const eid = o.employee_id || '__none'
+              const ename = o.employee_name || '—'
+              if (!empMap[eid]) empMap[eid] = { name: ename, count: 0, sales: 0, cod: 0, codAmt: 0, trans: 0, transAmt: 0 }
+              empMap[eid].count++
+              empMap[eid].sales += parseFloat(o.sale_price) || 0
+              if (o.payment_type === 'transfer') { empMap[eid].trans++; empMap[eid].transAmt += parseFloat(o.sale_price) || 0 }
+              else { empMap[eid].cod++; empMap[eid].codAmt += parseFloat(o.cod_amount) || 0 }
+            })
+            const empList = Object.values(empMap).sort((a, b) => b.count - a.count)
+            return <div style={{ ...glass, padding: 14, marginBottom: 10 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>👤 แจกแจงรายคน ({empList.length} คน)</div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, fontFamily: T.font }}>
+                <thead>
+                  <tr style={{ background: T.surfaceAlt }}>
+                    <th style={{ padding: '6px', textAlign: 'center', fontWeight: 600, color: T.textDim, width: 30 }}>#</th>
+                    <th style={{ padding: '6px', textAlign: 'left', fontWeight: 600, color: T.textDim }}>พนักงาน</th>
+                    <th style={{ padding: '6px', textAlign: 'center', fontWeight: 600, color: T.textDim }}>ออเดอร์</th>
+                    <th style={{ padding: '6px', textAlign: 'right', fontWeight: 600, color: T.textDim }}>ยอดขาย</th>
+                    <th style={{ padding: '6px', textAlign: 'center', fontWeight: 600, color: T.textDim }}>📦 COD</th>
+                    <th style={{ padding: '6px', textAlign: 'right', fontWeight: 600, color: T.textDim }}>ยอด COD</th>
+                    <th style={{ padding: '6px', textAlign: 'center', fontWeight: 600, color: T.textDim }}>🏦 โอน</th>
+                    <th style={{ padding: '6px', textAlign: 'right', fontWeight: 600, color: T.textDim }}>ยอดโอน</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {empList.map((e, i) => (
+                    <tr key={e.name+i} style={{ borderBottom: `1px solid ${T.border}`, background: i < 3 ? 'rgba(184,134,11,0.03)' : 'transparent' }}>
+                      <td style={{ padding: '6px', textAlign: 'center', fontWeight: 800, color: i < 3 ? T.gold : T.textDim }}>{i + 1}</td>
+                      <td style={{ padding: '6px', fontWeight: 600 }}>{e.name}</td>
+                      <td style={{ padding: '6px', textAlign: 'center', fontWeight: 700, color: T.gold }}>{e.count}</td>
+                      <td style={{ padding: '6px', textAlign: 'right', fontWeight: 700, color: T.success }}>฿{fmt(e.sales)}</td>
+                      <td style={{ padding: '6px', textAlign: 'center', color: T.gold }}>{e.cod}</td>
+                      <td style={{ padding: '6px', textAlign: 'right', color: T.gold }}>฿{fmt(e.codAmt)}</td>
+                      <td style={{ padding: '6px', textAlign: 'center', color: T.success }}>{e.trans}</td>
+                      <td style={{ padding: '6px', textAlign: 'right', color: T.success }}>฿{fmt(e.transAmt)}</td>
+                    </tr>
+                  ))}
+                  <tr style={{ background: 'rgba(184,134,11,0.05)' }}>
+                    <td colSpan="2" style={{ padding: '6px', fontWeight: 800 }}>รวม</td>
+                    <td style={{ padding: '6px', textAlign: 'center', fontWeight: 800, color: T.gold }}>{empList.reduce((s,e)=>s+e.count,0)}</td>
+                    <td style={{ padding: '6px', textAlign: 'right', fontWeight: 800, color: T.success }}>฿{fmt(empList.reduce((s,e)=>s+e.sales,0))}</td>
+                    <td style={{ padding: '6px', textAlign: 'center', fontWeight: 700, color: T.gold }}>{empList.reduce((s,e)=>s+e.cod,0)}</td>
+                    <td style={{ padding: '6px', textAlign: 'right', fontWeight: 700, color: T.gold }}>฿{fmt(empList.reduce((s,e)=>s+e.codAmt,0))}</td>
+                    <td style={{ padding: '6px', textAlign: 'center', fontWeight: 700, color: T.success }}>{empList.reduce((s,e)=>s+e.trans,0)}</td>
+                    <td style={{ padding: '6px', textAlign: 'right', fontWeight: 700, color: T.success }}>฿{fmt(empList.reduce((s,e)=>s+e.transAmt,0))}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          })()}
+
           {/* ตาราง */}
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: T.font }}>
