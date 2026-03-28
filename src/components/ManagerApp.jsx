@@ -892,29 +892,6 @@ export default function ManagerApp({ profile, onLogout }) {
 
         {/* ══ SHIPPING ══ */}
         {tab === 'shipping' && (() => {
-          const shipOrders = orders.filter(o => {
-            if (shipFilter === 'waiting') return !o.shipping_status || o.shipping_status === 'waiting'
-            if (shipFilter === 'printed') return o.shipping_status === 'printed'
-            return true
-          })
-          const waitingCount = orders.filter(o => !o.shipping_status || o.shipping_status === 'waiting').length
-          const printedCount = orders.filter(o => o.shipping_status === 'printed').length
-
-          const markPrinted = async (ids) => {
-            const { error } = await supabase.from('mt_orders').update({ shipping_status: 'printed' }).in('id', ids)
-            if (error) { flash('❌ ' + error.message); return }
-            setOrders(prev => prev.map(o => ids.includes(o.id) ? { ...o, shipping_status: 'printed' } : o))
-            flash('✅ อัพเดทสถานะ ' + ids.length + ' รายการ')
-          }
-
-          const markWaiting = async (ids) => {
-            const { error } = await supabase.from('mt_orders').update({ shipping_status: 'waiting' }).in('id', ids)
-            if (error) { flash('❌ ' + error.message); return }
-            setOrders(prev => prev.map(o => ids.includes(o.id) ? { ...o, shipping_status: 'waiting' } : o))
-            flash('✅ เปลี่ยนกลับเป็นรอส่ง ' + ids.length + ' รายการ')
-          }
-
-        {tab === 'shipping' && (() => {
           const allShipOrders = orders.filter(o => {
             // กรองตามวันที่
             if (dateFilter) { const od = (o.order_date||'').substring(0,10); if (od < dateFilter) return false }
