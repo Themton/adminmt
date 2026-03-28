@@ -168,10 +168,10 @@ export default function ManagerApp({ profile, onLogout }) {
     return () => supabase.removeChannel(ch)
   }, [])
   // ═══ Stats ═══
-  const today = orders.filter(o => sameDay(o.created_at, new Date()))
-  const todaySum = today.reduce((s, o) => s + (parseFloat(o.sale_price) || 0), 0)
-  const weekSum = orders.filter(o => withinDays(o.created_at, 7)).reduce((s, o) => s + (parseFloat(o.sale_price) || 0), 0)
-  const monthSum = orders.filter(o => thisMonth(o.created_at)).reduce((s, o) => s + (parseFloat(o.sale_price) || 0), 0)
+  const today = useMemo(() => orders.filter(o => sameDay(o.created_at, new Date())), [orders])
+  const todaySum = useMemo(() => today.reduce((s, o) => s + (parseFloat(o.sale_price) || 0), 0), [today])
+  const weekSum = useMemo(() => orders.filter(o => withinDays(o.created_at, 7)).reduce((s, o) => s + (parseFloat(o.sale_price) || 0), 0), [orders])
+  const monthSum = useMemo(() => orders.filter(o => thisMonth(o.created_at)).reduce((s, o) => s + (parseFloat(o.sale_price) || 0), 0), [orders])
 
   const chart7 = useMemo(() => {
     const a = []; for (let i = 6; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); a.push({ date: fmtDate(d), ยอดขาย: orders.filter(o => sameDay(o.created_at, d)).reduce((s, o) => s + (parseFloat(o.sale_price) || 0), 0) }) }; return a
