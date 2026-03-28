@@ -914,13 +914,85 @@ export default function ManagerApp({ profile, onLogout }) {
             flash('✅ เปลี่ยนกลับเป็นรอส่ง ' + ids.length + ' รายการ')
           }
 
+        {tab === 'shipping' && (() => {
+          const allShipOrders = orders.filter(o => {
+            // กรองตามวันที่
+            if (dateFilter) { const od = (o.order_date||'').substring(0,10); if (od < dateFilter) return false }
+            if (dateFilterEnd) { const od = (o.order_date||'').substring(0,10); if (od > dateFilterEnd) return false }
+            return true
+          })
+          const shipOrders = allShipOrders.filter(o => {
+            if (shipFilter === 'waiting') return !o.shipping_status || o.shipping_status === 'waiting'
+            if (shipFilter === 'printed') return o.shipping_status === 'printed'
+            return true
+          })
+          const waitingCount = allShipOrders.filter(o => !o.shipping_status || o.shipping_status === 'waiting').length
+          const printedCount = allShipOrders.filter(o => o.shipping_status === 'printed').length
+
+          const markPrinted = async (ids) => {
+            const { error } = await supabase.from('mt_orders').update({ shipping_status: 'printed' }).in('id', ids)
+            if (error) { flash('❌ ' + error.message); return }
+            setOrders(prev => prev.map(o => ids.includes(o.id) ? { ...o, shipping_status: 'printed' } : o))
+            flash('✅ อัพเดทสถานะ ' + ids.length + ' รายการ')
+          }
+
+          const markWaiting = async (ids) => {
+            const { error } = await supabase.from('mt_orders').update({ shipping_status: 'waiting' }).in('id', ids)
+            if (error) { flash('❌ ' + error.message); return }
+            setOrders(prev => prev.map(o => ids.includes(o.id) ? { ...o, shipping_status: 'waiting' } : o))
+            flash('✅ เปลี่ยนกลับเป็นรอส่ง ' + ids.length + ' รายการ')
+          }
+
+          const exportShip = (type) => {
+            const rows = shipOrders.filter(o => {
+              if (!searchQuery) return true
+              const q = searchQuery.toLowerCase()
+              return (o.customer_name||'').toLowerCase().includes(q) || (o.customer_phone||'').includes(q) || (o.employee_name||'').toLowerCase().includes(q)
+            })
+            if (type === 'csv') {
+              const header = ['#','วันที่','เวลา','ลูกค้า','เบอร์โทรศัพท์','ที่อยู่','ตำบล','อำเภอ','จังหวัด','รหัส ปณ.','ราคา','COD','ประเภท','สถานะ','เพจ','หมายเหตุ','พนักงาน']
+              const csv = '\uFEFF' + [header, ...rows.map((o,i) => {
+                const dt = new Date(o.created_at)
+                return [i+1, (o.order_date||'').substring(0,10), dt.toLocaleTimeString('th-TH',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit',second:'2-digit'}), o.customer_name||'', o.customer_phone||'', o.customer_address||'', o.sub_district||'', o.district||'', o.province||'', o.zip_code||'', o.sale_price||'', o.cod_amount||'', o.payment_type==='transfer'?'โอน':'COD', o.shipping_status==='printed'?'ปริ้นแล้ว':'รอส่ง', o.sales_channel||'', o.remark||'', o.employee_name||'']
+              })].map(r => r.map(c => '"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\n')
+              const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+              const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'shipping_' + (dateFilter||'all') + '.csv'; a.click()
+              flash('✅ Export CSV สำเร็จ!')
+            } else {
+              const header = '<tr><th>#</th><th>วันที่</th><th>เวลา</th><th>ลูกค้า</th><th>เบอร์โทรศัพท์</th><th>ที่อยู่</th><th>ตำบล</th><th>อำเภอ</th><th>จังหวัด</th><th>รหัส ปณ.</th><th>ราคา</th><th>COD</th><th>ประเภท</th><th>สถานะ</th><th>เพจ</th><th>หมายเหตุ</th><th>พนักงาน</th></tr>'
+              const body = rows.map((o,i) => { const dt = new Date(o.created_at); return '<tr><td>'+(i+1)+'</td><td>'+(o.order_date||'').substring(0,10)+'</td><td>'+dt.toLocaleTimeString('th-TH',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit',second:'2-digit'})+'</td><td>'+(o.customer_name||'')+'</td><td>'+(o.customer_phone||'')+'</td><td>'+(o.customer_address||'')+'</td><td>'+(o.sub_district||'')+'</td><td>'+(o.district||'')+'</td><td>'+(o.province||'')+'</td><td>'+(o.zip_code||'')+'</td><td>'+(o.sale_price||'')+'</td><td>'+(o.cod_amount||'')+'</td><td>'+(o.payment_type==='transfer'?'โอน':'COD')+'</td><td>'+(o.shipping_status==='printed'?'ปริ้นแล้ว':'รอส่ง')+'</td><td>'+(o.sales_channel||'')+'</td><td>'+(o.remark||'')+'</td><td>'+(o.employee_name||'')+'</td></tr>' }).join('')
+              const html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="UTF-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Shipping</x:Name></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head><body><table border="1">'+header+body+'</table></body></html>'
+              const blob = new Blob([html], { type: 'application/vnd.ms-excel' })
+              const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'shipping_' + (dateFilter||'all') + '.xls'; a.click()
+              flash('✅ Export Excel สำเร็จ!')
+            }
+          }
+
           return <>
           <div style={{ ...glass, padding: 14, marginBottom: 10 }}>
             <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>🚚 การจัดส่ง</div>
-            {/* ปุ่มกรองสถานะ */}
-            <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+
+            {/* วันที่ + ปุ่มเลือกช่วง */}
+            <div style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <input type="date" value={dateFilter} onChange={e => { setDateFilter(e.target.value); if (!dateFilterEnd || e.target.value > dateFilterEnd) setDateFilterEnd(e.target.value); setQuickFilter('') }}
+                style={{ padding: '8px 10px', borderRadius: T.radiusSm, background: T.surfaceAlt, border: `1px solid ${T.border}`, color: T.text, fontSize: 12, fontFamily: T.font, outline: 'none' }} />
+              <span style={{ fontSize: 12, color: T.textDim }}>ถึง</span>
+              <input type="date" value={dateFilterEnd} onChange={e => { setDateFilterEnd(e.target.value); setQuickFilter('') }}
+                style={{ padding: '8px 10px', borderRadius: T.radiusSm, background: T.surfaceAlt, border: `1px solid ${T.border}`, color: T.text, fontSize: 12, fontFamily: T.font, outline: 'none' }} />
               {[
-                { id: 'all', label: `📦 ทั้งหมด`, count: orders.length },
+                { id: 'today', label: 'วันนี้', fn: () => { setDateFilter(todayStr); setDateFilterEnd(todayStr); setQuickFilter('today') } },
+                { id: '7days', label: '7 วัน', fn: () => { const d = new Date(); d.setDate(d.getDate()-6); setDateFilter(d.toISOString().split('T')[0]); setDateFilterEnd(todayStr); setQuickFilter('7days') } },
+                { id: 'month', label: 'เดือนนี้', fn: () => { const d = new Date(); setDateFilter(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-01'); setDateFilterEnd(todayStr); setQuickFilter('month') } },
+              ].map(b => (
+                <button key={b.id} onClick={b.fn} style={{ padding: '6px 12px', borderRadius: 8, border: quickFilter === b.id ? 'none' : `1px solid ${T.border}`, background: quickFilter === b.id ? 'linear-gradient(135deg, #B8860B, #DAA520)' : '#fff', color: quickFilter === b.id ? '#fff' : T.textDim, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>{b.label}</button>
+              ))}
+            </div>
+
+            {/* ปุ่มกรองสถานะ */}
+            <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: 6 }}>
+              {[
+                { id: 'all', label: `📦 ทั้งหมด`, count: allShipOrders.length },
                 { id: 'waiting', label: `🟡 รอส่ง`, count: waitingCount },
                 { id: 'printed', label: `🟢 ปริ้นแล้ว`, count: printedCount },
               ].map(b => (
@@ -932,6 +1004,11 @@ export default function ManagerApp({ profile, onLogout }) {
                   boxShadow: shipFilter === b.id ? '0 2px 8px rgba(0,0,0,0.15)' : 'none'
                 }}>{b.label} <span style={{ marginLeft: 4, padding: '1px 6px', borderRadius: 6, background: shipFilter === b.id ? 'rgba(255,255,255,0.3)' : T.surfaceAlt, fontSize: 10 }}>{b.count}</span></button>
               ))}
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button onClick={() => exportShip('excel')} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(45,138,78,0.2)', background: 'rgba(45,138,78,0.05)', color: T.success, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>📊 Export Excel ({shipOrders.length})</button>
+                <button onClick={() => exportShip('csv')} style={{ padding: '6px 14px', borderRadius: 8, border: `1px solid ${T.border}`, background: '#fff', color: T.textDim, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>📥 CSV</button>
+              </div>
             </div>
 
             {/* ค้นหา */}
