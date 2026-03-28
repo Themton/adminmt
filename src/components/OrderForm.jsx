@@ -293,19 +293,20 @@ export default function OrderForm({ profile, onSuccess }) {
     }
     setSubmitting(true)
 
-    // เช็คซ้ำ: เบอร์เดียวกัน + เพจเดียวกัน + วันเดียวกัน
-    const todayDate = new Date().toISOString().split('T')[0]
+    // เช็คซ้ำ: เบอร์เดียวกัน + เพจเดียวกัน + ย้อนหลัง 3 วัน
+    const threeDaysAgo = new Date(); threeDaysAgo.setDate(threeDaysAgo.getDate() - 3)
+    const fromDate = threeDaysAgo.toISOString().split('T')[0]
     const { data: dupCheck } = await supabase.from('mt_orders')
-      .select('id, customer_name')
+      .select('id, customer_name, order_date, created_at')
       .eq('customer_phone', form.customerPhone)
-      .eq('order_date', todayDate)
       .eq('sales_channel', form.salesChannel || '')
+      .gte('order_date', fromDate)
     if (dupCheck && dupCheck.length > 0) {
-      const dupName = dupCheck[0].customer_name
-      if (!confirm(`⚠️ พบออเดอร์ซ้ำวันนี้!\n\nเบอร์: ${form.customerPhone}\nชื่อ: ${dupName}\nเพจ: ${form.salesChannel || '—'}\n\nต้องการบันทึกซ้ำหรือไม่?`)) {
-        setSubmitting(false)
-        return
-      }
+      const dup = dupCheck[0]
+      const dupDate = new Date(dup.created_at).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+      flash('❌ ออเดอร์ซ้ำ! เบอร์ ' + form.customerPhone + ' (' + dup.customer_name + ') สั่งแล้วเมื่อ ' + dupDate + ' เพจ: ' + (form.salesChannel || '—'))
+      setSubmitting(false)
+      return
     }
 
     let slipUrl = ''
