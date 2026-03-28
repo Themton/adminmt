@@ -610,6 +610,45 @@ export default function ManagerApp({ profile, onLogout }) {
                 <span>🏦 โอน {trans.length} · ฿{fmt(trans.reduce((s,o)=>s+(parseFloat(o.sale_price)||0),0))}</span>
               </div>
             </div>
+            {/* ปุ่ม Export */}
+            <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => {
+                const rows = [['#','วันที่','เวลา','ลูกค้า','เบอร์โทรศัพท์','ที่อยู่','ตำบล','อำเภอ','จังหวัด','รหัส ปณ.','ราคา','COD','ประเภท','เพจ','FB/Line','หมายเหตุ','พนักงาน']]
+                filtered.forEach((o, i) => {
+                  const dt = new Date(o.created_at)
+                  rows.push([
+                    i+1,
+                    (o.order_date||'').substring(0,10),
+                    dt.toLocaleTimeString('th-TH', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                    o.customer_name||'', o.customer_phone||'', o.customer_address||'',
+                    o.sub_district||'', o.district||'', o.province||'', o.zip_code||'',
+                    o.sale_price||'', o.cod_amount||'',
+                    o.payment_type === 'transfer' ? 'โอน' : 'COD',
+                    o.sales_channel||'', o.customer_social||'', o.remark||'',
+                    o.employee_name||''
+                  ])
+                })
+                const csv = '\uFEFF' + rows.map(r => r.map(c => '"' + String(c).replace(/"/g,'""') + '"').join(',')).join('\n')
+                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+                const a = document.createElement('a'); a.href = URL.createObjectURL(blob)
+                a.download = 'ADMIN_MT_' + (dateFilter || 'all') + '.csv'
+                a.click()
+                flash('✅ Export CSV สำเร็จ!')
+              }} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(45,138,78,0.2)', background: 'rgba(45,138,78,0.05)', color: T.success, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>📥 CSV ({filtered.length})</button>
+              <button onClick={() => {
+                const header = '<tr><th>#</th><th>วันที่</th><th>เวลา</th><th>ลูกค้า</th><th>เบอร์โทรศัพท์</th><th>ที่อยู่</th><th>ตำบล</th><th>อำเภอ</th><th>จังหวัด</th><th>รหัส ปณ.</th><th>ราคา</th><th>COD</th><th>ประเภท</th><th>เพจ</th><th>FB/Line</th><th>หมายเหตุ</th><th>พนักงาน</th></tr>'
+                const body = filtered.map((o, i) => {
+                  const dt = new Date(o.created_at)
+                  return '<tr><td>'+(i+1)+'</td><td>'+(o.order_date||'').substring(0,10)+'</td><td>'+dt.toLocaleTimeString('th-TH',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit',second:'2-digit'})+'</td><td>'+(o.customer_name||'')+'</td><td>'+(o.customer_phone||'')+'</td><td>'+(o.customer_address||'')+'</td><td>'+(o.sub_district||'')+'</td><td>'+(o.district||'')+'</td><td>'+(o.province||'')+'</td><td>'+(o.zip_code||'')+'</td><td>'+(o.sale_price||'')+'</td><td>'+(o.cod_amount||'')+'</td><td>'+(o.payment_type==='transfer'?'โอน':'COD')+'</td><td>'+(o.sales_channel||'')+'</td><td>'+(o.customer_social||'')+'</td><td>'+(o.remark||'')+'</td><td>'+(o.employee_name||'')+'</td></tr>'
+                }).join('')
+                const html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="UTF-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Orders</x:Name></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head><body><table border="1">'+header+body+'</table></body></html>'
+                const blob = new Blob([html], { type: 'application/vnd.ms-excel' })
+                const a = document.createElement('a'); a.href = URL.createObjectURL(blob)
+                a.download = 'ADMIN_MT_' + (dateFilter || 'all') + '.xls'
+                a.click()
+                flash('✅ Export Excel สำเร็จ!')
+              }} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(45,138,78,0.2)', background: 'rgba(45,138,78,0.05)', color: T.success, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>📊 Excel ({filtered.length})</button>
+            </div>
           </div>
 
           {/* จัดอันดับเพจขายดี */}
