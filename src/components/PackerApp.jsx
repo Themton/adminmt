@@ -5,10 +5,13 @@ import { exportProshipExcel, exportProshipCSV } from '../lib/exportProship'
 
 export default function PackerApp({ profile, onLogout }) {
   const [orders, setOrders] = useState([])
+  const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState(null)
   const [shipFilter, setShipFilter] = useState('waiting')
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedIds, setSelectedIds] = useState(new Set())
+  const [page, setPage] = useState(1)
+  const PER_PAGE = 200
   const todayStr = new Date().toISOString().split('T')[0]
   const [dateFilter, setDateFilter] = useState('')
   const [dateFilterEnd, setDateFilterEnd] = useState('')
@@ -18,14 +21,16 @@ export default function PackerApp({ profile, onLogout }) {
 
   useEffect(() => {
     const loadOrders = async () => {
+      setLoading(true)
       let all = [], from = 0
       while (true) {
-        const { data } = await supabase.from('mt_orders').select('*').order('created_at', { ascending: false }).range(from, from + 999)
+        const { data } = await supabase.from('mt_orders').select('id,order_date,created_at,customer_name,customer_phone,customer_address,sub_district,district,province,zip_code,customer_social,sales_channel,sale_price,cod_amount,payment_type,remark,employee_name,employee_id,daily_seq,shipping_status,order_number').order('created_at', { ascending: false }).range(from, from + 999)
         if (!data || data.length === 0) break
         all = [...all, ...data]; from += 1000
         if (data.length < 1000) break
       }
       setOrders(all)
+      setLoading(false)
     }
     loadOrders()
 
@@ -107,16 +112,16 @@ export default function PackerApp({ profile, onLogout }) {
 
           {/* วันที่ + ปุ่มเลือกช่วง */}
           <div style={{ display: 'flex', gap: 6, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-            <input type="date" value={dateFilter} onChange={e => { setDateFilter(e.target.value); if (!dateFilterEnd || e.target.value > dateFilterEnd) setDateFilterEnd(e.target.value); setQuickFilter('') }}
+            <input type="date" value={dateFilter} onChange={e => { setDateFilter(e.target.value); if (!dateFilterEnd || e.target.value > dateFilterEnd) setDateFilterEnd(e.target.value); setQuickFilter(''); setPage(1) }}
               style={{ padding: '8px 10px', borderRadius: T.radiusSm, background: T.surfaceAlt, border: `1px solid ${T.border}`, color: T.text, fontSize: 12, fontFamily: T.font, outline: 'none' }} />
             <span style={{ fontSize: 12, color: T.textDim }}>ถึง</span>
-            <input type="date" value={dateFilterEnd} onChange={e => { setDateFilterEnd(e.target.value); setQuickFilter('') }}
+            <input type="date" value={dateFilterEnd} onChange={e => { setDateFilterEnd(e.target.value); setQuickFilter(''); setPage(1) }}
               style={{ padding: '8px 10px', borderRadius: T.radiusSm, background: T.surfaceAlt, border: `1px solid ${T.border}`, color: T.text, fontSize: 12, fontFamily: T.font, outline: 'none' }} />
             {[
-              { id: 'today', label: 'วันนี้', fn: () => { setDateFilter(todayStr); setDateFilterEnd(todayStr); setQuickFilter('today') } },
-              { id: '7days', label: '7 วัน', fn: () => { const d = new Date(); d.setDate(d.getDate() - 6); setDateFilter(d.toISOString().split('T')[0]); setDateFilterEnd(todayStr); setQuickFilter('7days') } },
-              { id: 'month', label: 'เดือนนี้', fn: () => { const d = new Date(); setDateFilter(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-01'); setDateFilterEnd(todayStr); setQuickFilter('month') } },
-              { id: 'all', label: 'ทั้งหมด', fn: () => { setDateFilter(''); setDateFilterEnd(''); setQuickFilter('all') } },
+              { id: 'today', label: 'วันนี้', fn: () => { setDateFilter(todayStr); setDateFilterEnd(todayStr); setQuickFilter('today'); setPage(1) } },
+              { id: '7days', label: '7 วัน', fn: () => { const d = new Date(); d.setDate(d.getDate() - 6); setDateFilter(d.toISOString().split('T')[0]); setDateFilterEnd(todayStr); setQuickFilter('7days'); setPage(1) } },
+              { id: 'month', label: 'เดือนนี้', fn: () => { const d = new Date(); setDateFilter(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-01'); setDateFilterEnd(todayStr); setQuickFilter('month'); setPage(1) } },
+              { id: 'all', label: 'ทั้งหมด', fn: () => { setDateFilter(''); setDateFilterEnd(''); setQuickFilter('all'); setPage(1) } },
             ].map(b => (
               <button key={b.id} onClick={b.fn} style={{ padding: '6px 12px', borderRadius: 8, border: quickFilter === b.id ? 'none' : `1px solid ${T.border}`, background: quickFilter === b.id ? 'linear-gradient(135deg, #B8860B, #DAA520)' : '#fff', color: quickFilter === b.id ? '#fff' : T.textDim, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.font, boxShadow: quickFilter === b.id ? '0 2px 8px rgba(184,134,11,0.3)' : 'none' }}>{b.label}</button>
             ))}
@@ -130,7 +135,7 @@ export default function PackerApp({ profile, onLogout }) {
                 { id: 'waiting', label: '🟡 รอส่ง', count: waitingCount },
                 { id: 'printed', label: '🟢 ปริ้นแล้ว', count: printedCount },
               ].map(b => (
-                <button key={b.id} onClick={() => setShipFilter(b.id)} style={{
+                <button key={b.id} onClick={() => { setShipFilter(b.id); setPage(1) }} style={{
                   padding: '8px 16px', borderRadius: 10, cursor: 'pointer', fontFamily: T.font, fontSize: 12, fontWeight: 700,
                   border: shipFilter === b.id ? 'none' : `1px solid ${T.border}`,
                   background: shipFilter === b.id ? (b.id === 'waiting' ? 'linear-gradient(135deg, #F39C12, #F1C40F)' : b.id === 'printed' ? 'linear-gradient(135deg, #2D8A4E, #27AE60)' : 'linear-gradient(135deg, #B8860B, #DAA520)') : '#fff',
@@ -146,7 +151,7 @@ export default function PackerApp({ profile, onLogout }) {
           </div>
 
           {/* ค้นหา */}
-          <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="🔍 ค้นหาชื่อ เบอร์ พนักงาน หมายเหตุ..."
+          <input value={searchQuery} onChange={e => { setSearchQuery(e.target.value); setPage(1) }} placeholder="🔍 ค้นหาชื่อ เบอร์ พนักงาน หมายเหตุ..."
             style={{ width: '100%', padding: '10px 12px', borderRadius: T.radiusSm, border: `1px solid ${T.border}`, background: T.surfaceAlt, color: T.text, fontSize: 13, fontFamily: T.font, outline: 'none', boxSizing: 'border-box', marginBottom: 8 }} />
 
           <div style={{ fontSize: 12, color: T.textDim }}>{searchFiltered.length} รายการ</div>
@@ -204,7 +209,7 @@ export default function PackerApp({ profile, onLogout }) {
               </tr>
             </thead>
             <tbody>
-              {searchFiltered.map((o, i) => {
+              {searchFiltered.slice((page-1)*PER_PAGE, page*PER_PAGE).map((o, i) => {
                 const dt = new Date(o.created_at)
                 const isPrinted = o.shipping_status === 'printed'
                 return (
@@ -212,7 +217,7 @@ export default function PackerApp({ profile, onLogout }) {
                     <td style={{ padding: '10px 8px', textAlign: 'center' }}>
                       <input type="checkbox" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} style={{ cursor: 'pointer', width: 16, height: 16 }} />
                     </td>
-                    <td style={{ padding: '10px 8px', textAlign: 'center', fontWeight: 700, color: T.gold }}>{o.daily_seq || i + 1}</td>
+                    <td style={{ padding: '10px 8px', textAlign: 'center', fontWeight: 700, color: T.gold }}>{o.daily_seq || (page-1)*PER_PAGE + i + 1}</td>
                     <td style={{ padding: '10px 8px', fontSize: 11 }}>{(o.order_date || '').substring(0, 10)}</td>
                     <td style={{ padding: '10px 8px', fontSize: 11, color: T.textDim }}>{dt.toLocaleTimeString('th-TH', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</td>
                     <td style={{ padding: '10px 8px' }}><div style={{ fontWeight: 600 }}>{o.customer_name}</div><div style={{ fontSize: 10, color: T.textMuted }}>{o.remark || ''}</div></td>
@@ -237,8 +242,22 @@ export default function PackerApp({ profile, onLogout }) {
               })}
             </tbody>
           </table>
-          {searchFiltered.length === 0 && <Empty text="ไม่มีออเดอร์" />}
+          {searchFiltered.length === 0 && !loading && <Empty text="ไม่มีออเดอร์" />}
+          {loading && <div style={{ textAlign: 'center', padding: 40, color: T.textDim }}>⏳ กำลังโหลดข้อมูล...</div>}
         </div>
+
+        {/* Pagination */}
+        {(() => {
+          const totalPages = Math.ceil(searchFiltered.length / PER_PAGE)
+          if (totalPages <= 1) return null
+          return <div style={{ ...glass, padding: 12, marginTop: 10, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <button onClick={() => setPage(1)} disabled={page===1} style={{ padding: '6px 10px', borderRadius: 6, border: `1px solid ${T.border}`, background: page===1?T.surfaceAlt:'#fff', color: page===1?T.textMuted:T.gold, fontSize: 11, fontWeight: 600, cursor: page===1?'default':'pointer', fontFamily: T.font }}>«</button>
+            <button onClick={() => setPage(p=>Math.max(1,p-1))} disabled={page===1} style={{ padding: '6px 10px', borderRadius: 6, border: `1px solid ${T.border}`, background: page===1?T.surfaceAlt:'#fff', color: page===1?T.textMuted:T.gold, fontSize: 11, fontWeight: 600, cursor: page===1?'default':'pointer', fontFamily: T.font }}>‹</button>
+            <span style={{ fontSize: 12, color: T.textDim, padding: '0 8px' }}>หน้า {page} / {totalPages} ({searchFiltered.length} รายการ)</span>
+            <button onClick={() => setPage(p=>Math.min(totalPages,p+1))} disabled={page===totalPages} style={{ padding: '6px 10px', borderRadius: 6, border: `1px solid ${T.border}`, background: page===totalPages?T.surfaceAlt:'#fff', color: page===totalPages?T.textMuted:T.gold, fontSize: 11, fontWeight: 600, cursor: page===totalPages?'default':'pointer', fontFamily: T.font }}>›</button>
+            <button onClick={() => setPage(totalPages)} disabled={page===totalPages} style={{ padding: '6px 10px', borderRadius: 6, border: `1px solid ${T.border}`, background: page===totalPages?T.surfaceAlt:'#fff', color: page===totalPages?T.textMuted:T.gold, fontSize: 11, fontWeight: 600, cursor: page===totalPages?'default':'pointer', fontFamily: T.font }}>»</button>
+          </div>
+        })()}
       </div>
     </div>
   )

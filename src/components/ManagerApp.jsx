@@ -134,7 +134,7 @@ export default function ManagerApp({ profile, onLogout }) {
         let allOrders = []
         let from = 0
         while (true) {
-          const { data } = await supabase.from('mt_orders').select('*').order('created_at', { ascending: false }).range(from, from + 999)
+          const { data } = await supabase.from('mt_orders').select('id,order_number,order_date,created_at,customer_name,customer_phone,customer_address,sub_district,district,province,zip_code,customer_social,sales_channel,sale_price,cod_amount,payment_type,slip_url,remark,employee_id,employee_name,team_id,daily_seq,shipping_status,flash_pno,flash_status').order('created_at', { ascending: false }).range(from, from + 999)
           if (!data || data.length === 0) break
           allOrders = [...allOrders, ...data]
           if (data.length < 1000) break
