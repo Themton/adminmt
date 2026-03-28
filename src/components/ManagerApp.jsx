@@ -23,6 +23,7 @@ export default function ManagerApp({ profile, onLogout }) {
   
   const [userFilter, setUserFilter] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
+  const [shipFilter, setShipFilter] = useState('all')
 
   // Team modal
   const [showTeamModal, setShowTeamModal] = useState(false)
@@ -391,7 +392,7 @@ export default function ManagerApp({ profile, onLogout }) {
       </div>
 
       <div style={{ padding: '16px 16px 0' }}>
-        <Tabs items={[{ id: 'dashboard', label: '📈 ภาพรวม' }, { id: 'create', label: '➕ สร้าง' }, { id: 'orders', label: '📋 รายงาน' }, { id: 'teams', label: '👥 ทีม' }, { id: 'users', label: '🧑‍💼 ผู้ใช้' }]} active={tab} onChange={setTab} />
+        <Tabs items={[{ id: 'dashboard', label: '📈 ภาพรวม' }, { id: 'create', label: '➕ สร้าง' }, { id: 'orders', label: '📋 รายงาน' }, ...(profile.role === 'manager' ? [{ id: 'shipping', label: '🚚 การจัดส่ง' }] : []), { id: 'teams', label: '👥 ทีม' }, { id: 'users', label: '🧑‍💼 ผู้ใช้' }]} active={tab} onChange={setTab} />
       </div>
 
       <div style={{ padding: 16 }}>
@@ -885,6 +886,124 @@ export default function ManagerApp({ profile, onLogout }) {
               </tbody>
             </table>
             {filtered.length === 0 && <Empty text={searchQuery ? 'ไม่พบผลลัพธ์' : 'ไม่มีออเดอร์'} />}
+          </div>
+        </>
+        })()}
+
+        {/* ══ SHIPPING ══ */}
+        {tab === 'shipping' && (() => {
+          const shipOrders = orders.filter(o => {
+            if (shipFilter === 'waiting') return !o.shipping_status || o.shipping_status === 'waiting'
+            if (shipFilter === 'printed') return o.shipping_status === 'printed'
+            return true
+          })
+          const waitingCount = orders.filter(o => !o.shipping_status || o.shipping_status === 'waiting').length
+          const printedCount = orders.filter(o => o.shipping_status === 'printed').length
+
+          const markPrinted = async (ids) => {
+            const { error } = await supabase.from('mt_orders').update({ shipping_status: 'printed' }).in('id', ids)
+            if (error) { flash('❌ ' + error.message); return }
+            setOrders(prev => prev.map(o => ids.includes(o.id) ? { ...o, shipping_status: 'printed' } : o))
+            flash('✅ อัพเดทสถานะ ' + ids.length + ' รายการ')
+          }
+
+          const markWaiting = async (ids) => {
+            const { error } = await supabase.from('mt_orders').update({ shipping_status: 'waiting' }).in('id', ids)
+            if (error) { flash('❌ ' + error.message); return }
+            setOrders(prev => prev.map(o => ids.includes(o.id) ? { ...o, shipping_status: 'waiting' } : o))
+            flash('✅ เปลี่ยนกลับเป็นรอส่ง ' + ids.length + ' รายการ')
+          }
+
+          return <>
+          <div style={{ ...glass, padding: 14, marginBottom: 10 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>🚚 การจัดส่ง</div>
+            {/* ปุ่มกรองสถานะ */}
+            <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+              {[
+                { id: 'all', label: `📦 ทั้งหมด`, count: orders.length },
+                { id: 'waiting', label: `🟡 รอส่ง`, count: waitingCount },
+                { id: 'printed', label: `🟢 ปริ้นแล้ว`, count: printedCount },
+              ].map(b => (
+                <button key={b.id} onClick={() => setShipFilter(b.id)} style={{
+                  padding: '8px 16px', borderRadius: 10, cursor: 'pointer', fontFamily: T.font, fontSize: 12, fontWeight: 700,
+                  border: shipFilter === b.id ? 'none' : `1px solid ${T.border}`,
+                  background: shipFilter === b.id ? (b.id === 'waiting' ? 'linear-gradient(135deg, #F39C12, #F1C40F)' : b.id === 'printed' ? 'linear-gradient(135deg, #2D8A4E, #27AE60)' : 'linear-gradient(135deg, #B8860B, #DAA520)') : '#fff',
+                  color: shipFilter === b.id ? '#fff' : T.textDim,
+                  boxShadow: shipFilter === b.id ? '0 2px 8px rgba(0,0,0,0.15)' : 'none'
+                }}>{b.label} <span style={{ marginLeft: 4, padding: '1px 6px', borderRadius: 6, background: shipFilter === b.id ? 'rgba(255,255,255,0.3)' : T.surfaceAlt, fontSize: 10 }}>{b.count}</span></button>
+              ))}
+            </div>
+
+            {/* ค้นหา */}
+            <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="🔍 ค้นหาชื่อ เบอร์ พนักงาน..."
+              style={{ width: '100%', padding: '10px 12px', borderRadius: T.radiusSm, border: `1px solid ${T.border}`, background: T.surfaceAlt, color: T.text, fontSize: 13, fontFamily: T.font, outline: 'none', boxSizing: 'border-box', marginBottom: 8 }} />
+
+            <div style={{ fontSize: 12, color: T.textDim }}>{shipOrders.length} รายการ</div>
+          </div>
+
+          {/* ปุ่ม bulk action */}
+          {shipFilter === 'waiting' && waitingCount > 0 && (
+            <div style={{ ...glass, padding: 12, marginBottom: 10, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => {
+                const ids = shipOrders.filter(o => !o.shipping_status || o.shipping_status === 'waiting').map(o => o.id)
+                if (confirm(`✅ เปลี่ยนสถานะ ${ids.length} รายการ เป็น "ปริ้นแล้ว"?`)) markPrinted(ids)
+              }} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg, #2D8A4E, #27AE60)', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: T.font }}>🖨 ปริ้นทั้งหมด ({waitingCount})</button>
+            </div>
+          )}
+
+          {/* ตาราง */}
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: T.font }}>
+              <thead>
+                <tr style={{ background: T.surfaceAlt }}>
+                  <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}`, width: 40 }}>#</th>
+                  <th style={{ padding: '8px 6px', textAlign: 'left', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>วันที่</th>
+                  <th style={{ padding: '8px 6px', textAlign: 'left', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>เวลา</th>
+                  <th style={{ padding: '8px 6px', textAlign: 'left', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>ลูกค้า</th>
+                  <th style={{ padding: '8px 6px', textAlign: 'left', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>เบอร์โทรศัพท์</th>
+                  <th style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>ราคา</th>
+                  <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>ประเภท</th>
+                  <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>สถานะ</th>
+                  <th style={{ padding: '8px 6px', textAlign: 'left', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>พนักงาน</th>
+                  <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>จัดการ</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shipOrders.filter(o => {
+                  if (!searchQuery) return true
+                  const q = searchQuery.toLowerCase()
+                  return (o.customer_name||'').toLowerCase().includes(q) || (o.customer_phone||'').includes(q) || (o.employee_name||'').toLowerCase().includes(q)
+                }).map((o, i) => {
+                  const dt = new Date(o.created_at)
+                  const isPrinted = o.shipping_status === 'printed'
+                  return (
+                    <tr key={o.id} style={{ borderBottom: `1px solid ${T.border}`, borderLeft: isPrinted ? '3px solid #2D8A4E' : '3px solid #F39C12' }}>
+                      <td style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 700, color: T.gold }}>{o.daily_seq || i+1}</td>
+                      <td style={{ padding: '8px 6px', fontSize: 11 }}>{(o.order_date||'').substring(0,10)}</td>
+                      <td style={{ padding: '8px 6px', fontSize: 11, color: T.textDim }}>{dt.toLocaleTimeString('th-TH', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</td>
+                      <td style={{ padding: '8px 6px', fontWeight: 600 }}>{o.customer_name}</td>
+                      <td style={{ padding: '8px 6px', color: T.textDim }}>{o.customer_phone}</td>
+                      <td style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 700, color: T.success }}>฿{fmt(parseFloat(o.sale_price)||0)}</td>
+                      <td style={{ padding: '8px 6px', textAlign: 'center' }}>
+                        <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600, background: o.payment_type === 'transfer' ? 'rgba(45,138,78,0.1)' : 'rgba(184,134,11,0.1)', color: o.payment_type === 'transfer' ? T.success : T.gold }}>{o.payment_type === 'transfer' ? 'โอน' : 'COD'}</span>
+                      </td>
+                      <td style={{ padding: '8px 6px', textAlign: 'center' }}>
+                        <span style={{ padding: '3px 10px', borderRadius: 6, fontSize: 10, fontWeight: 700, background: isPrinted ? 'rgba(45,138,78,0.1)' : 'rgba(243,156,18,0.1)', color: isPrinted ? T.success : '#F39C12' }}>{isPrinted ? '🖨 ปริ้นแล้ว' : '🟡 รอส่ง'}</span>
+                      </td>
+                      <td style={{ padding: '8px 6px', fontSize: 11, color: T.textDim }}>{o.employee_name||'—'}</td>
+                      <td style={{ padding: '8px 6px', textAlign: 'center' }}>
+                        {isPrinted ? (
+                          <button onClick={() => markWaiting([o.id])} style={{ padding: '4px 8px', borderRadius: 4, border: '1px solid rgba(243,156,18,0.3)', background: 'rgba(243,156,18,0.05)', color: '#F39C12', fontSize: 10, cursor: 'pointer', fontFamily: T.font }}>↩ รอส่ง</button>
+                        ) : (
+                          <button onClick={() => markPrinted([o.id])} style={{ padding: '4px 8px', borderRadius: 4, border: '1px solid rgba(45,138,78,0.3)', background: 'rgba(45,138,78,0.05)', color: T.success, fontSize: 10, cursor: 'pointer', fontFamily: T.font }}>🖨 ปริ้นแล้ว</button>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+            {shipOrders.length === 0 && <Empty text="ไม่มีออเดอร์" />}
           </div>
         </>
         })()}
