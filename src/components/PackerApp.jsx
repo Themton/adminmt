@@ -8,6 +8,7 @@ export default function PackerApp({ profile, onLogout }) {
   const [toast, setToast] = useState(null)
   const [shipFilter, setShipFilter] = useState('waiting')
   const [searchQuery, setSearchQuery] = useState('')
+  const [selectedIds, setSelectedIds] = useState(new Set())
   const todayStr = new Date().toISOString().split('T')[0]
   const [dateFilter, setDateFilter] = useState('')
   const [dateFilterEnd, setDateFilterEnd] = useState('')
@@ -73,9 +74,18 @@ export default function PackerApp({ profile, onLogout }) {
     flash('✅ เปลี่ยนกลับเป็นรอส่ง ' + ids.length + ' รายการ')
   }
 
+  const toggleSelect = (id) => {
+    setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }
+  const toggleAll = () => {
+    if (selectedIds.size === searchFiltered.length) setSelectedIds(new Set())
+    else setSelectedIds(new Set(searchFiltered.map(o => o.id)))
+  }
+
   const exportShip = (type) => {
-    if (type === 'csv') { exportProshipCSV(searchFiltered, 'Orders_' + (dateFilter||'all') + '.csv'); flash('✅ Export CSV สำเร็จ!') }
-    else { exportProshipExcel(searchFiltered, 'Orders_' + (dateFilter||'all') + '.xls'); flash('✅ Export Excel สำเร็จ!') }
+    const exportData = selectedIds.size > 0 ? searchFiltered.filter(o => selectedIds.has(o.id)) : searchFiltered
+    if (type === 'csv') { exportProshipCSV(exportData, 'Orders_' + (dateFilter||'all') + '.csv'); flash('✅ Export CSV สำเร็จ!') }
+    else { exportProshipExcel(exportData, 'Orders_' + (dateFilter||'all') + '.xls'); flash('✅ Export Excel สำเร็จ!') }
   }
 
   return (
@@ -143,20 +153,44 @@ export default function PackerApp({ profile, onLogout }) {
         </div>
 
         {/* ปุ่ม bulk */}
-        {shipFilter === 'waiting' && waitingCount > 0 && (
-          <div style={{ ...glass, padding: 12, marginBottom: 10, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button onClick={() => {
-              const ids = searchFiltered.filter(o => !o.shipping_status || o.shipping_status === 'waiting').map(o => o.id)
-              if (confirm(`✅ เปลี่ยนสถานะ ${ids.length} รายการ เป็น "ปริ้นแล้ว"?`)) markPrinted(ids)
-            }} style={{ padding: '10px 20px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg, #2D8A4E, #27AE60)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: T.font, boxShadow: '0 2px 10px rgba(45,138,78,0.3)' }}>🖨 ปริ้นทั้งหมด ({searchFiltered.filter(o => !o.shipping_status || o.shipping_status === 'waiting').length})</button>
+        {(shipFilter === 'waiting' && waitingCount > 0) || selectedIds.size > 0 ? (
+          <div style={{ ...glass, padding: 12, marginBottom: 10, display: 'flex', gap: 8, justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ fontSize: 12, color: T.textDim }}>
+              {selectedIds.size > 0 ? `เลือก ${selectedIds.size} รายการ` : ''}
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {selectedIds.size > 0 && (
+                <>
+                  <button onClick={() => {
+                    const ids = [...selectedIds]
+                    if (confirm(`🖨 เปลี่ยน ${ids.length} รายการ เป็น "ปริ้นแล้ว"?`)) { markPrinted(ids); setSelectedIds(new Set()) }
+                  }} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg, #2D8A4E, #27AE60)', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: T.font }}>🖨 ปริ้นที่เลือก ({selectedIds.size})</button>
+                  <button onClick={() => {
+                    const ids = [...selectedIds]
+                    if (confirm(`↩ เปลี่ยน ${ids.length} รายการ เป็น "รอส่ง"?`)) { markWaiting(ids); setSelectedIds(new Set()) }
+                  }} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid rgba(243,156,18,0.3)', background: 'rgba(243,156,18,0.05)', color: '#F39C12', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: T.font }}>↩ รอส่ง ({selectedIds.size})</button>
+                  <button onClick={() => {
+                    exportProshipExcel(searchFiltered.filter(o => selectedIds.has(o.id)), 'Orders_selected.xls')
+                    flash('✅ Export ' + selectedIds.size + ' รายการ')
+                  }} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid rgba(45,138,78,0.2)', background: 'rgba(45,138,78,0.05)', color: T.success, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: T.font }}>📊 Excel ({selectedIds.size})</button>
+                </>
+              )}
+              {selectedIds.size === 0 && shipFilter === 'waiting' && <button onClick={() => {
+                const ids = searchFiltered.filter(o => !o.shipping_status || o.shipping_status === 'waiting').map(o => o.id)
+                if (confirm(`✅ เปลี่ยนสถานะ ${ids.length} รายการ เป็น "ปริ้นแล้ว"?`)) markPrinted(ids)
+              }} style={{ padding: '10px 20px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg, #2D8A4E, #27AE60)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: T.font, boxShadow: '0 2px 10px rgba(45,138,78,0.3)' }}>🖨 ปริ้นทั้งหมด ({searchFiltered.filter(o => !o.shipping_status || o.shipping_status === 'waiting').length})</button>}
+            </div>
           </div>
-        )}
+        ) : null}
 
         {/* ตาราง */}
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: T.font, background: 'rgba(255,255,255,0.85)', borderRadius: 14, overflow: 'hidden' }}>
             <thead>
               <tr style={{ background: T.surfaceAlt }}>
+                <th style={{ padding: '10px 8px', textAlign: 'center', borderBottom: `1px solid ${T.border}`, width: 36 }}>
+                  <input type="checkbox" checked={selectedIds.size === searchFiltered.length && searchFiltered.length > 0} onChange={toggleAll} style={{ cursor: 'pointer', width: 16, height: 16 }} />
+                </th>
                 <th style={{ padding: '10px 8px', textAlign: 'center', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}`, width: 40 }}>#</th>
                 <th style={{ padding: '10px 8px', textAlign: 'left', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>วันที่</th>
                 <th style={{ padding: '10px 8px', textAlign: 'left', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>เวลา</th>
@@ -174,7 +208,10 @@ export default function PackerApp({ profile, onLogout }) {
                 const dt = new Date(o.created_at)
                 const isPrinted = o.shipping_status === 'printed'
                 return (
-                  <tr key={o.id} style={{ borderBottom: `1px solid ${T.border}`, borderLeft: isPrinted ? '3px solid #2D8A4E' : '3px solid #F39C12' }}>
+                  <tr key={o.id} style={{ borderBottom: `1px solid ${T.border}`, borderLeft: isPrinted ? '3px solid #2D8A4E' : '3px solid #F39C12', background: selectedIds.has(o.id) ? 'rgba(184,134,11,0.06)' : 'transparent' }}>
+                    <td style={{ padding: '10px 8px', textAlign: 'center' }}>
+                      <input type="checkbox" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} style={{ cursor: 'pointer', width: 16, height: 16 }} />
+                    </td>
                     <td style={{ padding: '10px 8px', textAlign: 'center', fontWeight: 700, color: T.gold }}>{o.daily_seq || i + 1}</td>
                     <td style={{ padding: '10px 8px', fontSize: 11 }}>{(o.order_date || '').substring(0, 10)}</td>
                     <td style={{ padding: '10px 8px', fontSize: 11, color: T.textDim }}>{dt.toLocaleTimeString('th-TH', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</td>
