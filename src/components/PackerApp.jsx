@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { T, glass, fmt, fmtDateTime, LiveDot, Toast, Empty } from './ui'
+import { exportProshipExcel, exportProshipCSV } from '../lib/exportProship'
 
 export default function PackerApp({ profile, onLogout }) {
   const [orders, setOrders] = useState([])
@@ -73,24 +74,8 @@ export default function PackerApp({ profile, onLogout }) {
   }
 
   const exportShip = (type) => {
-    const rows = searchFiltered
-    if (type === 'csv') {
-      const header = ['#', 'วันที่', 'เวลา', 'ลูกค้า', 'เบอร์โทรศัพท์', 'ที่อยู่', 'ตำบล', 'อำเภอ', 'จังหวัด', 'รหัส ปณ.', 'ราคา', 'COD', 'ประเภท', 'สถานะ', 'เพจ', 'หมายเหตุ', 'พนักงาน']
-      const csv = '\uFEFF' + [header, ...rows.map((o, i) => {
-        const dt = new Date(o.created_at)
-        return [i + 1, (o.order_date || '').substring(0, 10), dt.toLocaleTimeString('th-TH', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', second: '2-digit' }), o.customer_name || '', o.customer_phone || '', o.customer_address || '', o.sub_district || '', o.district || '', o.province || '', o.zip_code || '', o.sale_price || '', o.cod_amount || '', o.payment_type === 'transfer' ? 'โอน' : 'COD', o.shipping_status === 'printed' ? 'ปริ้นแล้ว' : 'รอส่ง', o.sales_channel || '', o.remark || '', o.employee_name || '']
-      })].map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(',')).join('\n')
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'shipping_' + (dateFilter || 'all') + '.csv'; a.click()
-      flash('✅ Export CSV สำเร็จ!')
-    } else {
-      const header = '<tr><th>#</th><th>วันที่</th><th>เวลา</th><th>ลูกค้า</th><th>เบอร์โทรศัพท์</th><th>ที่อยู่</th><th>ตำบล</th><th>อำเภอ</th><th>จังหวัด</th><th>รหัส ปณ.</th><th>ราคา</th><th>COD</th><th>ประเภท</th><th>สถานะ</th><th>เพจ</th><th>หมายเหตุ</th><th>พนักงาน</th></tr>'
-      const body = rows.map((o, i) => { const dt = new Date(o.created_at); return '<tr><td>' + (i + 1) + '</td><td>' + (o.order_date || '').substring(0, 10) + '</td><td>' + dt.toLocaleTimeString('th-TH', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', second: '2-digit' }) + '</td><td>' + (o.customer_name || '') + '</td><td>' + (o.customer_phone || '') + '</td><td>' + (o.customer_address || '') + '</td><td>' + (o.sub_district || '') + '</td><td>' + (o.district || '') + '</td><td>' + (o.province || '') + '</td><td>' + (o.zip_code || '') + '</td><td>' + (o.sale_price || '') + '</td><td>' + (o.cod_amount || '') + '</td><td>' + (o.payment_type === 'transfer' ? 'โอน' : 'COD') + '</td><td>' + (o.shipping_status === 'printed' ? 'ปริ้นแล้ว' : 'รอส่ง') + '</td><td>' + (o.sales_channel || '') + '</td><td>' + (o.remark || '') + '</td><td>' + (o.employee_name || '') + '</td></tr>' }).join('')
-      const html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="UTF-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Shipping</x:Name></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head><body><table border="1">' + header + body + '</table></body></html>'
-      const blob = new Blob([html], { type: 'application/vnd.ms-excel' })
-      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'shipping_' + (dateFilter || 'all') + '.xls'; a.click()
-      flash('✅ Export Excel สำเร็จ!')
-    }
+    if (type === 'csv') { exportProshipCSV(searchFiltered, 'Orders_' + (dateFilter||'all') + '.csv'); flash('✅ Export CSV สำเร็จ!') }
+    else { exportProshipExcel(searchFiltered, 'Orders_' + (dateFilter||'all') + '.xls'); flash('✅ Export Excel สำเร็จ!') }
   }
 
   return (
