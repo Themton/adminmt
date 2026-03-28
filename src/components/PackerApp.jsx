@@ -24,7 +24,7 @@ export default function PackerApp({ profile, onLogout }) {
       setLoading(true)
       let all = [], from = 0
       while (true) {
-        const { data } = await supabase.from('mt_orders').select('id,order_date,created_at,customer_name,customer_phone,customer_address,sub_district,district,province,zip_code,customer_social,sales_channel,sale_price,cod_amount,payment_type,remark,employee_name,employee_id,daily_seq,shipping_status,order_number').order('created_at', { ascending: false }).range(from, from + 999)
+        const { data } = await supabase.from('mt_orders').select('*').order('created_at', { ascending: false }).range(from, from + 999)
         if (!data || data.length === 0) break
         all = [...all, ...data]; from += 1000
         if (data.length < 1000) break
