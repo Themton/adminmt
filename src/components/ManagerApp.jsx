@@ -997,7 +997,6 @@ export default function ManagerApp({ profile, onLogout }) {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: T.font }}>
               <thead>
                 <tr style={{ background: T.surfaceAlt }}>
-                  <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}`, width: 40 }}>#</th>
                   <th style={{ padding: '8px 6px', textAlign: 'left', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>วันที่</th>
                   <th style={{ padding: '8px 6px', textAlign: 'left', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>เวลา</th>
                   <th style={{ padding: '8px 6px', textAlign: 'left', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>ลูกค้า</th>
@@ -1021,7 +1020,6 @@ export default function ManagerApp({ profile, onLogout }) {
                   const isPrinted = o.shipping_status === 'printed'
                   return (
                     <tr key={o.id} style={{ borderBottom: `1px solid ${T.border}`, borderLeft: isPrinted ? '3px solid #2D8A4E' : '3px solid #F39C12' }}>
-                      <td style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 700, color: T.gold }}>{o.daily_seq || (currentPage-1)*pageSize+i+1}</td>
                       <td style={{ padding: '8px 6px', fontSize: 11 }}>{(o.order_date||'').substring(0,10)}</td>
                       <td style={{ padding: '8px 6px', fontSize: 11, color: T.textDim }}>{dt.toLocaleTimeString('th-TH', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</td>
                       <td style={{ padding: '8px 6px', fontWeight: 600 }}>{o.customer_name}</td>

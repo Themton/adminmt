@@ -232,7 +232,6 @@ export default function PackerApp({ profile, onLogout }) {
                 <th style={{ padding: '10px 8px', textAlign: 'center', borderBottom: `1px solid ${T.border}`, width: 36 }}>
                   <input type="checkbox" checked={(() => { const pIds = searchFiltered.slice((page-1)*pageSize, page*pageSize).map(o => o.id); return pIds.length > 0 && pIds.every(id => selectedIds.has(id)) })()} onChange={toggleAll} style={{ cursor: 'pointer', width: 16, height: 16 }} />
                 </th>
-                <th style={{ padding: '10px 8px', textAlign: 'center', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}`, width: 40 }}>#</th>
                 <th style={{ padding: '10px 8px', textAlign: 'left', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>วันที่</th>
                 <th style={{ padding: '10px 8px', textAlign: 'left', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>เวลา</th>
                 <th style={{ padding: '10px 8px', textAlign: 'left', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>ลูกค้า</th>
@@ -253,7 +252,6 @@ export default function PackerApp({ profile, onLogout }) {
                     <td style={{ padding: '10px 8px', textAlign: 'center' }}>
                       <input type="checkbox" checked={selectedIds.has(o.id)} onClick={e => toggleSelect(o.id, e)} readOnly style={{ cursor: 'pointer', width: 16, height: 16 }} />
                     </td>
-                    <td style={{ padding: '10px 8px', textAlign: 'center', fontWeight: 700, color: T.gold }}>{o.daily_seq || (page-1)*pageSize + i + 1}</td>
                     <td style={{ padding: '10px 8px', fontSize: 11 }}>{(o.order_date || '').substring(0, 10)}</td>
                     <td style={{ padding: '10px 8px', fontSize: 11, color: T.textDim }}>{dt.toLocaleTimeString('th-TH', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</td>
                     <td style={{ padding: '10px 8px' }}><div style={{ fontWeight: 600 }}>{o.customer_name}</div><div style={{ fontSize: 10, color: T.textMuted }}>{o.remark || ''}</div></td>
