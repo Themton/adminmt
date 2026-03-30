@@ -70,6 +70,9 @@ export default function ManagerApp({ profile, onLogout }) {
     if (!u.zip_code) missing.push('รหัส ปณ.')
     if (!u.province) missing.push('จังหวัด')
     if (!u.sale_price || parseFloat(u.sale_price) <= 0) missing.push('ราคาขาย')
+    if (!u.remark) missing.push('หมายเหตุ')
+    if (!u.customer_social) missing.push('ชื่อเฟส/ไลน์')
+    if (!u.sales_channel) missing.push('ชื่อเพจ')
     if (missing.length > 0) { flash('❌ กรุณากรอก: ' + missing.join(', ')); return }
 
     const { id, ...updates } = u
@@ -464,7 +467,7 @@ export default function ManagerApp({ profile, onLogout }) {
             const pOrders = orders.filter(o => o.employee_id === p.id)
             const pToday = pOrders.filter(o => sameDay(o.created_at, new Date()))
             const pMonth = pOrders.filter(o => thisMonth(o.created_at))
-            return { ...p, team: p.mt_teams?.name || (p.role === 'manager' ? '🏢 หัวหน้า' : p.role === 'admin' ? '🔑 แอดมิน' : '—'), todayCount: pToday.length, todaySales: pToday.reduce((s,o) => s+(parseFloat(o.sale_price)||0), 0), monthCount: pMonth.length, monthSales: pMonth.reduce((s,o) => s+(parseFloat(o.sale_price)||0), 0) }
+            return { ...p, team: p.mt_teams?.name || (p.role === 'manager' ? '🏢 หัวหน้า' : p.role === 'admin' ? '🔑 แอดมิน' : p.role === 'packer' ? '📦 แพค' : '—'), todayCount: pToday.length, todaySales: pToday.reduce((s,o) => s+(parseFloat(o.sale_price)||0), 0), monthCount: pMonth.length, monthSales: pMonth.reduce((s,o) => s+(parseFloat(o.sale_price)||0), 0) }
           }).sort((a,b) => b.monthSales - a.monthSales)
 
           return <>
