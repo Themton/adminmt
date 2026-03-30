@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { T, glass, fmt, fmtDateTime, LiveDot, Toast, Empty } from './ui'
+import { T, glass, fmt, fmtDateTime, LiveDot, Toast, Empty, Pagination } from './ui'
 import { exportProshipExcel, exportProshipCSV } from '../lib/exportProship'
 
 export default function PackerApp({ profile, onLogout }) {
@@ -11,7 +11,7 @@ export default function PackerApp({ profile, onLogout }) {
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [page, setPage] = useState(1)
-  const PER_PAGE = 200
+  const [pageSize, setPageSize] = useState(100)
   const todayStr = new Date().toISOString().split('T')[0]
   const [dateFilter, setDateFilter] = useState('')
   const [dateFilterEnd, setDateFilterEnd] = useState('')
@@ -224,7 +224,7 @@ export default function PackerApp({ profile, onLogout }) {
               </tr>
             </thead>
             <tbody>
-              {searchFiltered.slice((page-1)*PER_PAGE, page*PER_PAGE).map((o, i) => {
+              {searchFiltered.slice((page-1)*pageSize, page*pageSize).map((o, i) => {
                 const dt = new Date(o.created_at)
                 const isPrinted = o.shipping_status === 'printed'
                 return (
@@ -232,7 +232,7 @@ export default function PackerApp({ profile, onLogout }) {
                     <td style={{ padding: '10px 8px', textAlign: 'center' }}>
                       <input type="checkbox" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} style={{ cursor: 'pointer', width: 16, height: 16 }} />
                     </td>
-                    <td style={{ padding: '10px 8px', textAlign: 'center', fontWeight: 700, color: T.gold }}>{o.daily_seq || (page-1)*PER_PAGE + i + 1}</td>
+                    <td style={{ padding: '10px 8px', textAlign: 'center', fontWeight: 700, color: T.gold }}>{o.daily_seq || (page-1)*pageSize + i + 1}</td>
                     <td style={{ padding: '10px 8px', fontSize: 11 }}>{(o.order_date || '').substring(0, 10)}</td>
                     <td style={{ padding: '10px 8px', fontSize: 11, color: T.textDim }}>{dt.toLocaleTimeString('th-TH', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</td>
                     <td style={{ padding: '10px 8px' }}><div style={{ fontWeight: 600 }}>{o.customer_name}</div><div style={{ fontSize: 10, color: T.textMuted }}>{o.remark || ''}</div></td>
@@ -261,18 +261,7 @@ export default function PackerApp({ profile, onLogout }) {
           {loading && <div style={{ textAlign: 'center', padding: 40, color: T.textDim }}>⏳ กำลังโหลดข้อมูล...</div>}
         </div>
 
-        {/* Pagination */}
-        {(() => {
-          const totalPages = Math.ceil(searchFiltered.length / PER_PAGE)
-          if (totalPages <= 1) return null
-          return <div style={{ ...glass, padding: 12, marginTop: 10, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            <button onClick={() => setPage(1)} disabled={page===1} style={{ padding: '6px 10px', borderRadius: 6, border: `1px solid ${T.border}`, background: page===1?T.surfaceAlt:'#fff', color: page===1?T.textMuted:T.gold, fontSize: 11, fontWeight: 600, cursor: page===1?'default':'pointer', fontFamily: T.font }}>«</button>
-            <button onClick={() => setPage(p=>Math.max(1,p-1))} disabled={page===1} style={{ padding: '6px 10px', borderRadius: 6, border: `1px solid ${T.border}`, background: page===1?T.surfaceAlt:'#fff', color: page===1?T.textMuted:T.gold, fontSize: 11, fontWeight: 600, cursor: page===1?'default':'pointer', fontFamily: T.font }}>‹</button>
-            <span style={{ fontSize: 12, color: T.textDim, padding: '0 8px' }}>หน้า {page} / {totalPages} ({searchFiltered.length} รายการ)</span>
-            <button onClick={() => setPage(p=>Math.min(totalPages,p+1))} disabled={page===totalPages} style={{ padding: '6px 10px', borderRadius: 6, border: `1px solid ${T.border}`, background: page===totalPages?T.surfaceAlt:'#fff', color: page===totalPages?T.textMuted:T.gold, fontSize: 11, fontWeight: 600, cursor: page===totalPages?'default':'pointer', fontFamily: T.font }}>›</button>
-            <button onClick={() => setPage(totalPages)} disabled={page===totalPages} style={{ padding: '6px 10px', borderRadius: 6, border: `1px solid ${T.border}`, background: page===totalPages?T.surfaceAlt:'#fff', color: page===totalPages?T.textMuted:T.gold, fontSize: 11, fontWeight: 600, cursor: page===totalPages?'default':'pointer', fontFamily: T.font }}>»</button>
-          </div>
-        })()}
+        <Pagination total={searchFiltered.length} page={page} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />
       </div>
     </div>
   )

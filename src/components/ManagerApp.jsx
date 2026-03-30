@@ -5,7 +5,7 @@ import { syncOrderToSheet, updateOrderInSheet, deleteOrderFromSheet, syncAllToSh
 import { createFlashOrder, trackFlashOrder } from '../lib/flashApi'
 import { exportProshipExcel, exportProshipCSV } from '../lib/exportProship'
 import OrderForm from './OrderForm'
-import { T, glass, fmt, fmtDate, fmtDateFull, fmtDateTime, sameDay, withinDays, thisMonth, Stat, Tabs, Btn, Toast, Modal, Empty, LiveDot } from './ui'
+import { T, glass, fmt, fmtDate, fmtDateFull, fmtDateTime, sameDay, withinDays, thisMonth, Stat, Tabs, Btn, Toast, Modal, Empty, LiveDot, Pagination } from './ui'
 
 function FI({ label, ...p }) {
   return <div style={{ marginBottom: 14 }}>{label && <label style={{ display: 'block', fontSize: 12, color: T.textDim, fontWeight: 500, marginBottom: 6 }}>{label}</label>}<input {...p} style={{ width: '100%', padding: '13px 16px', borderRadius: T.radiusSm, border: `1px solid ${T.border}`, background: T.surfaceAlt, color: T.text, fontSize: 15, fontFamily: T.font, outline: 'none', boxSizing: 'border-box', ...(p.style||{}) }} /></div>
@@ -25,6 +25,11 @@ export default function ManagerApp({ profile, onLogout }) {
   const [userFilter, setUserFilter] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [shipFilter, setShipFilter] = useState('all')
+  const [pageSize, setPageSize] = useState(100)
+  const [currentPage, setCurrentPage] = useState(1)
+
+  // Reset page when filters change
+  useEffect(() => { setCurrentPage(1) }, [dateFilter, dateFilterEnd, userFilter, searchQuery, shipFilter, quickFilter])
 
   // Team modal
   const [showTeamModal, setShowTeamModal] = useState(false)
@@ -845,9 +850,9 @@ export default function ManagerApp({ profile, onLogout }) {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((o, i) => (
+                {filtered.slice((currentPage-1)*pageSize, currentPage*pageSize).map((o, i) => (
                   <tr key={o.id} style={{ borderBottom: `1px solid ${T.border}` }}>
-                    <td style={{ padding: '8px 6px', fontWeight: 700, color: T.gold }}>{o.daily_seq || i+1}</td>
+                    <td style={{ padding: '8px 6px', fontWeight: 700, color: T.gold }}>{o.daily_seq || (currentPage-1)*pageSize+i+1}</td>
                     <td style={{ padding: '8px 6px' }}>
                       <div style={{ fontWeight: 600 }}>{o.customer_name}</div>
                       {o.remark && <div style={{ fontSize: 10, color: T.textMuted }}>💬 {o.remark}</div>}
@@ -879,6 +884,7 @@ export default function ManagerApp({ profile, onLogout }) {
               </tbody>
             </table>
             {filtered.length === 0 && <Empty text={searchQuery ? 'ไม่พบผลลัพธ์' : 'ไม่มีออเดอร์'} />}
+            <Pagination total={filtered.length} page={currentPage} pageSize={pageSize} onPageChange={setCurrentPage} onPageSizeChange={setPageSize} />
           </div>
         </>
         })()}
@@ -1001,16 +1007,18 @@ export default function ManagerApp({ profile, onLogout }) {
                 </tr>
               </thead>
               <tbody>
-                {shipOrders.filter(o => {
-                  if (!searchQuery) return true
-                  const q = searchQuery.toLowerCase()
-                  return (o.customer_name||'').toLowerCase().includes(q) || (o.customer_phone||'').includes(q) || (o.employee_name||'').toLowerCase().includes(q)
-                }).map((o, i) => {
+                {(() => {
+                  const searchedShip = shipOrders.filter(o => {
+                    if (!searchQuery) return true
+                    const q = searchQuery.toLowerCase()
+                    return (o.customer_name||'').toLowerCase().includes(q) || (o.customer_phone||'').includes(q) || (o.employee_name||'').toLowerCase().includes(q)
+                  })
+                  return searchedShip.slice((currentPage-1)*pageSize, currentPage*pageSize).map((o, i) => {
                   const dt = new Date(o.created_at)
                   const isPrinted = o.shipping_status === 'printed'
                   return (
                     <tr key={o.id} style={{ borderBottom: `1px solid ${T.border}`, borderLeft: isPrinted ? '3px solid #2D8A4E' : '3px solid #F39C12' }}>
-                      <td style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 700, color: T.gold }}>{o.daily_seq || i+1}</td>
+                      <td style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 700, color: T.gold }}>{o.daily_seq || (currentPage-1)*pageSize+i+1}</td>
                       <td style={{ padding: '8px 6px', fontSize: 11 }}>{(o.order_date||'').substring(0,10)}</td>
                       <td style={{ padding: '8px 6px', fontSize: 11, color: T.textDim }}>{dt.toLocaleTimeString('th-TH', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</td>
                       <td style={{ padding: '8px 6px', fontWeight: 600 }}>{o.customer_name}</td>
@@ -1032,10 +1040,12 @@ export default function ManagerApp({ profile, onLogout }) {
                       </td>
                     </tr>
                   )
-                })}
+                })
+                })()}
               </tbody>
             </table>
             {shipOrders.length === 0 && <Empty text="ไม่มีออเดอร์" />}
+            <Pagination total={shipOrders.length} page={currentPage} pageSize={pageSize} onPageChange={setCurrentPage} onPageSizeChange={setPageSize} />
           </div>
         </>
         })()}

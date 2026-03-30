@@ -189,6 +189,31 @@ export function Empty({ text }) {
   )
 }
 
+// Pagination
+export function Pagination({ total, page, pageSize, onPageChange, onPageSizeChange }) {
+  const totalPages = Math.ceil(total / pageSize)
+  if (total <= 100) return null
+  const btnStyle = (active) => ({ padding: '6px 12px', borderRadius: 8, border: active ? 'none' : `1px solid ${T.border}`, background: active ? 'linear-gradient(135deg, #B8860B, #DAA520)' : '#fff', color: active ? '#fff' : T.textDim, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.font, boxShadow: active ? '0 2px 6px rgba(184,134,11,0.25)' : 'none' })
+  const navBtn = (disabled) => ({ padding: '6px 10px', borderRadius: 6, border: `1px solid ${T.border}`, background: disabled ? T.surfaceAlt : '#fff', color: disabled ? T.textMuted : T.gold, fontSize: 11, fontWeight: 600, cursor: disabled ? 'default' : 'pointer', fontFamily: T.font })
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', flexWrap: 'wrap', gap: 8 }}>
+      <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+        <span style={{ fontSize: 11, color: T.textDim, marginRight: 4 }}>แสดง:</span>
+        {[100, 200, 500].map(s => (
+          <button key={s} onClick={() => { onPageSizeChange(s); onPageChange(1) }} style={btnStyle(pageSize === s)}>{s}</button>
+        ))}
+      </div>
+      {totalPages > 1 && <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+        <button onClick={() => onPageChange(1)} disabled={page===1} style={navBtn(page===1)}>«</button>
+        <button onClick={() => onPageChange(Math.max(1,page-1))} disabled={page===1} style={navBtn(page===1)}>‹</button>
+        <span style={{ fontSize: 12, color: T.textDim, padding: '0 6px' }}>หน้า {page}/{totalPages} ({total})</span>
+        <button onClick={() => onPageChange(Math.min(totalPages,page+1))} disabled={page===totalPages} style={navBtn(page===totalPages)}>›</button>
+        <button onClick={() => onPageChange(totalPages)} disabled={page===totalPages} style={navBtn(page===totalPages)}>»</button>
+      </div>}
+    </div>
+  )
+}
+
 // Global CSS
 export const GlobalStyles = () => (
   <style>{`
