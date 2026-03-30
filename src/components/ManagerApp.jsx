@@ -284,9 +284,17 @@ export default function ManagerApp({ profile, onLogout }) {
     <div style={{ fontFamily: T.font, minHeight: '100vh', background: T.bg, color: T.text, paddingBottom: 40 }}>
       <style>{`
         @media (min-width: 768px) {
-          .mt-content { max-width: 1400px; margin: 0 auto; padding: 20px 32px !important; }
-          .mt-tabs { max-width: 1400px; margin: 0 auto; padding: 20px 32px 0 !important; }
-          .mt-header { padding: 14px 32px !important; }
+          .mt-content { max-width: 1400px; margin: 0 auto; padding: 24px 40px !important; }
+          .mt-tabs { max-width: 1400px; margin: 0 auto; padding: 20px 40px 0 !important; }
+          .mt-header { padding: 16px 40px !important; }
+          .mt-content table { font-size: 13px !important; }
+          .mt-content table th { padding: 12px 10px !important; font-size: 12px !important; }
+          .mt-content table td { padding: 12px 10px !important; }
+        }
+        @media (min-width: 1200px) {
+          .mt-content { max-width: 1600px; padding: 24px 48px !important; }
+          .mt-tabs { max-width: 1600px; padding: 20px 48px 0 !important; }
+          .mt-header { padding: 16px 48px !important; }
         }
       `}</style>
       <Toast message={toast} />

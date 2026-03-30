@@ -97,8 +97,15 @@ export default function PackerApp({ profile, onLogout }) {
     <div style={{ fontFamily: T.font, minHeight: '100vh', background: T.bg, color: T.text, paddingBottom: 40 }}>
       <style>{`
         @media (min-width: 768px) {
-          .pk-content { max-width: 1400px; margin: 0 auto; padding: 20px 32px !important; }
-          .pk-header { padding: 14px 32px !important; }
+          .pk-content { max-width: 1400px; margin: 0 auto; padding: 24px 40px !important; }
+          .pk-header { padding: 16px 40px !important; }
+          .pk-content table { font-size: 13px !important; }
+          .pk-content table th { padding: 12px 10px !important; font-size: 12px !important; }
+          .pk-content table td { padding: 12px 10px !important; }
+        }
+        @media (min-width: 1200px) {
+          .pk-content { max-width: 1600px; padding: 24px 48px !important; }
+          .pk-header { padding: 16px 48px !important; }
         }
       `}</style>
       <Toast message={toast} />

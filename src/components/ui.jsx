@@ -100,17 +100,18 @@ export function Stat({ label, value, icon, gradient, sub, compact }) {
 export function Tabs({ items, active, onChange }) {
   return (
     <div style={{
-      display: 'flex', gap: 3, padding: 3, borderRadius: T.radiusSm,
+      display: 'flex', gap: 3, padding: 4, borderRadius: 12,
       background: T.surfaceAlt, border: `1px solid ${T.border}`,
       overflowX: 'auto', WebkitOverflowScrolling: 'touch',
     }}>
       {items.map(t => (
         <button key={t.id} onClick={() => onChange(t.id)} style={{
-          flex: '1 0 auto', padding: '10px 14px', borderRadius: 8, border: 'none',
+          flex: '1 0 auto', padding: '11px 18px', borderRadius: 10, border: 'none',
           background: active === t.id ? T.grad1 : 'transparent',
           color: active === t.id ? '#fff' : T.textDim,
-          fontSize: 13, fontWeight: 600, cursor: 'pointer',
-          fontFamily: T.font, whiteSpace: 'nowrap', transition: 'all 0.25s ease',
+          fontSize: 13, fontWeight: active === t.id ? 700 : 500, cursor: 'pointer',
+          fontFamily: T.font, whiteSpace: 'nowrap', transition: 'all 0.2s ease',
+          boxShadow: active === t.id ? '0 2px 8px rgba(184,134,11,0.25)' : 'none',
         }}>{t.label}</button>
       ))}
     </div>
@@ -194,8 +195,12 @@ export const GlobalStyles = () => (
     @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700;800;900&family=DM+Sans:wght@400;500;600;700;800;900&display=swap');
     @keyframes livePulse { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
     @keyframes toastIn { from { transform:translate(-50%,-120%); opacity:0; } to { transform:translate(-50%,0); opacity:1; } }
-    body { background: #FAFAF7; }
-    ::-webkit-scrollbar { width:4px; }
-    ::-webkit-scrollbar-thumb { background:rgba(0,0,0,0.1); border-radius:4px; }
+    body { background: #FAFAF7; margin: 0; }
+    ::-webkit-scrollbar { width:6px; }
+    ::-webkit-scrollbar-thumb { background:rgba(0,0,0,0.12); border-radius:4px; }
+    table { border-spacing: 0; }
+    @media (min-width: 768px) {
+      body { font-size: 14px; }
+    }
   `}</style>
 )
