@@ -646,7 +646,7 @@ export default function ManagerApp({ profile, onLogout }) {
             {/* ปุ่ม Export */}
             <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-end' }}>
               <button onClick={() => { exportProshipCSV(filtered, 'Orders_' + (dateFilter||'all') + '.csv'); flash('✅ Export CSV สำเร็จ!') }} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(45,138,78,0.2)', background: 'rgba(45,138,78,0.05)', color: T.success, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>📥 CSV ({filtered.length})</button>
-              <button onClick={() => { exportProshipExcel(filtered, 'Orders_' + (dateFilter||'all') + '.xls'); flash('✅ Export Excel สำเร็จ!') }} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(45,138,78,0.2)', background: 'rgba(45,138,78,0.05)', color: T.success, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>📊 Excel ({filtered.length})</button>
+              <button onClick={() => { exportProshipExcel(filtered, 'Orders_' + (dateFilter||'all') + '.xlsx').then(() => flash('✅ Export Excel สำเร็จ!')) }} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(45,138,78,0.2)', background: 'rgba(45,138,78,0.05)', color: T.success, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>📊 Excel ({filtered.length})</button>
             </div>
           </div>
 
@@ -926,7 +926,7 @@ export default function ManagerApp({ profile, onLogout }) {
               return (o.customer_name||'').toLowerCase().includes(q) || (o.customer_phone||'').includes(q) || (o.employee_name||'').toLowerCase().includes(q)
             })
             if (type === 'csv') { exportProshipCSV(rows, 'Orders_' + (dateFilter||'all') + '.csv'); flash('✅ Export CSV สำเร็จ!') }
-            else { exportProshipExcel(rows, 'Orders_' + (dateFilter||'all') + '.xls'); flash('✅ Export Excel สำเร็จ!') }
+            else { exportProshipExcel(rows, 'Orders_' + (dateFilter||'all') + '.xlsx').then(() => flash('✅ Export Excel สำเร็จ!')) }
           }
 
           return <>

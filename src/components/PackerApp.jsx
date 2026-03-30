@@ -92,7 +92,7 @@ export default function PackerApp({ profile, onLogout }) {
   const exportShip = (type) => {
     const exportData = selectedIds.size > 0 ? searchFiltered.filter(o => selectedIds.has(o.id)) : searchFiltered
     if (type === 'csv') { exportProshipCSV(exportData, 'Orders_' + (dateFilter||'all') + '.csv'); flash('✅ Export CSV สำเร็จ!') }
-    else { exportProshipExcel(exportData, 'Orders_' + (dateFilter||'all') + '.xls'); flash('✅ Export Excel สำเร็จ!') }
+    else { exportProshipExcel(exportData, 'Orders_' + (dateFilter||'all') + '.xlsx').then(() => flash('✅ Export Excel สำเร็จ!')) }
   }
 
   return (
@@ -190,7 +190,7 @@ export default function PackerApp({ profile, onLogout }) {
                     if (confirm(`↩ เปลี่ยน ${ids.length} รายการ เป็น "รอส่ง"?`)) { markWaiting(ids); setSelectedIds(new Set()) }
                   }} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid rgba(243,156,18,0.3)', background: 'rgba(243,156,18,0.05)', color: '#F39C12', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: T.font }}>↩ รอส่ง ({selectedIds.size})</button>
                   <button onClick={() => {
-                    exportProshipExcel(searchFiltered.filter(o => selectedIds.has(o.id)), 'Orders_selected.xls')
+                    exportProshipExcel(searchFiltered.filter(o => selectedIds.has(o.id)), 'Orders_selected.xlsx')
                     flash('✅ Export ' + selectedIds.size + ' รายการ')
                   }} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid rgba(45,138,78,0.2)', background: 'rgba(45,138,78,0.05)', color: T.success, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: T.font }}>📊 Excel ({selectedIds.size})</button>
                 </>
