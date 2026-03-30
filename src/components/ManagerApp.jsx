@@ -282,6 +282,13 @@ export default function ManagerApp({ profile, onLogout }) {
 
   return (
     <div style={{ fontFamily: T.font, minHeight: '100vh', background: T.bg, color: T.text, paddingBottom: 40 }}>
+      <style>{`
+        @media (min-width: 768px) {
+          .mt-content { max-width: 1400px; margin: 0 auto; padding: 20px 32px !important; }
+          .mt-tabs { max-width: 1400px; margin: 0 auto; padding: 20px 32px 0 !important; }
+          .mt-header { padding: 14px 32px !important; }
+        }
+      `}</style>
       <Toast message={toast} />
 
       {/* Flash Express Modal */}
@@ -375,7 +382,7 @@ export default function ManagerApp({ profile, onLogout }) {
       </Modal>
 
       {/* Header */}
-      <div style={{ ...glass, borderRadius: 0, padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 100, background: 'rgba(255,255,255,0.95)', borderBottom: `1px solid ${T.border}` }}>
+      <div className="mt-header" style={{ ...glass, borderRadius: 0, padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 100, background: 'rgba(255,255,255,0.95)', borderBottom: `1px solid ${T.border}` }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><img src="./logo.png" alt="" style={{ height: 32 }} /> <span style={{ fontSize: 18, fontWeight: 900 }}>ADMIN THE MT</span><LiveDot /></div>
           <div style={{ fontSize: 11, color: T.textDim }}>{profile.full_name} — {profile.role === 'manager' ? 'หัวหน้า' : 'แอดมิน'}</div>
@@ -392,11 +399,11 @@ export default function ManagerApp({ profile, onLogout }) {
         </div>
       </div>
 
-      <div style={{ padding: '16px 16px 0' }}>
+      <div className="mt-tabs" style={{ padding: '16px 16px 0' }}>
         <Tabs items={[{ id: 'dashboard', label: '📈 ภาพรวม' }, { id: 'create', label: '➕ สร้าง' }, { id: 'orders', label: '📋 รายงาน' }, ...(profile.role === 'manager' ? [{ id: 'shipping', label: '🚚 การจัดส่ง' }] : []), { id: 'teams', label: '👥 ทีม' }, { id: 'users', label: '🧑‍💼 ผู้ใช้' }]} active={tab} onChange={setTab} />
       </div>
 
-      <div style={{ padding: 16 }}>
+      <div className="mt-content" style={{ padding: 16 }}>
         {/* ══ CREATE ORDER ══ */}
         {tab === 'create' && <OrderForm profile={profile} onSuccess={(newOrder) => {
           setOrders(prev => {
