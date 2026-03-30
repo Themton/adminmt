@@ -1,5 +1,6 @@
 // ═══ Export ProShip Format (.xlsx) ═══
 import ExcelJS from 'exceljs'
+import { supabase } from './supabase'
 
 const NOTE_TEXT = 'ช่องสีแดงต้องกรอก ช่องสีขาวไม่จำเป็น\nอำเภอ จังหวัด หากสกดผิด ระบบจะไม่นำเข้าให้\nเบอร์มือถือ ต้องครบ 10 หลัก ไม่สามารถใช้เบอร์ 02 ได้'
 
@@ -35,14 +36,25 @@ function orderToRow(o) {
   }
 }
 
-export async function exportProshipExcel(orders, filename) {
+async function logExport(profile, type, filename, count, filterInfo) {
+  try {
+    await supabase.from('mt_export_logs').insert({
+      user_id: profile?.id || null,
+      user_name: profile?.full_name || '—',
+      export_type: type,
+      file_name: filename,
+      record_count: count,
+      filter_info: filterInfo || '',
+    })
+  } catch {}
+}
+
+export async function exportProshipExcel(orders, filename, profile, filterInfo) {
   const wb = new ExcelJS.Workbook()
   const ws = wb.addWorksheet('ProShip')
 
-  // Column widths
   HEADERS.forEach((h, i) => { ws.getColumn(i + 1).width = h.width })
 
-  // Row 1: Note (merged A1:L1)
   ws.mergeCells('A1:L1')
   const noteCell = ws.getCell('A1')
   noteCell.value = NOTE_TEXT
@@ -51,56 +63,50 @@ export async function exportProshipExcel(orders, filename) {
   noteCell.alignment = { wrapText: true, vertical: 'top' }
   ws.getRow(1).height = 45
 
-  // Row 2: Headers
   HEADERS.forEach((h, i) => {
     const cell = ws.getCell(2, i + 1)
     cell.value = h.label
     cell.font = { bold: true, size: 10 }
     cell.alignment = { wrapText: true, vertical: 'middle', horizontal: 'center' }
-    cell.border = {
-      top: { style: 'thin' }, bottom: { style: 'thin' },
-      left: { style: 'thin' }, right: { style: 'thin' }
-    }
-    if (h.required) {
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFC7CE' } }
-    }
+    cell.border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } }
+    if (h.required) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFC7CE' } }
   })
   ws.getRow(2).height = 30
 
-  // Data rows
   orders.forEach((o, idx) => {
     const row = orderToRow(o)
-    const rowNum = idx + 3
     HEADERS.forEach((h, i) => {
-      const cell = ws.getCell(rowNum, i + 1)
+      const cell = ws.getCell(idx + 3, i + 1)
       cell.value = row[h.key]
-      cell.border = {
-        top: { style: 'thin' }, bottom: { style: 'thin' },
-        left: { style: 'thin' }, right: { style: 'thin' }
-      }
+      cell.border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } }
       cell.font = { size: 10 }
     })
   })
 
-  // Download
   const buffer = await wb.xlsx.writeBuffer()
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
   a.download = filename || 'Orders_' + new Date().toISOString().split('T')[0] + '.xlsx'
   a.click()
+
+  await logExport(profile, 'Excel', a.download, orders.length, filterInfo)
 }
 
-export function exportProshipCSV(orders, filename) {
+export async function exportProshipCSV(orders, filename, profile, filterInfo) {
   const headerRow = HEADERS.map(h => h.label.split('\n')[0])
-  const rows = [headerRow, ...orders.map(o => {
-    const r = orderToRow(o)
-    return HEADERS.map(h => r[h.key])
-  })]
+  const rows = [headerRow, ...orders.map(o => { const r = orderToRow(o); return HEADERS.map(h => r[h.key]) })]
   const csv = '\uFEFF' + rows.map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(',')).join('\n')
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
   a.download = filename || 'Orders_' + new Date().toISOString().split('T')[0] + '.csv'
   a.click()
+
+  await logExport(profile, 'CSV', a.download, orders.length, filterInfo)
+}
+
+export async function fetchExportLogs(limit = 20) {
+  const { data } = await supabase.from('mt_export_logs').select('*').order('created_at', { ascending: false }).limit(limit)
+  return data || []
 }

@@ -3,7 +3,7 @@ import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, R
 import { supabase } from '../lib/supabase'
 import { syncOrderToSheet, updateOrderInSheet, deleteOrderFromSheet, syncAllToSheet, resetSheet } from '../lib/sheetSync'
 import { createFlashOrder, trackFlashOrder } from '../lib/flashApi'
-import { exportProshipExcel, exportProshipCSV } from '../lib/exportProship'
+import { exportProshipExcel, exportProshipCSV, fetchExportLogs } from '../lib/exportProship'
 import OrderForm from './OrderForm'
 import { T, glass, fmt, fmtDate, fmtDateFull, fmtDateTime, sameDay, withinDays, thisMonth, Stat, Tabs, Btn, Toast, Modal, Empty, LiveDot, Pagination } from './ui'
 
@@ -99,6 +99,9 @@ export default function ManagerApp({ profile, onLogout }) {
     try { return JSON.parse(localStorage.getItem('flash_src') || '{}') } catch { return {} }
   })
   const [showFlashSrc, setShowFlashSrc] = useState(false)
+  const [exportLogs, setExportLogs] = useState([])
+  const [showExportLogs, setShowExportLogs] = useState(false)
+  const loadExportLogs = async () => { setExportLogs(await fetchExportLogs(50)); setShowExportLogs(true) }
 
   const sendToFlash = async (order) => {
     if (!confirm(`📦 ส่งออเดอร์ไป Flash Express?\n\n${order.customer_name}\n${order.customer_phone}\n${order.district} ${order.province}`)) return
@@ -408,6 +411,38 @@ export default function ManagerApp({ profile, onLogout }) {
         </>}
       </Modal>
 
+      {/* Export History Modal */}
+      <Modal show={showExportLogs} onClose={() => setShowExportLogs(false)} title="📜 ประวัติการ Export">
+        {exportLogs.length === 0 ? <div style={{ textAlign: 'center', padding: 20, color: T.textDim }}>ยังไม่มีประวัติ</div> : (
+          <div style={{ maxHeight: 400, overflowY: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: T.font }}>
+              <thead>
+                <tr style={{ background: T.surfaceAlt, position: 'sticky', top: 0 }}>
+                  <th style={{ padding: '8px 6px', textAlign: 'left', fontWeight: 600, color: T.textDim }}>วันเวลา</th>
+                  <th style={{ padding: '8px 6px', textAlign: 'left', fontWeight: 600, color: T.textDim }}>ผู้ Export</th>
+                  <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, color: T.textDim }}>ประเภท</th>
+                  <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, color: T.textDim }}>จำนวน</th>
+                  <th style={{ padding: '8px 6px', textAlign: 'left', fontWeight: 600, color: T.textDim }}>ไฟล์</th>
+                </tr>
+              </thead>
+              <tbody>
+                {exportLogs.map(log => (
+                  <tr key={log.id} style={{ borderBottom: `1px solid ${T.border}` }}>
+                    <td style={{ padding: '8px 6px', fontSize: 11, color: T.textDim }}>{new Date(log.created_at).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</td>
+                    <td style={{ padding: '8px 6px', fontWeight: 600 }}>{log.user_name}</td>
+                    <td style={{ padding: '8px 6px', textAlign: 'center' }}>
+                      <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600, background: log.export_type === 'Excel' ? 'rgba(45,138,78,0.1)' : 'rgba(184,134,11,0.1)', color: log.export_type === 'Excel' ? T.success : T.gold }}>{log.export_type}</span>
+                    </td>
+                    <td style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 700, color: T.gold }}>{log.record_count}</td>
+                    <td style={{ padding: '8px 6px', fontSize: 10, color: T.textDim }}>{log.file_name}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Modal>
+
       {/* Header */}
       <div className="mt-header" style={{ ...glass, borderRadius: 0, padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 100, background: 'rgba(255,255,255,0.95)', borderBottom: `1px solid ${T.border}` }}>
         <div>
@@ -648,8 +683,9 @@ export default function ManagerApp({ profile, onLogout }) {
             </div>
             {/* ปุ่ม Export */}
             <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-end' }}>
-              <button onClick={() => { exportProshipCSV(filtered, 'Orders_' + (dateFilter||'all') + '.csv'); flash('✅ Export CSV สำเร็จ!') }} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(45,138,78,0.2)', background: 'rgba(45,138,78,0.05)', color: T.success, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>📥 CSV ({filtered.length})</button>
-              <button onClick={() => { exportProshipExcel(filtered, 'Orders_' + (dateFilter||'all') + '.xlsx').then(() => flash('✅ Export Excel สำเร็จ!')) }} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(45,138,78,0.2)', background: 'rgba(45,138,78,0.05)', color: T.success, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>📊 Excel ({filtered.length})</button>
+              <button onClick={() => { exportProshipCSV(filtered, 'Orders_' + (dateFilter||'all') + '.csv', profile, dateFilter + '~' + dateFilterEnd); flash('✅ Export CSV สำเร็จ!') }} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(45,138,78,0.2)', background: 'rgba(45,138,78,0.05)', color: T.success, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>📥 CSV ({filtered.length})</button>
+              <button onClick={() => { exportProshipExcel(filtered, 'Orders_' + (dateFilter||'all') + '.xlsx', profile, dateFilter + '~' + dateFilterEnd).then(() => flash('✅ Export Excel สำเร็จ!')) }} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(45,138,78,0.2)', background: 'rgba(45,138,78,0.05)', color: T.success, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>📊 Excel ({filtered.length})</button>
+              <button onClick={loadExportLogs} style={{ padding: '6px 14px', borderRadius: 8, border: `1px solid ${T.border}`, background: '#fff', color: T.textDim, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>📜 ประวัติ</button>
             </div>
           </div>
 
@@ -928,8 +964,8 @@ export default function ManagerApp({ profile, onLogout }) {
               const q = searchQuery.toLowerCase()
               return (o.customer_name||'').toLowerCase().includes(q) || (o.customer_phone||'').includes(q) || (o.employee_name||'').toLowerCase().includes(q)
             })
-            if (type === 'csv') { exportProshipCSV(rows, 'Orders_' + (dateFilter||'all') + '.csv'); flash('✅ Export CSV สำเร็จ!') }
-            else { exportProshipExcel(rows, 'Orders_' + (dateFilter||'all') + '.xlsx').then(() => flash('✅ Export Excel สำเร็จ!')) }
+            if (type === 'csv') { exportProshipCSV(rows, 'Orders_' + (dateFilter||'all') + '.csv', profile, 'shipping'); flash('✅ Export CSV สำเร็จ!') }
+            else { exportProshipExcel(rows, 'Orders_' + (dateFilter||'all') + '.xlsx', profile, 'shipping').then(() => flash('✅ Export Excel สำเร็จ!')) }
           }
 
           return <>

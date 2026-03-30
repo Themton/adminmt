@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
-import { T, glass, fmt, fmtDateTime, LiveDot, Toast, Empty, Pagination } from './ui'
-import { exportProshipExcel, exportProshipCSV } from '../lib/exportProship'
+import { T, glass, fmt, fmtDateTime, LiveDot, Toast, Empty, Pagination, Modal } from './ui'
+import { exportProshipExcel, exportProshipCSV, fetchExportLogs } from '../lib/exportProship'
 
 export default function PackerApp({ profile, onLogout }) {
   const [orders, setOrders] = useState([])
@@ -110,10 +110,14 @@ export default function PackerApp({ profile, onLogout }) {
     }
   }
 
+  const [exportLogs, setExportLogs] = useState([])
+  const [showExportLogs, setShowExportLogs] = useState(false)
+  const loadExportLogs = async () => { setExportLogs(await fetchExportLogs(50)); setShowExportLogs(true) }
+
   const exportShip = (type) => {
     const exportData = selectedIds.size > 0 ? searchFiltered.filter(o => selectedIds.has(o.id)) : searchFiltered
-    if (type === 'csv') { exportProshipCSV(exportData, 'Orders_' + (dateFilter||'all') + '.csv'); flash('✅ Export CSV สำเร็จ!') }
-    else { exportProshipExcel(exportData, 'Orders_' + (dateFilter||'all') + '.xlsx').then(() => flash('✅ Export Excel สำเร็จ!')) }
+    if (type === 'csv') { exportProshipCSV(exportData, 'Orders_' + (dateFilter||'all') + '.csv', profile, 'shipping'); flash('✅ Export CSV สำเร็จ!') }
+    else { exportProshipExcel(exportData, 'Orders_' + (dateFilter||'all') + '.xlsx', profile, 'shipping').then(() => flash('✅ Export Excel สำเร็จ!')) }
   }
 
   return (
@@ -132,6 +136,38 @@ export default function PackerApp({ profile, onLogout }) {
         }
       `}</style>
       <Toast message={toast} />
+
+      {/* Export History Modal */}
+      <Modal show={showExportLogs} onClose={() => setShowExportLogs(false)} title="📜 ประวัติการ Export">
+        {exportLogs.length === 0 ? <div style={{ textAlign: 'center', padding: 20, color: T.textDim }}>ยังไม่มีประวัติ</div> : (
+          <div style={{ maxHeight: 400, overflowY: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: T.font }}>
+              <thead>
+                <tr style={{ background: T.surfaceAlt, position: 'sticky', top: 0 }}>
+                  <th style={{ padding: '8px 6px', textAlign: 'left', fontWeight: 600, color: T.textDim }}>วันเวลา</th>
+                  <th style={{ padding: '8px 6px', textAlign: 'left', fontWeight: 600, color: T.textDim }}>ผู้ Export</th>
+                  <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, color: T.textDim }}>ประเภท</th>
+                  <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, color: T.textDim }}>จำนวน</th>
+                  <th style={{ padding: '8px 6px', textAlign: 'left', fontWeight: 600, color: T.textDim }}>ไฟล์</th>
+                </tr>
+              </thead>
+              <tbody>
+                {exportLogs.map(log => (
+                  <tr key={log.id} style={{ borderBottom: `1px solid ${T.border}` }}>
+                    <td style={{ padding: '8px 6px', fontSize: 11, color: T.textDim }}>{new Date(log.created_at).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</td>
+                    <td style={{ padding: '8px 6px', fontWeight: 600 }}>{log.user_name}</td>
+                    <td style={{ padding: '8px 6px', textAlign: 'center' }}>
+                      <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600, background: log.export_type === 'Excel' ? 'rgba(45,138,78,0.1)' : 'rgba(184,134,11,0.1)', color: log.export_type === 'Excel' ? T.success : T.gold }}>{log.export_type}</span>
+                    </td>
+                    <td style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 700, color: T.gold }}>{log.record_count}</td>
+                    <td style={{ padding: '8px 6px', fontSize: 10, color: T.textDim }}>{log.file_name}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Modal>
 
       {/* Header */}
       <div className="pk-header" style={{ ...glass, borderRadius: 0, padding: '14px 18px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, zIndex: 100, background: 'rgba(255,255,255,0.95)', borderBottom: `1px solid ${T.border}` }}>
@@ -183,6 +219,7 @@ export default function PackerApp({ profile, onLogout }) {
             <div style={{ display: 'flex', gap: 6 }}>
               <button onClick={() => exportShip('excel')} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(45,138,78,0.2)', background: 'rgba(45,138,78,0.05)', color: T.success, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>📊 Excel ({searchFiltered.length})</button>
               <button onClick={() => exportShip('csv')} style={{ padding: '6px 14px', borderRadius: 8, border: `1px solid ${T.border}`, background: '#fff', color: T.textDim, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>📥 CSV</button>
+              <button onClick={loadExportLogs} style={{ padding: '6px 14px', borderRadius: 8, border: `1px solid ${T.border}`, background: '#fff', color: T.textDim, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>📜 ประวัติ</button>
             </div>
           </div>
 
@@ -211,7 +248,7 @@ export default function PackerApp({ profile, onLogout }) {
                     if (confirm(`↩ เปลี่ยน ${ids.length} รายการ เป็น "รอส่ง"?`)) { markWaiting(ids); setSelectedIds(new Set()) }
                   }} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid rgba(243,156,18,0.3)', background: 'rgba(243,156,18,0.05)', color: '#F39C12', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: T.font }}>↩ รอส่ง ({selectedIds.size})</button>
                   <button onClick={() => {
-                    exportProshipExcel(searchFiltered.filter(o => selectedIds.has(o.id)), 'Orders_selected.xlsx')
+                    exportProshipExcel(searchFiltered.filter(o => selectedIds.has(o.id)), 'Orders_selected.xlsx', profile, 'selected')
                     flash('✅ Export ' + selectedIds.size + ' รายการ')
                   }} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid rgba(45,138,78,0.2)', background: 'rgba(45,138,78,0.05)', color: T.success, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: T.font }}>📊 Excel ({selectedIds.size})</button>
                 </>
