@@ -85,8 +85,14 @@ export default function PackerApp({ profile, onLogout }) {
     setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
   }
   const toggleAll = () => {
-    if (selectedIds.size === searchFiltered.length) setSelectedIds(new Set())
-    else setSelectedIds(new Set(searchFiltered.map(o => o.id)))
+    const pageItems = searchFiltered.slice((page-1)*pageSize, page*pageSize)
+    const pageIds = pageItems.map(o => o.id)
+    const allSelected = pageIds.every(id => selectedIds.has(id))
+    if (allSelected) {
+      setSelectedIds(prev => { const n = new Set(prev); pageIds.forEach(id => n.delete(id)); return n })
+    } else {
+      setSelectedIds(prev => { const n = new Set(prev); pageIds.forEach(id => n.add(id)); return n })
+    }
   }
 
   const exportShip = (type) => {
@@ -209,7 +215,7 @@ export default function PackerApp({ profile, onLogout }) {
             <thead>
               <tr style={{ background: T.surfaceAlt }}>
                 <th style={{ padding: '10px 8px', textAlign: 'center', borderBottom: `1px solid ${T.border}`, width: 36 }}>
-                  <input type="checkbox" checked={selectedIds.size === searchFiltered.length && searchFiltered.length > 0} onChange={toggleAll} style={{ cursor: 'pointer', width: 16, height: 16 }} />
+                  <input type="checkbox" checked={(() => { const pIds = searchFiltered.slice((page-1)*pageSize, page*pageSize).map(o => o.id); return pIds.length > 0 && pIds.every(id => selectedIds.has(id)) })()} onChange={toggleAll} style={{ cursor: 'pointer', width: 16, height: 16 }} />
                 </th>
                 <th style={{ padding: '10px 8px', textAlign: 'center', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}`, width: 40 }}>#</th>
                 <th style={{ padding: '10px 8px', textAlign: 'left', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>วันที่</th>
