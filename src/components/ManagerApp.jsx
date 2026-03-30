@@ -901,7 +901,7 @@ export default function ManagerApp({ profile, onLogout }) {
             if (shipFilter === 'waiting') return !o.shipping_status || o.shipping_status === 'waiting'
             if (shipFilter === 'printed') return o.shipping_status === 'printed'
             return true
-          })
+          }).sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
           const waitingCount = allShipOrders.filter(o => !o.shipping_status || o.shipping_status === 'waiting').length
           const printedCount = allShipOrders.filter(o => o.shipping_status === 'printed').length
 
