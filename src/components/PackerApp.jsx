@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { T, glass, fmt, fmtDateTime, LiveDot, Toast, Empty, Pagination } from './ui'
 import { exportProshipExcel, exportProshipCSV } from '../lib/exportProship'
@@ -81,8 +81,23 @@ export default function PackerApp({ profile, onLogout }) {
     flash('✅ เปลี่ยนกลับเป็นรอส่ง ' + ids.length + ' รายการ')
   }
 
-  const toggleSelect = (id) => {
-    setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const lastCheckedRef = useRef(null)
+  const toggleSelect = (id, e) => {
+    const currentList = searchFiltered.slice((page-1)*pageSize, page*pageSize)
+    const currentIdx = currentList.findIndex(o => o.id === id)
+
+    if (e?.shiftKey && lastCheckedRef.current !== null) {
+      const start = Math.min(lastCheckedRef.current, currentIdx)
+      const end = Math.max(lastCheckedRef.current, currentIdx)
+      setSelectedIds(prev => {
+        const n = new Set(prev)
+        for (let i = start; i <= end; i++) { n.add(currentList[i].id) }
+        return n
+      })
+    } else {
+      setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+    }
+    lastCheckedRef.current = currentIdx
   }
   const toggleAll = () => {
     const pageItems = searchFiltered.slice((page-1)*pageSize, page*pageSize)
@@ -236,7 +251,7 @@ export default function PackerApp({ profile, onLogout }) {
                 return (
                   <tr key={o.id} style={{ borderBottom: `1px solid ${T.border}`, borderLeft: isPrinted ? '3px solid #2D8A4E' : '3px solid #F39C12', background: selectedIds.has(o.id) ? 'rgba(184,134,11,0.06)' : 'transparent' }}>
                     <td style={{ padding: '10px 8px', textAlign: 'center' }}>
-                      <input type="checkbox" checked={selectedIds.has(o.id)} onChange={() => toggleSelect(o.id)} style={{ cursor: 'pointer', width: 16, height: 16 }} />
+                      <input type="checkbox" checked={selectedIds.has(o.id)} onClick={e => toggleSelect(o.id, e)} readOnly style={{ cursor: 'pointer', width: 16, height: 16 }} />
                     </td>
                     <td style={{ padding: '10px 8px', textAlign: 'center', fontWeight: 700, color: T.gold }}>{o.daily_seq || (page-1)*pageSize + i + 1}</td>
                     <td style={{ padding: '10px 8px', fontSize: 11 }}>{(o.order_date || '').substring(0, 10)}</td>
