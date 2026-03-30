@@ -39,6 +39,8 @@ export default function PackerApp({ profile, onLogout }) {
         (payload) => { setOrders(prev => prev.some(o => o.id === payload.new.id) ? prev : [payload.new, ...prev]) })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'mt_orders' },
         (payload) => { setOrders(prev => prev.map(o => o.id === payload.new.id ? payload.new : o)) })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'mt_orders' },
+        (payload) => { setOrders(prev => prev.filter(o => o.id !== payload.old.id)) })
       .subscribe()
     return () => supabase.removeChannel(ch)
   }, [])

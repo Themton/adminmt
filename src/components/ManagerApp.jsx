@@ -166,7 +166,18 @@ export default function ManagerApp({ profile, onLogout }) {
         (payload) => { setOrders(prev => prev.map(o => o.id === payload.new.id ? payload.new : o)) }
       )
       .subscribe()
-    return () => supabase.removeChannel(ch)
+
+    // Realtime — profiles + teams
+    const ch2 = supabase.channel('mgr-profiles')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'mt_profiles' },
+        () => { supabase.from('mt_profiles').select('*, mt_teams(name)').then(({ data }) => { if (data) setProfiles(data) }) }
+      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'mt_teams' },
+        () => { supabase.from('mt_teams').select('*').order('name').then(({ data }) => { if (data) setTeams(data) }) }
+      )
+      .subscribe()
+
+    return () => { supabase.removeChannel(ch); supabase.removeChannel(ch2) }
   }, [])
   // ═══ Stats ═══
   const today = useMemo(() => orders.filter(o => sameDay(o.created_at, new Date())), [orders])

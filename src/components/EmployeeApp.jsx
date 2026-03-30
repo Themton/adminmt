@@ -280,14 +280,22 @@ export default function EmployeeApp({ profile, onLogout }) {
     fetchOrders()
 
     // Realtime — เฉพาะออเดอร์ของตัวเอง
-    const ch = supabase.channel('emp-orders-' + profile.id).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'mt_orders' },
-      (payload) => {
-        const o = payload.new
-        if (o.employee_id === profile.id) {
-          setOrders(prev => [o, ...prev])
+    const ch = supabase.channel('emp-orders-' + profile.id)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'mt_orders' },
+        (payload) => {
+          const o = payload.new
+          if (o.employee_id === profile.id) {
+            setOrders(prev => prev.some(p => p.id === o.id) ? prev : [o, ...prev])
+          }
         }
-      }
-    ).subscribe()
+      )
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'mt_orders' },
+        (payload) => { setOrders(prev => prev.map(o => o.id === payload.new.id ? payload.new : o)) }
+      )
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'mt_orders' },
+        (payload) => { setOrders(prev => prev.filter(o => o.id !== payload.old.id)) }
+      )
+      .subscribe()
     return () => supabase.removeChannel(ch)
   }, [profile.id, profile.team_id])
 
