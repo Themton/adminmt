@@ -143,6 +143,34 @@ export default function ManagerApp({ profile, onLogout }) {
     flash('✅ บันทึกข้อมูลผู้ส่งสำเร็จ')
   }
 
+  // ═══ จัดการเลขพัสดุ (Manual) ═══
+  const [pnoModal, setPnoModal] = useState(null) // { orderId, pno, customerName } or null
+  const [pnoInput, setPnoInput] = useState('')
+
+  const openPnoModal = (order) => {
+    setPnoModal({ orderId: order.id, pno: order.flash_pno || '', customerName: order.customer_name })
+    setPnoInput(order.flash_pno || '')
+  }
+
+  const savePno = async () => {
+    if (!pnoModal) return
+    const val = pnoInput.trim()
+    const { error } = await supabase.from('mt_orders').update({ flash_pno: val, flash_status: val ? 'manual' : '' }).eq('id', pnoModal.orderId)
+    if (error) { flash('❌ ' + error.message); return }
+    setOrders(prev => prev.map(o => o.id === pnoModal.orderId ? { ...o, flash_pno: val, flash_status: val ? 'manual' : '' } : o))
+    flash(val ? '✅ บันทึกเลขพัสดุสำเร็จ' : '✅ ลบเลขพัสดุสำเร็จ')
+    setPnoModal(null)
+    setPnoInput('')
+  }
+
+  const deletePno = async (orderId) => {
+    if (!confirm('🗑 ลบเลขพัสดุนี้?')) return
+    const { error } = await supabase.from('mt_orders').update({ flash_pno: '', flash_status: '' }).eq('id', orderId)
+    if (error) { flash('❌ ' + error.message); return }
+    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, flash_pno: '', flash_status: '' } : o))
+    flash('✅ ลบเลขพัสดุแล้ว')
+  }
+
   // ═══ โหลดข้อมูล ═══
   useEffect(() => {
     const loadAll = async () => {
@@ -389,6 +417,19 @@ export default function ManagerApp({ profile, onLogout }) {
           <FI label="รหัส ปณ." value={flashSrcInfo.zip||''} onChange={e => setFlashSrcInfo(p=>({...p,zip:e.target.value}))} />
         </div>
         <Btn full onClick={() => saveFlashSrc(flashSrcInfo)} grad={T.grad2}>💾 บันทึก</Btn>
+      </Modal>
+
+      {/* Tracking Number Modal — สร้าง / แก้ไข / ลบ เลขพัสดุ */}
+      <Modal show={!!pnoModal} onClose={() => { setPnoModal(null); setPnoInput('') }} title={pnoModal?.pno ? '✏️ แก้ไขเลขพัสดุ' : '📦 สร้างเลขพัสดุ'}>
+        {pnoModal && <>
+          <div style={{ fontSize: 13, color: T.textDim, marginBottom: 12 }}>ลูกค้า: <strong style={{ color: T.text }}>{pnoModal.customerName}</strong></div>
+          <FI label="เลขพัสดุ / Tracking Number" value={pnoInput} onChange={e => setPnoInput(e.target.value)} placeholder="เช่น TH123456789, FLASH-001, ..." />
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Btn full onClick={savePno} grad={T.grad2}>{pnoModal.pno ? '💾 บันทึก' : '✅ สร้าง'}</Btn>
+            <Btn full outline onClick={() => { setPnoModal(null); setPnoInput('') }}>ยกเลิก</Btn>
+          </div>
+          {pnoModal.pno && <button onClick={() => { deletePno(pnoModal.orderId); setPnoModal(null); setPnoInput('') }} style={{ width: '100%', marginTop: 12, padding: 12, borderRadius: T.radiusSm, border: '1px solid rgba(214,48,49,0.2)', background: 'rgba(214,48,49,0.04)', color: T.danger, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>🗑 ลบเลขพัสดุ</button>}
+        </>}
       </Modal>
 
       {/* Edit Order Modal */}
@@ -1108,9 +1149,12 @@ export default function ManagerApp({ profile, onLogout }) {
                       </td>
                       <td style={{ padding: '8px 6px', textAlign: 'center' }}>
                         {o.flash_pno ? (
-                          <button onClick={() => trackFlash(o.flash_pno)} style={{ padding: '4px 6px', borderRadius: 4, border: '1px solid rgba(45,138,78,0.2)', background: 'rgba(45,138,78,0.05)', color: T.success, fontSize: 9, cursor: 'pointer', fontFamily: 'monospace', fontWeight: 700, letterSpacing: 0.3 }}>{o.flash_pno.length > 14 ? o.flash_pno.substring(0,14)+'…' : o.flash_pno}</button>
+                          <div style={{ display: 'flex', gap: 3, alignItems: 'center', justifyContent: 'center' }}>
+                            <button onClick={() => openPnoModal(o)} style={{ padding: '4px 6px', borderRadius: 4, border: '1px solid rgba(45,138,78,0.2)', background: 'rgba(45,138,78,0.05)', color: T.success, fontSize: 9, cursor: 'pointer', fontFamily: 'monospace', fontWeight: 700, letterSpacing: 0.3, maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={o.flash_pno}>{o.flash_pno.length > 14 ? o.flash_pno.substring(0,14)+'…' : o.flash_pno}</button>
+                            <button onClick={() => deletePno(o.id)} style={{ padding: '3px 5px', borderRadius: 4, border: '1px solid rgba(214,48,49,0.15)', background: '#fff', color: T.danger, fontSize: 9, cursor: 'pointer', fontFamily: T.font, lineHeight: 1 }} title="ลบ">✕</button>
+                          </div>
                         ) : (
-                          <button onClick={() => sendToFlash(o)} style={{ padding: '4px 8px', borderRadius: 4, border: '1px solid rgba(255,165,0,0.3)', background: 'rgba(255,165,0,0.05)', color: '#e67e00', fontSize: 10, cursor: 'pointer', fontFamily: T.font, fontWeight: 600 }}>📦 ส่ง Flash</button>
+                          <button onClick={() => openPnoModal(o)} style={{ padding: '4px 8px', borderRadius: 4, border: '1px solid rgba(184,134,11,0.3)', background: 'rgba(184,134,11,0.05)', color: T.gold, fontSize: 10, cursor: 'pointer', fontFamily: T.font, fontWeight: 600 }}>➕ สร้าง</button>
                         )}
                       </td>
                     </tr>
