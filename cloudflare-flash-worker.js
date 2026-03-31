@@ -6,7 +6,7 @@
 // ═══════════════════════════════════════════════════════════
 
 const MCH_ID = 'CBC9351';
-const API_KEY = '0d0b630e5e245149fe120a062c342b3f41ffaea51597464841e97d324b79233';
+const API_KEY = '0d0b630e5e245149fe120a062c342b3f41ffaea51597464841e97d324b792334';
 const BASE_URL = 'https://open-api.flashexpress.com';
 
 // ═══ SHA256 Signature ═══
