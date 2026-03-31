@@ -1073,10 +1073,13 @@ export default function ManagerApp({ profile, onLogout }) {
             return true
           })
           const shipOrders = allShipOrders.filter(o => {
-            if (shipFilter === 'waiting') return !o.shipping_status || o.shipping_status === 'waiting'
+            if (shipFilter === 'preparing') return (!o.shipping_status || o.shipping_status === 'waiting') && !o.flash_pno
+            if (shipFilter === 'ready') return o.shipping_status === 'printed' && !o.flash_pno
+            if (shipFilter === 'insystem') return !!o.flash_pno
             if (shipFilter === 'printed') return o.shipping_status === 'printed'
+            if (shipFilter === 'waiting') return !o.shipping_status || o.shipping_status === 'waiting'
             return true
-          }).sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+          }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
           const waitingCount = allShipOrders.filter(o => !o.shipping_status || o.shipping_status === 'waiting').length
           const printedCount = allShipOrders.filter(o => o.shipping_status === 'printed').length
 
@@ -1105,87 +1108,81 @@ export default function ManagerApp({ profile, onLogout }) {
           }
 
           return <>
-          <div style={{ ...glass, padding: 14, marginBottom: 10 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>🚚 การจัดส่ง</div>
+          {/* ═══ Status Filter Bar ═══ */}
+          <div style={{ overflowX: 'auto', marginBottom: 10 }}>
+            <div style={{ display: 'flex', gap: 0, minWidth: 900, background: '#fff', borderRadius: 10, border: `1px solid ${T.border}`, overflow: 'hidden' }}>
+              {(() => {
+                const preparing = allShipOrders.filter(o => (!o.shipping_status || o.shipping_status === 'waiting') && !o.flash_pno)
+                const readyShip = allShipOrders.filter(o => o.shipping_status === 'printed' && !o.flash_pno)
+                const inSystem = allShipOrders.filter(o => o.flash_pno && o.flash_status === 'created')
+                const manual = allShipOrders.filter(o => o.flash_pno && o.flash_status === 'manual')
+                const allPrinted = allShipOrders.filter(o => o.shipping_status === 'printed')
+                const filters = [
+                  { id: 'all', label: 'ทั้งหมด', count: allShipOrders.length, color: '#2980B9', bg: '#EBF5FB' },
+                  { id: 'preparing', label: 'เตรียมส่ง', count: preparing.length, color: '#E67E22', bg: '#FEF5E7' },
+                  { id: 'ready', label: 'พร้อมส่ง', count: readyShip.length, color: '#27AE60', bg: '#EAFAF1' },
+                  { id: 'insystem', label: 'รับเข้าระบบ', count: inSystem.length + manual.length, color: '#8E44AD', bg: '#F4ECF7' },
+                  { id: 'printed', label: 'ปริ้นแล้ว', count: allPrinted.length, color: '#16A085', bg: '#E8F8F5' },
+                ]
+                return filters.map(f => (
+                  <button key={f.id} onClick={() => setShipFilter(f.id)} style={{
+                    flex: 1, padding: '12px 8px', border: 'none', cursor: 'pointer', fontFamily: T.font, fontSize: 11, fontWeight: 600,
+                    background: shipFilter === f.id ? f.bg : 'transparent',
+                    color: shipFilter === f.id ? f.color : T.textDim,
+                    borderBottom: shipFilter === f.id ? `3px solid ${f.color}` : '3px solid transparent',
+                    transition: 'all 0.15s'
+                  }}>
+                    <div style={{ fontSize: shipFilter === f.id ? 18 : 15, fontWeight: 800, color: shipFilter === f.id ? f.color : T.textDim }}>{f.count}</div>
+                    {f.label}
+                  </button>
+                ))
+              })()}
+            </div>
+          </div>
 
-            {/* วันที่ + ปุ่มเลือกช่วง */}
+          {/* ═══ Controls ═══ */}
+          <div style={{ ...glass, padding: 12, marginBottom: 10 }}>
             <div style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <input type="date" value={dateFilter} onChange={e => { setDateFilter(e.target.value); if (!dateFilterEnd || e.target.value > dateFilterEnd) setDateFilterEnd(e.target.value); setQuickFilter('') }}
-                style={{ padding: '8px 10px', borderRadius: T.radiusSm, background: T.surfaceAlt, border: `1px solid ${T.border}`, color: T.text, fontSize: 12, fontFamily: T.font, outline: 'none' }} />
-              <span style={{ fontSize: 12, color: T.textDim }}>ถึง</span>
+                style={{ padding: '7px 10px', borderRadius: 6, background: '#fff', border: `1px solid ${T.border}`, color: T.text, fontSize: 12, fontFamily: T.font, outline: 'none' }} />
+              <span style={{ fontSize: 12, color: T.textDim }}>—</span>
               <input type="date" value={dateFilterEnd} onChange={e => { setDateFilterEnd(e.target.value); setQuickFilter('') }}
-                style={{ padding: '8px 10px', borderRadius: T.radiusSm, background: T.surfaceAlt, border: `1px solid ${T.border}`, color: T.text, fontSize: 12, fontFamily: T.font, outline: 'none' }} />
-              {[
-                { id: 'today', label: 'วันนี้', fn: () => { setDateFilter(todayStr); setDateFilterEnd(todayStr); setQuickFilter('today') } },
-                { id: '7days', label: '7 วัน', fn: () => { const d = new Date(); d.setDate(d.getDate()-6); setDateFilter(d.toISOString().split('T')[0]); setDateFilterEnd(todayStr); setQuickFilter('7days') } },
-                { id: 'month', label: 'เดือนนี้', fn: () => { const d = new Date(); setDateFilter(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-01'); setDateFilterEnd(todayStr); setQuickFilter('month') } },
-              ].map(b => (
-                <button key={b.id} onClick={b.fn} style={{ padding: '6px 12px', borderRadius: 8, border: quickFilter === b.id ? 'none' : `1px solid ${T.border}`, background: quickFilter === b.id ? 'linear-gradient(135deg, #B8860B, #DAA520)' : '#fff', color: quickFilter === b.id ? '#fff' : T.textDim, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>{b.label}</button>
+                style={{ padding: '7px 10px', borderRadius: 6, background: '#fff', border: `1px solid ${T.border}`, color: T.text, fontSize: 12, fontFamily: T.font, outline: 'none' }} />
+              {[{ id: 'today', label: 'วันนี้' }, { id: '7days', label: '7 วัน' }, { id: 'month', label: 'เดือนนี้' }].map(b => (
+                <button key={b.id} onClick={() => {
+                  if (b.id === 'today') { setDateFilter(todayStr); setDateFilterEnd(todayStr) }
+                  else if (b.id === '7days') { const d = new Date(); d.setDate(d.getDate()-6); setDateFilter(d.toISOString().split('T')[0]); setDateFilterEnd(todayStr) }
+                  else { const d = new Date(); setDateFilter(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-01'); setDateFilterEnd(todayStr) }
+                  setQuickFilter(b.id)
+                }} style={{ padding: '6px 12px', borderRadius: 6, border: quickFilter === b.id ? 'none' : `1px solid ${T.border}`, background: quickFilter === b.id ? '#2980B9' : '#fff', color: quickFilter === b.id ? '#fff' : T.textDim, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>{b.label}</button>
               ))}
+              <div style={{ flex: 1 }} />
+              <button onClick={() => setShowFlashSrc(true)} style={{ padding: '6px 12px', borderRadius: 6, border: `1px solid ${T.border}`, background: '#fff', color: T.textDim, fontSize: 11, cursor: 'pointer', fontFamily: T.font }}>⚙️ ตั้งค่า Flash</button>
+              <button onClick={() => exportShip('excel')} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid rgba(45,138,78,0.2)', background: '#fff', color: T.success, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>📊 Export</button>
             </div>
-
-            {/* ปุ่มกรองสถานะ */}
-            <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', gap: 6 }}>
-              {[
-                { id: 'all', label: `📦 ทั้งหมด`, count: allShipOrders.length },
-                { id: 'waiting', label: `🟡 รอส่ง`, count: waitingCount },
-                { id: 'printed', label: `🟢 ปริ้นแล้ว`, count: printedCount },
-              ].map(b => (
-                <button key={b.id} onClick={() => setShipFilter(b.id)} style={{
-                  padding: '8px 16px', borderRadius: 10, cursor: 'pointer', fontFamily: T.font, fontSize: 12, fontWeight: 700,
-                  border: shipFilter === b.id ? 'none' : `1px solid ${T.border}`,
-                  background: shipFilter === b.id ? (b.id === 'waiting' ? 'linear-gradient(135deg, #F39C12, #F1C40F)' : b.id === 'printed' ? 'linear-gradient(135deg, #2D8A4E, #27AE60)' : 'linear-gradient(135deg, #B8860B, #DAA520)') : '#fff',
-                  color: shipFilter === b.id ? '#fff' : T.textDim,
-                  boxShadow: shipFilter === b.id ? '0 2px 8px rgba(0,0,0,0.15)' : 'none'
-                }}>{b.label} <span style={{ marginLeft: 4, padding: '1px 6px', borderRadius: 6, background: shipFilter === b.id ? 'rgba(255,255,255,0.3)' : T.surfaceAlt, fontSize: 10 }}>{b.count}</span></button>
-              ))}
-              </div>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button onClick={() => exportShip('excel')} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid rgba(45,138,78,0.2)', background: 'rgba(45,138,78,0.05)', color: T.success, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>📊 Export Excel ({shipOrders.length})</button>
-                <button onClick={() => exportShip('csv')} style={{ padding: '6px 14px', borderRadius: 8, border: `1px solid ${T.border}`, background: '#fff', color: T.textDim, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>📥 CSV</button>
-              </div>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="🔍 ค้นหาชื่อ เบอร์ เลขพัสดุ..."
+                style={{ flex: 1, padding: '8px 12px', borderRadius: 6, border: `1px solid ${T.border}`, background: '#fff', color: T.text, fontSize: 12, fontFamily: T.font, outline: 'none', boxSizing: 'border-box' }} />
+              {(() => { const p = shipOrders.filter(o => o.flash_pno); return p.length > 0 && <button onClick={() => notifyCourier(p.map(o => o.flash_pno))} style={{ padding: '8px 14px', borderRadius: 6, border: 'none', background: '#2980B9', color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: T.font, whiteSpace: 'nowrap' }}>📞 เรียกรับพัสดุ ({p.length})</button> })()}
             </div>
-
-            {/* ค้นหา */}
-            <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="🔍 ค้นหาชื่อ เบอร์ เลขพัสดุ พนักงาน..."
-              style={{ width: '100%', padding: '10px 12px', borderRadius: T.radiusSm, border: `1px solid ${T.border}`, background: T.surfaceAlt, color: T.text, fontSize: 13, fontFamily: T.font, outline: 'none', boxSizing: 'border-box', marginBottom: 8 }} />
-
-            <div style={{ fontSize: 12, color: T.textDim }}>{shipOrders.length} รายการ</div>
           </div>
 
-          {/* ปุ่ม bulk action */}
-          <div style={{ ...glass, padding: 12, marginBottom: 10, display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-            <button onClick={() => setShowFlashSrc(true)} style={{ padding: '8px 14px', borderRadius: 8, border: `1px solid ${T.border}`, background: '#fff', color: T.textDim, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.font, marginRight: 'auto' }}>⚙️ ตั้งค่า Flash</button>
-            {(() => {
-              const pnoOrders = shipOrders.filter(o => o.flash_pno)
-              return pnoOrders.length > 0 && (
-                <button onClick={() => notifyCourier(pnoOrders.map(o => o.flash_pno))} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg, #2980B9, #3498DB)', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: T.font }}>📞 เรียกรับพัสดุ ({pnoOrders.length})</button>
-              )
-            })()}
-            {shipFilter === 'waiting' && waitingCount > 0 && (
-              <button onClick={() => {
-                const ids = shipOrders.filter(o => !o.shipping_status || o.shipping_status === 'waiting').map(o => o.id)
-                if (confirm(`✅ เปลี่ยนสถานะ ${ids.length} รายการ เป็น "ปริ้นแล้ว"?`)) markPrinted(ids)
-              }} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg, #2D8A4E, #27AE60)', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: T.font }}>🖨 ปริ้นทั้งหมด ({waitingCount})</button>
-            )}
-          </div>
-
-          {/* ตาราง */}
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: T.font }}>
+          {/* ═══ Table ═══ */}
+          <div style={{ overflowX: 'auto', background: '#fff', borderRadius: 10, border: `1px solid ${T.border}` }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: T.font, minWidth: 1050 }}>
               <thead>
-                <tr style={{ background: T.surfaceAlt }}>
-                  <th style={{ padding: '8px 6px', textAlign: 'left', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>วันที่</th>
-                  <th style={{ padding: '8px 6px', textAlign: 'left', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>เวลา</th>
-                  <th style={{ padding: '8px 6px', textAlign: 'left', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>ลูกค้า</th>
-                  <th style={{ padding: '8px 6px', textAlign: 'left', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>เบอร์โทรศัพท์</th>
-                  <th style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>ราคา</th>
-                  <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>ประเภท</th>
-                  <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>สถานะ</th>
-                  <th style={{ padding: '8px 6px', textAlign: 'left', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>พนักงาน</th>
-                  <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>จัดการ</th>
-                  <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>⚡ เลขพัสดุ</th>
+                <tr style={{ background: '#F8F9FA', borderBottom: '2px solid #DEE2E6' }}>
+                  <th style={{ padding: '10px 6px', textAlign: 'center', fontWeight: 600, color: '#5D6D7E', width: 30 }}>#</th>
+                  <th style={{ padding: '10px 6px', textAlign: 'left', fontWeight: 600, color: '#5D6D7E' }}>วันที่</th>
+                  <th style={{ padding: '10px 6px', textAlign: 'left', fontWeight: 600, color: '#5D6D7E' }}>เวลา</th>
+                  <th style={{ padding: '10px 6px', textAlign: 'left', fontWeight: 600, color: '#5D6D7E' }}>ลูกค้า</th>
+                  <th style={{ padding: '10px 6px', textAlign: 'left', fontWeight: 600, color: '#5D6D7E' }}>เบอร์โทรศัพท์</th>
+                  <th style={{ padding: '10px 6px', textAlign: 'center', fontWeight: 600, color: '#5D6D7E' }}>สถานะ</th>
+                  <th style={{ padding: '10px 6px', textAlign: 'center', fontWeight: 600, color: '#5D6D7E' }}>การส่งสินค้า</th>
+                  <th style={{ padding: '10px 6px', textAlign: 'left', fontWeight: 600, color: '#5D6D7E' }}>หมายเลขการติดตาม</th>
+                  <th style={{ padding: '10px 6px', textAlign: 'right', fontWeight: 600, color: '#5D6D7E' }}>COD ⚙</th>
+                  <th style={{ padding: '10px 6px', textAlign: 'left', fontWeight: 600, color: '#5D6D7E' }}>ร้านค้า</th>
+                  <th style={{ padding: '10px 6px', textAlign: 'center', fontWeight: 600, color: '#5D6D7E' }}>การปฏิบัติ</th>
                 </tr>
               </thead>
               <tbody>
@@ -1193,46 +1190,46 @@ export default function ManagerApp({ profile, onLogout }) {
                   const searchedShip = shipOrders.filter(o => {
                     if (!searchQuery) return true
                     const q = searchQuery.toLowerCase()
-                    return (o.customer_name||'').toLowerCase().includes(q) || (o.customer_phone||'').includes(q) || (o.employee_name||'').toLowerCase().includes(q) || (o.flash_pno||'').toLowerCase().includes(q)
+                    return (o.customer_name||'').toLowerCase().includes(q) || (o.customer_phone||'').includes(q) || (o.flash_pno||'').toLowerCase().includes(q) || (o.sales_channel||'').toLowerCase().includes(q)
                   })
                   return searchedShip.slice((currentPage-1)*pageSize, currentPage*pageSize).map((o, i) => {
                   const dt = new Date(o.created_at)
+                  const hasPno = !!o.flash_pno
                   const isPrinted = o.shipping_status === 'printed'
+                  const stMap = { 'created': { label: 'รับเข้าระบบ', bg: '#E8DAEF', color: '#6C3483' }, 'manual': { label: 'รับเข้าระบบ', bg: '#E8DAEF', color: '#6C3483' } }
+                  const st = hasPno ? (stMap[o.flash_status] || stMap['manual']) : isPrinted ? { label: 'พร้อมส่ง', bg: '#D5F5E3', color: '#1E8449' } : { label: 'เตรียมส่ง', bg: '#FDEBD0', color: '#CA6F1E' }
+                  const dateStr = dt.toLocaleDateString('th-TH', { timeZone: 'Asia/Bangkok', day: '2-digit', month: 'short', year: 'numeric' })
+                  const timeStr = dt.toLocaleTimeString('th-TH', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' น.'
                   return (
-                    <tr key={o.id} style={{ borderBottom: `1px solid ${T.border}`, borderLeft: isPrinted ? '3px solid #2D8A4E' : '3px solid #F39C12' }}>
-                      <td style={{ padding: '8px 6px', fontSize: 11 }}>{(o.order_date||'').substring(0,10)}</td>
-                      <td style={{ padding: '8px 6px', fontSize: 11, color: T.textDim }}>{dt.toLocaleTimeString('th-TH', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</td>
-                      <td style={{ padding: '8px 6px', fontWeight: 600 }}>{o.customer_name}</td>
-                      <td style={{ padding: '8px 6px', color: T.textDim }}>{o.customer_phone}</td>
-                      <td style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 700, color: T.success }}>฿{fmt(parseFloat(o.sale_price)||0)}</td>
-                      <td style={{ padding: '8px 6px', textAlign: 'center' }}>
-                        <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600, background: o.payment_type === 'transfer' ? 'rgba(45,138,78,0.1)' : 'rgba(184,134,11,0.1)', color: o.payment_type === 'transfer' ? T.success : T.gold }}>{o.payment_type === 'transfer' ? 'โอน' : 'COD'}</span>
+                    <tr key={o.id} style={{ borderBottom: '1px solid #EAECEE', background: i % 2 === 0 ? '#fff' : '#FAFBFC' }}>
+                      <td style={{ padding: '10px 6px', textAlign: 'center' }}>
+                        <button onClick={() => hasPno ? printLabel(o.flash_pno) : null} style={{ background: 'none', border: 'none', cursor: hasPno ? 'pointer' : 'default', fontSize: 14, opacity: hasPno ? 1 : 0.3 }} title={hasPno ? 'ปริ้นใบปะหน้า' : 'ยังไม่มีเลขพัสดุ'}>🖨</button>
                       </td>
-                      <td style={{ padding: '8px 6px', textAlign: 'center' }}>
-                        <span style={{ padding: '3px 10px', borderRadius: 6, fontSize: 10, fontWeight: 700, background: isPrinted ? 'rgba(45,138,78,0.1)' : 'rgba(243,156,18,0.1)', color: isPrinted ? T.success : '#F39C12' }}>{isPrinted ? '🖨 ปริ้นแล้ว' : '🟡 รอส่ง'}</span>
+                      <td style={{ padding: '10px 6px', fontSize: 12, color: '#2C3E50' }}>{dateStr}</td>
+                      <td style={{ padding: '10px 6px', fontSize: 12, color: '#7F8C8D' }}>{timeStr}</td>
+                      <td style={{ padding: '10px 6px', fontWeight: 600, color: '#2C3E50', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.customer_name}</td>
+                      <td style={{ padding: '10px 6px', color: '#2C3E50', fontFamily: 'monospace', fontSize: 12 }}>{o.customer_phone}</td>
+                      <td style={{ padding: '10px 6px', textAlign: 'center' }}>
+                        <span style={{ padding: '4px 12px', borderRadius: 4, fontSize: 11, fontWeight: 600, background: st.bg, color: st.color, whiteSpace: 'nowrap' }}>{st.label}</span>
                       </td>
-                      <td style={{ padding: '8px 6px', fontSize: 11, color: T.textDim }}>{o.employee_name||'—'}</td>
-                      <td style={{ padding: '8px 6px', textAlign: 'center' }}>
-                        {isPrinted ? (
-                          <button onClick={() => markWaiting([o.id])} style={{ padding: '4px 8px', borderRadius: 4, border: '1px solid rgba(243,156,18,0.3)', background: 'rgba(243,156,18,0.05)', color: '#F39C12', fontSize: 10, cursor: 'pointer', fontFamily: T.font }}>↩ รอส่ง</button>
+                      <td style={{ padding: '10px 6px', textAlign: 'center', color: '#7F8C8D', fontSize: 12 }}>{hasPno ? 'flash' : '—'}</td>
+                      <td style={{ padding: '10px 6px' }}>
+                        {hasPno ? (
+                          <button onClick={() => trackFlash(o.flash_pno)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12, fontWeight: 600, color: '#2980B9', padding: 0 }} title="ติดตามสถานะ">
+                            {o.flash_pno} <span style={{ fontSize: 10 }}>🔗</span>
+                          </button>
                         ) : (
-                          <button onClick={() => markPrinted([o.id])} style={{ padding: '4px 8px', borderRadius: 4, border: '1px solid rgba(45,138,78,0.3)', background: 'rgba(45,138,78,0.05)', color: T.success, fontSize: 10, cursor: 'pointer', fontFamily: T.font }}>🖨 ปริ้นแล้ว</button>
+                          <span style={{ color: '#BDC3C7', fontSize: 11 }}>—</span>
                         )}
                       </td>
-                      <td style={{ padding: '8px 6px', textAlign: 'center' }}>
-                        {o.flash_pno ? (
-                          <div style={{ display: 'flex', gap: 3, alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
-                            <button onClick={() => openPnoModal(o)} style={{ padding: '4px 6px', borderRadius: 4, border: '1px solid rgba(45,138,78,0.2)', background: 'rgba(45,138,78,0.05)', color: T.success, fontSize: 9, cursor: 'pointer', fontFamily: 'monospace', fontWeight: 700, letterSpacing: 0.3, maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={'✏️ แก้ไข: ' + o.flash_pno}>{o.flash_pno.length > 14 ? o.flash_pno.substring(0,14)+'…' : o.flash_pno}</button>
-                            <button onClick={() => trackFlash(o.flash_pno)} style={{ padding: '3px 5px', borderRadius: 4, border: '1px solid rgba(41,128,185,0.2)', background: 'rgba(41,128,185,0.05)', color: '#2980B9', fontSize: 9, cursor: 'pointer', fontFamily: T.font, lineHeight: 1 }} title="📍 ติดตามสถานะ">📍</button>
-                            <button onClick={() => printLabel(o.flash_pno)} style={{ padding: '3px 5px', borderRadius: 4, border: '1px solid rgba(255,107,0,0.2)', background: 'rgba(255,107,0,0.05)', color: '#FF6B00', fontSize: 9, cursor: 'pointer', fontFamily: T.font, lineHeight: 1 }} title="🖨 ปริ้นใบปะหน้า">🖨</button>
-                            <button onClick={() => deletePno(o.id)} style={{ padding: '3px 5px', borderRadius: 4, border: '1px solid rgba(214,48,49,0.15)', background: '#fff', color: T.danger, fontSize: 9, cursor: 'pointer', fontFamily: T.font, lineHeight: 1 }} title="ลบ">✕</button>
-                          </div>
-                        ) : (
-                          <div style={{ display: 'flex', gap: 3, justifyContent: 'center' }}>
-                            <button onClick={() => openPnoModal(o)} style={{ padding: '4px 8px', borderRadius: 4, border: '1px solid rgba(184,134,11,0.3)', background: 'rgba(184,134,11,0.05)', color: T.gold, fontSize: 10, cursor: 'pointer', fontFamily: T.font, fontWeight: 600 }}>➕ สร้าง</button>
-                            <button onClick={() => sendToFlash(o)} style={{ padding: '4px 6px', borderRadius: 4, border: '1px solid rgba(255,107,0,0.3)', background: 'rgba(255,107,0,0.05)', color: '#FF6B00', fontSize: 10, cursor: 'pointer', fontFamily: T.font, fontWeight: 600 }} title="ส่งผ่าน Flash API">⚡</button>
-                          </div>
-                        )}
+                      <td style={{ padding: '10px 6px', textAlign: 'right', fontWeight: 700, color: '#2C3E50' }}>{o.payment_type === 'cod' ? fmt(parseFloat(o.cod_amount||o.sale_price)||0) : ''}</td>
+                      <td style={{ padding: '10px 6px', fontSize: 11, color: '#7F8C8D', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.sales_channel||'—'}</td>
+                      <td style={{ padding: '10px 6px', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
+                          <button onClick={() => openPnoModal(o)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, padding: 2 }} title="แก้ไขเลขพัสดุ">✏️</button>
+                          {hasPno && <button onClick={() => trackFlash(o.flash_pno)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, padding: 2 }} title="ติดตามสถานะ">👁</button>}
+                          {hasPno && <button onClick={() => deletePno(o.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, padding: 2, color: '#E74C3C' }} title="ลบเลขพัสดุ">⊘</button>}
+                        </div>
                       </td>
                     </tr>
                   )
@@ -1241,7 +1238,9 @@ export default function ManagerApp({ profile, onLogout }) {
               </tbody>
             </table>
             {shipOrders.length === 0 && <Empty text="ไม่มีออเดอร์" />}
-            <Pagination total={shipOrders.length} page={currentPage} pageSize={pageSize} onPageChange={setCurrentPage} onPageSizeChange={setPageSize} />
+            <div style={{ padding: '8px 12px', borderTop: '1px solid #DEE2E6', background: '#F8F9FA' }}>
+              <Pagination total={shipOrders.length} page={currentPage} pageSize={pageSize} onPageChange={setCurrentPage} onPageSizeChange={setPageSize} />
+            </div>
           </div>
         </>
         })()}
