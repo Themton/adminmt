@@ -113,10 +113,12 @@ async function createOrder(data) {
   params.returnPostalCode = clean(data.srcPostalCode || '');
   params.returnDetailAddress = clean(data.srcDetailAddress || '');
 
-  // COD
+  // COD — Flash อาจต้องการหน่วยสตางค์ (x100)
   if (data.codEnabled && data.codAmount > 0) {
     params.codEnabled = '1';
-    params.codAmount = String(data.codAmount);
+    // ถ้า codAmount < 1000 แปลว่าหน่วยบาท → คูณ 100 เป็นสตางค์
+    const amt = Number(data.codAmount);
+    params.codAmount = String(amt < 1000 ? amt * 100 : amt);
   }
 
   // หมายเหตุ
