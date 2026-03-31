@@ -1177,161 +1177,160 @@ export default function ManagerApp({ profile, onLogout }) {
           }
 
           return <>
-          {/* ═══ Status Filter Bar ═══ */}
-          <div style={{ overflowX: 'auto', marginBottom: 10 }}>
-            <div style={{ display: 'flex', gap: 0, minWidth: 900, background: '#fff', borderRadius: 10, border: `1px solid ${T.border}`, overflow: 'hidden' }}>
+          {/* ═══ PROSHIP-STYLE SHIPPING UI ═══ */}
+          <div style={{ fontFamily: T.font }}>
+            {/* Header */}
+            <div style={{ fontSize: 20, fontWeight: 700, color: '#2C3E50', marginBottom: 16 }}>ทั้งหมด การจัดส่ง</div>
+
+            {/* Top Controls */}
+            <div style={{ display: 'flex', gap: 10, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <input type="date" value={dateFilter} onChange={e => { setDateFilter(e.target.value); if (!dateFilterEnd || e.target.value > dateFilterEnd) setDateFilterEnd(e.target.value); setQuickFilter('') }}
+                  style={{ padding: '8px 10px', borderRadius: 6, background: '#fff', border: '1px solid #D5D8DC', color: '#2C3E50', fontSize: 12, fontFamily: T.font, outline: 'none' }} />
+                <span style={{ color: '#ABB2B9' }}>—</span>
+                <input type="date" value={dateFilterEnd} onChange={e => { setDateFilterEnd(e.target.value); setQuickFilter('') }}
+                  style={{ padding: '8px 10px', borderRadius: 6, background: '#fff', border: '1px solid #D5D8DC', color: '#2C3E50', fontSize: 12, fontFamily: T.font, outline: 'none' }} />
+                {[{ id: 'today', label: 'วันนี้' }, { id: '7days', label: '7 วัน' }, { id: 'month', label: 'เดือนนี้' }].map(b => (
+                  <button key={b.id} onClick={() => {
+                    if (b.id === 'today') { setDateFilter(todayStr); setDateFilterEnd(todayStr) }
+                    else if (b.id === '7days') { const d = new Date(); d.setDate(d.getDate()-6); setDateFilter(d.toISOString().split('T')[0]); setDateFilterEnd(todayStr) }
+                    else { const d = new Date(); setDateFilter(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-01'); setDateFilterEnd(todayStr) }
+                    setQuickFilter(b.id)
+                  }} style={{ padding: '7px 16px', borderRadius: 6, border: quickFilter === b.id ? '1px solid #3498DB' : '1px solid #D5D8DC', background: quickFilter === b.id ? '#3498DB' : '#fff', color: quickFilter === b.id ? '#fff' : '#5D6D7E', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>{b.label}</button>
+                ))}
+              </div>
+              <div style={{ flex: 1 }} />
+              <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="ค้นหาชื่อ เบอร์ เลขพัสดุ..."
+                style={{ padding: '8px 14px', borderRadius: 6, border: '1px solid #D5D8DC', background: '#fff', color: '#2C3E50', fontSize: 12, fontFamily: T.font, outline: 'none', width: 220, boxSizing: 'border-box' }} />
+              <button onClick={() => setShowFlashSrc(true)} style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid #D5D8DC', background: '#fff', color: '#5D6D7E', fontSize: 13, cursor: 'pointer', fontFamily: T.font }}>⚙️</button>
+              <button onClick={() => exportShip('excel')} style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid #D5D8DC', background: '#fff', color: '#5D6D7E', fontSize: 13, cursor: 'pointer', fontFamily: T.font }}>📊</button>
+              {(() => { const p = shipOrders.filter(o => o.flash_pno); return p.length > 0 && <button onClick={() => notifyCourier(p.map(o => o.flash_pno))} style={{ padding: '8px 16px', borderRadius: 6, border: 'none', background: '#27AE60', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: T.font, whiteSpace: 'nowrap' }}>📞 เรียกรับพัสดุ</button> })()}
+            </div>
+
+            {/* Status Filter Bar — Proship Style */}
+            <div style={{ display: 'flex', gap: 0, borderBottom: '2px solid #EAECEE', marginBottom: 16, overflowX: 'auto' }}>
               {(() => {
                 const preparing = allShipOrders.filter(o => (!o.shipping_status || o.shipping_status === 'waiting') && !o.flash_pno)
-                const readyShip = allShipOrders.filter(o => o.shipping_status === 'printed' && !o.flash_pno)
-                const inSystem = allShipOrders.filter(o => o.flash_pno && o.flash_status === 'created')
-                const manual = allShipOrders.filter(o => o.flash_pno && o.flash_status === 'manual')
+                const readyShip = allShipOrders.filter(o => (o.shipping_status === 'printed' || o.flash_pno) && o.flash_status !== 'created')
+                const inSystem = allShipOrders.filter(o => o.flash_pno && (o.flash_status === 'created' || o.flash_status === 'manual'))
                 const allPrinted = allShipOrders.filter(o => o.shipping_status === 'printed')
                 const filters = [
-                  { id: 'all', label: 'ทั้งหมด', count: allShipOrders.length, color: '#2980B9', bg: '#EBF5FB' },
-                  { id: 'preparing', label: 'เตรียมส่ง', count: preparing.length, color: '#E67E22', bg: '#FEF5E7' },
-                  { id: 'ready', label: 'พร้อมส่ง', count: readyShip.length, color: '#27AE60', bg: '#EAFAF1' },
-                  { id: 'insystem', label: 'รับเข้าระบบ', count: inSystem.length + manual.length, color: '#8E44AD', bg: '#F4ECF7' },
-                  { id: 'printed', label: 'ปริ้นแล้ว', count: allPrinted.length, color: '#16A085', bg: '#E8F8F5' },
+                  { id: 'all', icon: '📦', label: 'ทั้งหมด', count: allShipOrders.length, color: '#2980B9' },
+                  { id: 'preparing', icon: '🚚', label: 'เตรียมส่ง', count: preparing.length, color: '#E67E22' },
+                  { id: 'ready', icon: '✅', label: 'พร้อมส่ง', count: readyShip.length, color: '#27AE60' },
+                  { id: 'insystem', icon: '📥', label: 'รับเข้าระบบ', count: inSystem.length, color: '#2980B9' },
+                  { id: 'printed', icon: '🖨', label: 'ปริ้นแล้ว', count: allPrinted.length, color: '#16A085' },
                 ]
                 return filters.map(f => (
                   <button key={f.id} onClick={() => setShipFilter(f.id)} style={{
-                    flex: 1, padding: '12px 8px', border: 'none', cursor: 'pointer', fontFamily: T.font, fontSize: 11, fontWeight: 600,
-                    background: shipFilter === f.id ? f.bg : 'transparent',
-                    color: shipFilter === f.id ? f.color : T.textDim,
+                    padding: '10px 18px', border: 'none', cursor: 'pointer', fontFamily: T.font, fontSize: 12, fontWeight: 500,
+                    background: 'transparent', color: shipFilter === f.id ? f.color : '#85929E',
                     borderBottom: shipFilter === f.id ? `3px solid ${f.color}` : '3px solid transparent',
-                    transition: 'all 0.15s'
+                    marginBottom: -2, whiteSpace: 'nowrap', transition: 'all 0.15s'
                   }}>
-                    <div style={{ fontSize: shipFilter === f.id ? 18 : 15, fontWeight: 800, color: shipFilter === f.id ? f.color : T.textDim }}>{f.count}</div>
-                    {f.label}
+                    <span style={{ marginRight: 4 }}>{f.icon}</span>
+                    {f.label} <strong style={{ marginLeft: 4, color: shipFilter === f.id ? f.color : '#ABB2B9' }}>{f.count}</strong>
                   </button>
                 ))
               })()}
             </div>
-          </div>
 
-          {/* ═══ Controls ═══ */}
-          <div style={{ ...glass, padding: 12, marginBottom: 10 }}>
-            <div style={{ display: 'flex', gap: 6, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              <input type="date" value={dateFilter} onChange={e => { setDateFilter(e.target.value); if (!dateFilterEnd || e.target.value > dateFilterEnd) setDateFilterEnd(e.target.value); setQuickFilter('') }}
-                style={{ padding: '7px 10px', borderRadius: 6, background: '#fff', border: `1px solid ${T.border}`, color: T.text, fontSize: 12, fontFamily: T.font, outline: 'none' }} />
-              <span style={{ fontSize: 12, color: T.textDim }}>—</span>
-              <input type="date" value={dateFilterEnd} onChange={e => { setDateFilterEnd(e.target.value); setQuickFilter('') }}
-                style={{ padding: '7px 10px', borderRadius: 6, background: '#fff', border: `1px solid ${T.border}`, color: T.text, fontSize: 12, fontFamily: T.font, outline: 'none' }} />
-              {[{ id: 'today', label: 'วันนี้' }, { id: '7days', label: '7 วัน' }, { id: 'month', label: 'เดือนนี้' }].map(b => (
-                <button key={b.id} onClick={() => {
-                  if (b.id === 'today') { setDateFilter(todayStr); setDateFilterEnd(todayStr) }
-                  else if (b.id === '7days') { const d = new Date(); d.setDate(d.getDate()-6); setDateFilter(d.toISOString().split('T')[0]); setDateFilterEnd(todayStr) }
-                  else { const d = new Date(); setDateFilter(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-01'); setDateFilterEnd(todayStr) }
-                  setQuickFilter(b.id)
-                }} style={{ padding: '6px 12px', borderRadius: 6, border: quickFilter === b.id ? 'none' : `1px solid ${T.border}`, background: quickFilter === b.id ? '#2980B9' : '#fff', color: quickFilter === b.id ? '#fff' : T.textDim, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>{b.label}</button>
-              ))}
-              <div style={{ flex: 1 }} />
-              <button onClick={() => setShowFlashSrc(true)} style={{ padding: '6px 12px', borderRadius: 6, border: `1px solid ${T.border}`, background: '#fff', color: T.textDim, fontSize: 11, cursor: 'pointer', fontFamily: T.font }}>⚙️ ตั้งค่า Flash</button>
-              <button onClick={() => exportShip('excel')} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid rgba(45,138,78,0.2)', background: '#fff', color: T.success, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>📊 Export</button>
-            </div>
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="🔍 ค้นหาชื่อ เบอร์ เลขพัสดุ..."
-                style={{ flex: 1, padding: '8px 12px', borderRadius: 6, border: `1px solid ${T.border}`, background: '#fff', color: T.text, fontSize: 12, fontFamily: T.font, outline: 'none', boxSizing: 'border-box' }} />
-              {(() => { const p = shipOrders.filter(o => o.flash_pno); return p.length > 0 && <button onClick={() => notifyCourier(p.map(o => o.flash_pno))} style={{ padding: '8px 14px', borderRadius: 6, border: 'none', background: '#2980B9', color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: T.font, whiteSpace: 'nowrap' }}>📞 เรียกรับพัสดุ ({p.length})</button> })()}
-            </div>
-          </div>
-
-          {/* ═══ Table ═══ */}
-          <div style={{ overflowX: 'auto', background: '#fff', borderRadius: 10, border: `1px solid ${T.border}` }}>
-            {/* Bulk action bar */}
+            {/* Bulk Action Bar */}
             {shipSelected.size > 0 && (
-              <div style={{ padding: '10px 14px', background: '#EBF5FB', borderBottom: '1px solid #AED6F1', display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: '#2980B9' }}>เลือก {shipSelected.size} รายการ</span>
+              <div style={{ padding: '10px 16px', background: '#EBF5FB', border: '1px solid #AED6F1', borderRadius: 8, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#2980B9' }}>✓ เลือก {shipSelected.size} รายการ</span>
                 <div style={{ flex: 1 }} />
-                <button onClick={() => {
-                  const sel = orders.filter(o => shipSelected.has(o.id))
-                  bulkCreateFlash(sel)
-                }} disabled={bulkCreating} style={{ padding: '8px 18px', borderRadius: 6, border: 'none', background: bulkCreating ? '#BDC3C7' : '#E67E22', color: '#fff', fontSize: 12, fontWeight: 700, cursor: bulkCreating ? 'wait' : 'pointer', fontFamily: T.font }}>
-                  {bulkCreating ? `⏳ กำลังสร้าง ${bulkProgress.done}/${bulkProgress.total}...` : `⚡ สร้างเลขพัสดุ Flash (${shipSelected.size})`}
+                <button onClick={() => { const sel = orders.filter(o => shipSelected.has(o.id)); bulkCreateFlash(sel) }} disabled={bulkCreating} style={{ padding: '8px 20px', borderRadius: 6, border: 'none', background: bulkCreating ? '#BDC3C7' : '#E67E22', color: '#fff', fontSize: 12, fontWeight: 700, cursor: bulkCreating ? 'wait' : 'pointer', fontFamily: T.font }}>
+                  {bulkCreating ? `⏳ ${bulkProgress.done}/${bulkProgress.total}...` : `⚡ สร้างเลขพัสดุ Flash (${shipSelected.size})`}
                 </button>
-                <button onClick={() => setShipSelected(new Set())} style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid #AED6F1', background: '#fff', color: '#5D6D7E', fontSize: 12, cursor: 'pointer', fontFamily: T.font }}>✕ ยกเลิก</button>
+                <button onClick={() => setShipSelected(new Set())} style={{ padding: '8px 14px', borderRadius: 6, border: '1px solid #D5D8DC', background: '#fff', color: '#5D6D7E', fontSize: 12, cursor: 'pointer', fontFamily: T.font }}>✕ ยกเลิก</button>
               </div>
             )}
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: T.font, minWidth: 1050 }}>
-              <thead>
-                <tr style={{ background: '#F8F9FA', borderBottom: '2px solid #DEE2E6' }}>
-                  <th style={{ padding: '10px 6px', textAlign: 'center', width: 32 }}>
-                    <input type="checkbox" onChange={() => {
-                      const ids = shipOrders.map(o => o.id)
-                      toggleShipSelectAll(ids)
-                    }} checked={shipOrders.length > 0 && shipOrders.every(o => shipSelected.has(o.id))} style={{ width: 16, height: 16, cursor: 'pointer', accentColor: '#2980B9' }} />
-                  </th>
-                  <th style={{ padding: '10px 6px', textAlign: 'center', fontWeight: 600, color: '#5D6D7E', width: 30 }}>#</th>
-                  <th style={{ padding: '10px 6px', textAlign: 'left', fontWeight: 600, color: '#5D6D7E' }}>วันที่</th>
-                  <th style={{ padding: '10px 6px', textAlign: 'left', fontWeight: 600, color: '#5D6D7E' }}>เวลา</th>
-                  <th style={{ padding: '10px 6px', textAlign: 'left', fontWeight: 600, color: '#5D6D7E' }}>ลูกค้า</th>
-                  <th style={{ padding: '10px 6px', textAlign: 'left', fontWeight: 600, color: '#5D6D7E' }}>เบอร์โทรศัพท์</th>
-                  <th style={{ padding: '10px 6px', textAlign: 'center', fontWeight: 600, color: '#5D6D7E' }}>สถานะ</th>
-                  <th style={{ padding: '10px 6px', textAlign: 'center', fontWeight: 600, color: '#5D6D7E' }}>การส่งสินค้า</th>
-                  <th style={{ padding: '10px 6px', textAlign: 'left', fontWeight: 600, color: '#5D6D7E' }}>หมายเลขการติดตาม</th>
-                  <th style={{ padding: '10px 6px', textAlign: 'right', fontWeight: 600, color: '#5D6D7E' }}>COD ⚙</th>
-                  <th style={{ padding: '10px 6px', textAlign: 'left', fontWeight: 600, color: '#5D6D7E' }}>ร้านค้า</th>
-                  <th style={{ padding: '10px 6px', textAlign: 'center', fontWeight: 600, color: '#5D6D7E' }}>การปฏิบัติ</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(() => {
-                  const searchedShip = shipOrders.filter(o => {
-                    if (!searchQuery) return true
-                    const q = searchQuery.toLowerCase()
-                    return (o.customer_name||'').toLowerCase().includes(q) || (o.customer_phone||'').includes(q) || (o.flash_pno||'').toLowerCase().includes(q) || (o.sales_channel||'').toLowerCase().includes(q)
-                  })
-                  return searchedShip.slice((currentPage-1)*pageSize, currentPage*pageSize).map((o, i) => {
-                  const dt = new Date(o.created_at)
-                  const hasPno = !!o.flash_pno
-                  const isPrinted = o.shipping_status === 'printed'
-                  const stMap = { 'created': { label: 'รับเข้าระบบ', bg: '#E8DAEF', color: '#6C3483' }, 'manual': { label: 'รับเข้าระบบ', bg: '#E8DAEF', color: '#6C3483' } }
-                  const st = hasPno ? (stMap[o.flash_status] || stMap['manual']) : isPrinted ? { label: 'พร้อมส่ง', bg: '#D5F5E3', color: '#1E8449' } : { label: 'เตรียมส่ง', bg: '#FDEBD0', color: '#CA6F1E' }
-                  const dateStr = dt.toLocaleDateString('th-TH', { timeZone: 'Asia/Bangkok', day: '2-digit', month: 'short', year: 'numeric' })
-                  const timeStr = dt.toLocaleTimeString('th-TH', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' น.'
-                  return (
-                    <tr key={o.id} style={{ borderBottom: '1px solid #EAECEE', background: shipSelected.has(o.id) ? '#EBF5FB' : (i % 2 === 0 ? '#fff' : '#FAFBFC') }}>
-                      <td style={{ padding: '10px 6px', textAlign: 'center' }}>
-                        <input type="checkbox" checked={shipSelected.has(o.id)} onChange={() => toggleShipSelect(o.id)} style={{ width: 16, height: 16, cursor: 'pointer', accentColor: '#2980B9' }} />
-                      </td>
-                      <td style={{ padding: '10px 6px', textAlign: 'center' }}>
-                        <button onClick={() => hasPno ? printLabel(o.flash_pno) : null} style={{ background: 'none', border: 'none', cursor: hasPno ? 'pointer' : 'default', fontSize: 14, opacity: hasPno ? 1 : 0.3 }} title={hasPno ? 'ปริ้นใบปะหน้า' : 'ยังไม่มีเลขพัสดุ'}>🖨</button>
-                      </td>
-                      <td style={{ padding: '10px 6px', fontSize: 12, color: '#2C3E50' }}>{dateStr}</td>
-                      <td style={{ padding: '10px 6px', fontSize: 12, color: '#7F8C8D' }}>{timeStr}</td>
-                      <td style={{ padding: '10px 6px', fontWeight: 600, color: '#2C3E50', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.customer_name}</td>
-                      <td style={{ padding: '10px 6px', color: '#2C3E50', fontFamily: 'monospace', fontSize: 12 }}>{o.customer_phone}</td>
-                      <td style={{ padding: '10px 6px', textAlign: 'center' }}>
-                        <span style={{ padding: '4px 12px', borderRadius: 4, fontSize: 11, fontWeight: 600, background: st.bg, color: st.color, whiteSpace: 'nowrap' }}>{st.label}</span>
-                      </td>
-                      <td style={{ padding: '10px 6px', textAlign: 'center', color: '#7F8C8D', fontSize: 12 }}>{hasPno ? 'flash' : '—'}</td>
-                      <td style={{ padding: '10px 6px' }}>
-                        {hasPno ? (
-                          <button onClick={() => trackFlash(o.flash_pno)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12, fontWeight: 600, color: '#2980B9', padding: 0 }} title="ติดตามสถานะ">
-                            {o.flash_pno} <span style={{ fontSize: 10 }}>🔗</span>
-                          </button>
-                        ) : (
-                          <span style={{ color: '#BDC3C7', fontSize: 11 }}>—</span>
-                        )}
-                      </td>
-                      <td style={{ padding: '10px 6px', textAlign: 'right', fontWeight: 700, color: '#2C3E50' }}>{o.payment_type === 'cod' ? fmt(parseFloat(o.cod_amount||o.sale_price)||0) : ''}</td>
-                      <td style={{ padding: '10px 6px', fontSize: 11, color: '#7F8C8D', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.sales_channel||'—'}</td>
-                      <td style={{ padding: '10px 6px', textAlign: 'center' }}>
-                        <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
-                          <button onClick={() => openPnoModal(o)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, padding: 2 }} title="แก้ไขเลขพัสดุ">✏️</button>
-                          {hasPno && <button onClick={() => trackFlash(o.flash_pno)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, padding: 2 }} title="ติดตามสถานะ">👁</button>}
-                          {hasPno && <button onClick={() => deletePno(o.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, padding: 2, color: '#E74C3C' }} title="ลบเลขพัสดุ">⊘</button>}
-                        </div>
-                      </td>
+
+            {/* Table */}
+            <div style={{ background: '#fff', borderRadius: 8, border: '1px solid #DEE2E6', overflow: 'hidden' }}>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, fontFamily: T.font, minWidth: 1100 }}>
+                  <thead>
+                    <tr style={{ background: '#F4F6F7', borderBottom: '1px solid #DEE2E6' }}>
+                      <th style={{ padding: '12px 6px', textAlign: 'center', width: 36 }}>
+                        <input type="checkbox" onChange={() => toggleShipSelectAll(shipOrders.map(o => o.id))} checked={shipOrders.length > 0 && shipOrders.every(o => shipSelected.has(o.id))} style={{ width: 15, height: 15, cursor: 'pointer', accentColor: '#3498DB' }} />
+                      </th>
+                      <th style={{ padding: '12px 6px', textAlign: 'center', color: '#5D6D7E', fontWeight: 600, fontSize: 12, width: 36 }}>#</th>
+                      <th style={{ padding: '12px 8px', textAlign: 'left', color: '#5D6D7E', fontWeight: 600, fontSize: 12 }}>วันที่</th>
+                      <th style={{ padding: '12px 8px', textAlign: 'left', color: '#5D6D7E', fontWeight: 600, fontSize: 12 }}>เวลา</th>
+                      <th style={{ padding: '12px 8px', textAlign: 'left', color: '#5D6D7E', fontWeight: 600, fontSize: 12 }}>ลูกค้า</th>
+                      <th style={{ padding: '12px 8px', textAlign: 'left', color: '#5D6D7E', fontWeight: 600, fontSize: 12 }}>เบอร์โทรศัพท์</th>
+                      <th style={{ padding: '12px 8px', textAlign: 'center', color: '#5D6D7E', fontWeight: 600, fontSize: 12 }}>สถานะ</th>
+                      <th style={{ padding: '12px 8px', textAlign: 'center', color: '#5D6D7E', fontWeight: 600, fontSize: 12 }}>การส่งสินค้า</th>
+                      <th style={{ padding: '12px 8px', textAlign: 'left', color: '#5D6D7E', fontWeight: 600, fontSize: 12 }}>หมายเลขการติดตาม</th>
+                      <th style={{ padding: '12px 8px', textAlign: 'right', color: '#5D6D7E', fontWeight: 600, fontSize: 12 }}>COD ⚙</th>
+                      <th style={{ padding: '12px 8px', textAlign: 'left', color: '#5D6D7E', fontWeight: 600, fontSize: 12 }}>ร้านค้า</th>
+                      <th style={{ padding: '12px 8px', textAlign: 'center', color: '#5D6D7E', fontWeight: 600, fontSize: 12 }}>การปฏิบัติ</th>
                     </tr>
-                  )
-                })
-                })()}
-              </tbody>
-            </table>
-            {shipOrders.length === 0 && <Empty text="ไม่มีออเดอร์" />}
-            <div style={{ padding: '8px 12px', borderTop: '1px solid #DEE2E6', background: '#F8F9FA' }}>
-              <Pagination total={shipOrders.length} page={currentPage} pageSize={pageSize} onPageChange={setCurrentPage} onPageSizeChange={setPageSize} />
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      const searched = shipOrders.filter(o => {
+                        if (!searchQuery) return true
+                        const q = searchQuery.toLowerCase()
+                        return (o.customer_name||'').toLowerCase().includes(q) || (o.customer_phone||'').includes(q) || (o.flash_pno||'').toLowerCase().includes(q) || (o.sales_channel||'').toLowerCase().includes(q)
+                      })
+                      return searched.slice((currentPage-1)*pageSize, currentPage*pageSize).map((o, i) => {
+                        const dt = new Date(o.created_at)
+                        const hasPno = !!o.flash_pno
+                        const isPrinted = o.shipping_status === 'printed'
+                        const st = hasPno
+                          ? { label: 'รับเข้าระบบ', bg: '#D4E6F1', color: '#2471A3' }
+                          : isPrinted
+                            ? { label: 'พร้อมส่ง', bg: '#D5F5E3', color: '#1E8449' }
+                            : { label: 'เตรียมส่ง', bg: '#FDEBD0', color: '#CA6F1E' }
+                        const dateStr = dt.toLocaleDateString('th-TH', { timeZone: 'Asia/Bangkok', day: '2-digit', month: 'short', year: 'numeric' })
+                        const timeStr = dt.toLocaleTimeString('th-TH', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' น.'
+                        return (
+                          <tr key={o.id} style={{ borderBottom: '1px solid #EAECEE', background: shipSelected.has(o.id) ? '#EBF5FB' : '#fff' }}>
+                            <td style={{ padding: '10px 6px', textAlign: 'center' }}>
+                              <input type="checkbox" checked={shipSelected.has(o.id)} onChange={() => toggleShipSelect(o.id)} style={{ width: 15, height: 15, cursor: 'pointer', accentColor: '#3498DB' }} />
+                            </td>
+                            <td style={{ padding: '10px 6px', textAlign: 'center' }}>
+                              <button onClick={() => hasPno ? printLabel(o.flash_pno) : null} style={{ background: 'none', border: 'none', cursor: hasPno ? 'pointer' : 'default', fontSize: 15, opacity: hasPno ? 0.7 : 0.2, padding: 0 }} title={hasPno ? 'ปริ้นใบปะหน้า' : ''}>🖨</button>
+                            </td>
+                            <td style={{ padding: '10px 8px', fontSize: 13, color: '#2C3E50' }}>{dateStr}</td>
+                            <td style={{ padding: '10px 8px', fontSize: 13, color: '#7F8C8D' }}>{timeStr}</td>
+                            <td style={{ padding: '10px 8px', fontWeight: 600, color: '#2C3E50', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.customer_name}</td>
+                            <td style={{ padding: '10px 8px', color: '#2C3E50', fontSize: 13 }}>{o.customer_phone}</td>
+                            <td style={{ padding: '10px 8px', textAlign: 'center' }}>
+                              <span style={{ padding: '4px 14px', borderRadius: 4, fontSize: 12, fontWeight: 600, background: st.bg, color: st.color, whiteSpace: 'nowrap' }}>{st.label}</span>
+                            </td>
+                            <td style={{ padding: '10px 8px', textAlign: 'center', color: '#7F8C8D', fontSize: 13 }}>{hasPno ? 'flash' : '—'}</td>
+                            <td style={{ padding: '10px 8px' }}>
+                              {hasPno ? (
+                                <button onClick={() => trackFlash(o.flash_pno)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'monospace', fontSize: 13, fontWeight: 600, color: '#2980B9', padding: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                  {o.flash_pno} <span style={{ fontSize: 11, opacity: 0.6 }}>🔗</span>
+                                </button>
+                              ) : <span style={{ color: '#D5D8DC' }}>—</span>}
+                            </td>
+                            <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: 600, color: '#2C3E50', fontSize: 13 }}>{o.payment_type === 'cod' ? fmt(parseFloat(o.cod_amount||o.sale_price)||0) : ''}</td>
+                            <td style={{ padding: '10px 8px', fontSize: 12, color: '#7F8C8D', maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.sales_channel||'—'}</td>
+                            <td style={{ padding: '10px 8px', textAlign: 'center' }}>
+                              <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+                                <button onClick={() => openPnoModal(o)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 15, padding: 0, opacity: 0.6 }} title="แก้ไข">✏️</button>
+                                {hasPno && <button onClick={() => trackFlash(o.flash_pno)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 15, padding: 0, opacity: 0.6 }} title="ดูสถานะ">👁</button>}
+                                {hasPno && <button onClick={() => deletePno(o.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 15, padding: 0, opacity: 0.5 }} title="ลบ">⊘</button>}
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+              {shipOrders.length === 0 && <Empty text="ไม่มีออเดอร์" />}
+              <div style={{ padding: '10px 16px', borderTop: '1px solid #EAECEE', background: '#F8F9FA', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 12, color: '#85929E' }}>{shipOrders.length} รายการ</span>
+                <Pagination total={shipOrders.length} page={currentPage} pageSize={pageSize} onPageChange={setCurrentPage} onPageSizeChange={setPageSize} />
+              </div>
             </div>
           </div>
         </>
