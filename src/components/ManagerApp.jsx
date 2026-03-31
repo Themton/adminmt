@@ -122,8 +122,14 @@ export default function ManagerApp({ profile, onLogout }) {
   const trackFlash = async (pno) => {
     flash('⏳ กำลังเช็คสถานะ...')
     const result = await trackFlashOrder(pno)
-    if (result.code === 1) {
-      setFlashModal({ pno, tracking: result.data })
+    if (result.code === 1 && result.data) {
+      const d = result.data
+      setFlashModal({
+        pno: d.pno || pno,
+        trackState: d.state,
+        trackStateText: d.stateText || '',
+        tracking: Array.isArray(d.routes) ? d.routes : (Array.isArray(d) ? d : [])
+      })
       flash('✅ โหลดสถานะสำเร็จ')
     } else {
       flash('❌ ' + (result.message || 'ไม่พบข้อมูล'))
@@ -334,13 +340,37 @@ export default function ManagerApp({ profile, onLogout }) {
             <div style={{ fontSize: 13, color: T.textDim }}>{flashModal.error}</div>
           </div>}
           {flashModal.tracking && <div>
-            <div style={{ fontWeight: 700, marginBottom: 8 }}>📍 สถานะ: {flashModal.pno}</div>
-            {Array.isArray(flashModal.tracking) ? flashModal.tracking.map((r, i) => (
-              <div key={i} style={{ padding: '8px 10px', borderLeft: `3px solid ${T.gold}`, marginBottom: 6, background: T.surfaceAlt, borderRadius: '0 8px 8px 0', fontSize: 12 }}>
-                <div style={{ fontWeight: 600 }}>{r.message}</div>
-                <div style={{ fontSize: 10, color: T.textMuted }}>{r.routedAt ? new Date(r.routedAt * 1000).toLocaleString('th-TH') : ''}</div>
+            {/* Header: PNO + State Badge */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+              <div>
+                <div style={{ fontSize: 11, color: T.textDim, marginBottom: 2 }}>หมายเลขพัสดุ</div>
+                <div style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: 16, letterSpacing: 1 }}>{flashModal.pno}</div>
               </div>
-            )) : <div style={{ fontSize: 13, color: T.textDim }}>ไม่พบข้อมูลการติดตาม</div>}
+              {flashModal.trackState && <div style={{
+                padding: '6px 14px', borderRadius: 20, fontWeight: 700, fontSize: 11,
+                background: flashModal.trackState >= 5 ? 'linear-gradient(135deg, #2D8A4E, #27AE60)' : flashModal.trackState >= 3 ? 'linear-gradient(135deg, #2980B9, #3498DB)' : 'linear-gradient(135deg, #F39C12, #F1C40F)',
+                color: '#fff'
+              }}>{flashModal.trackStateText || ['','สร้างออเดอร์','รับพัสดุแล้ว','ศูนย์คัดแยก','กำลังจัดส่ง','เซ็นรับแล้ว'][flashModal.trackState] || `สถานะ ${flashModal.trackState}`}</div>}
+            </div>
+            {/* Progress Bar */}
+            {flashModal.trackState && <div style={{ display: 'flex', gap: 3, marginBottom: 16 }}>
+              {[1,2,3,4,5].map(s => (
+                <div key={s} style={{ flex: 1, height: 4, borderRadius: 2, background: s <= flashModal.trackState ? (flashModal.trackState >= 5 ? '#2D8A4E' : flashModal.trackState >= 3 ? '#2980B9' : '#F39C12') : T.border }} />
+              ))}
+            </div>}
+            {/* Timeline */}
+            {Array.isArray(flashModal.tracking) && flashModal.tracking.length > 0 ? flashModal.tracking.map((r, i) => (
+              <div key={i} style={{ display: 'flex', gap: 10, marginBottom: 0 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 20 }}>
+                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: i === 0 ? T.gold : T.border, border: i === 0 ? `2px solid ${T.gold}` : `2px solid ${T.border}`, flexShrink: 0 }} />
+                  {i < flashModal.tracking.length - 1 && <div style={{ width: 2, flex: 1, minHeight: 20, background: T.border }} />}
+                </div>
+                <div style={{ paddingBottom: 14 }}>
+                  <div style={{ fontWeight: i === 0 ? 700 : 500, fontSize: 12, color: i === 0 ? T.text : T.textDim }}>{r.message}</div>
+                  <div style={{ fontSize: 10, color: T.textMuted, marginTop: 2 }}>{r.routedAt ? new Date(r.routedAt * 1000).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' }) : ''}</div>
+                </div>
+              </div>
+            )) : <div style={{ fontSize: 13, color: T.textDim, textAlign: 'center', padding: 20 }}>ไม่พบข้อมูลการติดตาม</div>}
           </div>}
         </>}
       </Modal>
@@ -962,7 +992,7 @@ export default function ManagerApp({ profile, onLogout }) {
             const rows = shipOrders.filter(o => {
               if (!searchQuery) return true
               const q = searchQuery.toLowerCase()
-              return (o.customer_name||'').toLowerCase().includes(q) || (o.customer_phone||'').includes(q) || (o.employee_name||'').toLowerCase().includes(q)
+              return (o.customer_name||'').toLowerCase().includes(q) || (o.customer_phone||'').includes(q) || (o.employee_name||'').toLowerCase().includes(q) || (o.flash_pno||'').toLowerCase().includes(q)
             })
             if (type === 'csv') { exportProshipCSV(rows, 'Orders_' + (dateFilter||'all') + '.csv', profile, 'shipping'); flash('✅ Export CSV สำเร็จ!') }
             else { exportProshipExcel(rows, 'Orders_' + (dateFilter||'all') + '.xlsx', profile, 'shipping').then(() => flash('✅ Export Excel สำเร็จ!')) }
@@ -1012,7 +1042,7 @@ export default function ManagerApp({ profile, onLogout }) {
             </div>
 
             {/* ค้นหา */}
-            <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="🔍 ค้นหาชื่อ เบอร์ พนักงาน..."
+            <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="🔍 ค้นหาชื่อ เบอร์ เลขพัสดุ พนักงาน..."
               style={{ width: '100%', padding: '10px 12px', borderRadius: T.radiusSm, border: `1px solid ${T.border}`, background: T.surfaceAlt, color: T.text, fontSize: 13, fontFamily: T.font, outline: 'none', boxSizing: 'border-box', marginBottom: 8 }} />
 
             <div style={{ fontSize: 12, color: T.textDim }}>{shipOrders.length} รายการ</div>
@@ -1042,6 +1072,7 @@ export default function ManagerApp({ profile, onLogout }) {
                   <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>สถานะ</th>
                   <th style={{ padding: '8px 6px', textAlign: 'left', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>พนักงาน</th>
                   <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>จัดการ</th>
+                  <th style={{ padding: '8px 6px', textAlign: 'center', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}` }}>⚡ เลขพัสดุ</th>
                 </tr>
               </thead>
               <tbody>
@@ -1049,7 +1080,7 @@ export default function ManagerApp({ profile, onLogout }) {
                   const searchedShip = shipOrders.filter(o => {
                     if (!searchQuery) return true
                     const q = searchQuery.toLowerCase()
-                    return (o.customer_name||'').toLowerCase().includes(q) || (o.customer_phone||'').includes(q) || (o.employee_name||'').toLowerCase().includes(q)
+                    return (o.customer_name||'').toLowerCase().includes(q) || (o.customer_phone||'').includes(q) || (o.employee_name||'').toLowerCase().includes(q) || (o.flash_pno||'').toLowerCase().includes(q)
                   })
                   return searchedShip.slice((currentPage-1)*pageSize, currentPage*pageSize).map((o, i) => {
                   const dt = new Date(o.created_at)
@@ -1073,6 +1104,13 @@ export default function ManagerApp({ profile, onLogout }) {
                           <button onClick={() => markWaiting([o.id])} style={{ padding: '4px 8px', borderRadius: 4, border: '1px solid rgba(243,156,18,0.3)', background: 'rgba(243,156,18,0.05)', color: '#F39C12', fontSize: 10, cursor: 'pointer', fontFamily: T.font }}>↩ รอส่ง</button>
                         ) : (
                           <button onClick={() => markPrinted([o.id])} style={{ padding: '4px 8px', borderRadius: 4, border: '1px solid rgba(45,138,78,0.3)', background: 'rgba(45,138,78,0.05)', color: T.success, fontSize: 10, cursor: 'pointer', fontFamily: T.font }}>🖨 ปริ้นแล้ว</button>
+                        )}
+                      </td>
+                      <td style={{ padding: '8px 6px', textAlign: 'center' }}>
+                        {o.flash_pno ? (
+                          <button onClick={() => trackFlash(o.flash_pno)} style={{ padding: '4px 6px', borderRadius: 4, border: '1px solid rgba(45,138,78,0.2)', background: 'rgba(45,138,78,0.05)', color: T.success, fontSize: 9, cursor: 'pointer', fontFamily: 'monospace', fontWeight: 700, letterSpacing: 0.3 }}>{o.flash_pno.length > 14 ? o.flash_pno.substring(0,14)+'…' : o.flash_pno}</button>
+                        ) : (
+                          <button onClick={() => sendToFlash(o)} style={{ padding: '4px 8px', borderRadius: 4, border: '1px solid rgba(255,165,0,0.3)', background: 'rgba(255,165,0,0.05)', color: '#e67e00', fontSize: 10, cursor: 'pointer', fontFamily: T.font, fontWeight: 600 }}>📦 ส่ง Flash</button>
                         )}
                       </td>
                     </tr>
