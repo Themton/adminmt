@@ -73,39 +73,45 @@ function jsonResponse(data, status = 200) {
 
 // ═══ Create Order ═══
 async function createOrder(data) {
+  // ทำให้ outTradeNo unique ทุกครั้ง (ป้องกันซ้ำ)
+  const ts = Date.now().toString(36);
+  const baseTradeNo = data.outTradeNo || ('MT' + Date.now());
   const params = {
-    outTradeNo: data.outTradeNo || ('MT' + Date.now()),
+    outTradeNo: baseTradeNo + '-' + ts,
     expressCategory: '1',
     articleCategory: '99',
     weight: String(data.weight || 500),
   };
 
+  // helper: trim + ลบ space ซ้ำ
+  const clean = (v) => v ? String(v).trim().replace(/\s+/g, ' ') : '';
+
   // ผู้ส่ง (src)
-  if (data.srcName) params.srcName = data.srcName;
-  if (data.srcPhone) params.srcPhone = data.srcPhone;
-  if (data.srcProvinceName) params.srcProvinceName = data.srcProvinceName;
-  if (data.srcCityName) params.srcCityName = data.srcCityName;
-  if (data.srcDistrictName) params.srcDistrictName = data.srcDistrictName;
-  if (data.srcPostalCode) params.srcPostalCode = data.srcPostalCode;
-  if (data.srcDetailAddress) params.srcDetailAddress = data.srcDetailAddress;
+  if (data.srcName) params.srcName = clean(data.srcName);
+  if (data.srcPhone) params.srcPhone = clean(data.srcPhone);
+  if (data.srcProvinceName) params.srcProvinceName = clean(data.srcProvinceName);
+  if (data.srcCityName) params.srcCityName = clean(data.srcCityName);
+  if (data.srcDistrictName) params.srcDistrictName = clean(data.srcDistrictName);
+  if (data.srcPostalCode) params.srcPostalCode = clean(data.srcPostalCode);
+  if (data.srcDetailAddress) params.srcDetailAddress = clean(data.srcDetailAddress);
 
   // ผู้รับ (dst) — required
-  if (data.dstName) params.dstName = data.dstName;
-  if (data.dstPhone) params.dstPhone = data.dstPhone;
-  if (data.dstProvinceName) params.dstProvinceName = data.dstProvinceName;
-  if (data.dstCityName) params.dstCityName = data.dstCityName;
-  if (data.dstDistrictName) params.dstDistrictName = data.dstDistrictName;
-  if (data.dstPostalCode) params.dstPostalCode = data.dstPostalCode;
-  if (data.dstDetailAddress) params.dstDetailAddress = data.dstDetailAddress;
+  if (data.dstName) params.dstName = clean(data.dstName);
+  if (data.dstPhone) params.dstPhone = clean(data.dstPhone);
+  if (data.dstProvinceName) params.dstProvinceName = clean(data.dstProvinceName);
+  if (data.dstCityName) params.dstCityName = clean(data.dstCityName);
+  if (data.dstDistrictName) params.dstDistrictName = clean(data.dstDistrictName);
+  if (data.dstPostalCode) params.dstPostalCode = clean(data.dstPostalCode);
+  if (data.dstDetailAddress) params.dstDetailAddress = clean(data.dstDetailAddress);
 
   // ที่อยู่ส่งคืน (return) — ใช้ที่อยู่ผู้ส่ง
-  params.returnName = data.srcName || '';
-  params.returnPhone = data.srcPhone || '';
-  params.returnProvinceName = data.srcProvinceName || '';
-  params.returnCityName = data.srcCityName || '';
-  params.returnDistrictName = data.srcDistrictName || '';
-  params.returnPostalCode = data.srcPostalCode || '';
-  params.returnDetailAddress = data.srcDetailAddress || '';
+  params.returnName = clean(data.srcName || '');
+  params.returnPhone = clean(data.srcPhone || '');
+  params.returnProvinceName = clean(data.srcProvinceName || '');
+  params.returnCityName = clean(data.srcCityName || '');
+  params.returnDistrictName = clean(data.srcDistrictName || '');
+  params.returnPostalCode = clean(data.srcPostalCode || '');
+  params.returnDetailAddress = clean(data.srcDetailAddress || '');
 
   // COD
   if (data.codEnabled && data.codAmount > 0) {
@@ -114,7 +120,7 @@ async function createOrder(data) {
   }
 
   // หมายเหตุ
-  if (data.remark) params.remark = data.remark;
+  if (data.remark) params.remark = clean(data.remark);
 
   return await callFlashAPI('/open/v1/orders', params);
 }
