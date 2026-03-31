@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { supabase } from '../lib/supabase'
 import { syncOrderToSheet, updateOrderInSheet, deleteOrderFromSheet, syncAllToSheet, resetSheet } from '../lib/sheetSync'
-import { createFlashOrder, trackFlashOrder } from '../lib/flashApi'
+import { createFlashOrder, trackFlashOrder, printFlashLabel, notifyFlashCourier, pingFlash } from '../lib/flashApi'
 import { exportProshipExcel, exportProshipCSV, fetchExportLogs } from '../lib/exportProship'
 import OrderForm from './OrderForm'
 import { T, glass, fmt, fmtDate, fmtDateFull, fmtDateTime, sameDay, withinDays, thisMonth, Stat, Tabs, Btn, Toast, Modal, Empty, LiveDot, Pagination } from './ui'
@@ -169,6 +169,60 @@ export default function ManagerApp({ profile, onLogout }) {
     if (error) { flash('❌ ' + error.message); return }
     setOrders(prev => prev.map(o => o.id === orderId ? { ...o, flash_pno: '', flash_status: '' } : o))
     flash('✅ ลบเลขพัสดุแล้ว')
+  }
+
+  // ═══ Print Label — ปริ้นใบปะหน้า ═══
+  const printLabel = async (pno) => {
+    flash('⏳ กำลังดาวน์โหลดใบปะหน้า...')
+    const result = await printFlashLabel(pno)
+    if (result.code === 1 && result.data) {
+      // ถ้าได้ URL → เปิดหน้าใหม่
+      if (result.data.labelUrl) {
+        window.open(result.data.labelUrl, '_blank')
+        flash('✅ เปิดใบปะหน้าสำเร็จ')
+      } else if (result.data.label) {
+        // ถ้าได้ base64 → แสดงรูป
+        const w = window.open()
+        w.document.write('<html><head><title>ใบปะหน้า ' + pno + '</title></head><body style="margin:0;display:flex;justify-content:center"><img src="data:image/png;base64,' + result.data.label + '" style="max-width:100%;height:auto"/></body></html>')
+        flash('✅ โหลดใบปะหน้าสำเร็จ')
+      } else {
+        flash('❌ ไม่พบข้อมูลใบปะหน้า')
+      }
+    } else {
+      flash('❌ ' + (result.message || 'ไม่สามารถดาวน์โหลดใบปะหน้า'))
+    }
+  }
+
+  // ═══ Notify Courier — เรียกพนักงานเข้ารับ ═══
+  const notifyCourier = async (pnoList) => {
+    const list = Array.isArray(pnoList) ? pnoList : [pnoList]
+    if (!confirm(`📞 เรียกพนักงาน Flash เข้ารับพัสดุ ${list.length} รายการ?`)) return
+    flash('⏳ กำลังแจ้ง Flash...')
+    const result = await notifyFlashCourier(list)
+    if (result.code === 1) {
+      flash('✅ แจ้งรับพัสดุสำเร็จ! ' + (result.data?.ticketPickupId ? 'Ticket: ' + result.data.ticketPickupId : ''))
+    } else {
+      flash('❌ ' + (result.message || 'ไม่สำเร็จ'))
+    }
+  }
+
+  // ═══ Flash Proxy URL ═══
+  const [flashProxyUrl, setFlashProxyUrl] = useState(() => {
+    try { return localStorage.getItem('flash_proxy_url') || '' } catch { return '' }
+  })
+  const saveFlashProxyUrl = (url) => {
+    try { localStorage.setItem('flash_proxy_url', url) } catch {}
+    setFlashProxyUrl(url)
+    flash('✅ บันทึก Flash URL สำเร็จ')
+  }
+  const testFlashConnection = async () => {
+    flash('⏳ ทดสอบการเชื่อมต่อ...')
+    const result = await pingFlash()
+    if (result.code === 1) {
+      flash('✅ เชื่อมต่อ Flash สำเร็จ! ENV: ' + (result.env || '-') + ' | mchId: ' + (result.mchId || '-'))
+    } else {
+      flash('❌ เชื่อมต่อไม่สำเร็จ: ' + (result.message || 'Unknown'))
+    }
   }
 
   // ═══ โหลดข้อมูล ═══
@@ -404,7 +458,18 @@ export default function ManagerApp({ profile, onLogout }) {
       </Modal>
 
       {/* Flash Sender Info Modal */}
-      <Modal show={showFlashSrc} onClose={() => setShowFlashSrc(false)} title="⚙️ ข้อมูลผู้ส่ง Flash Express">
+      <Modal show={showFlashSrc} onClose={() => setShowFlashSrc(false)} title="⚙️ ตั้งค่า Flash Express">
+        {/* API URL */}
+        <div style={{ padding: 12, borderRadius: T.radiusSm, background: 'rgba(255,107,0,0.04)', border: '1px solid rgba(255,107,0,0.15)', marginBottom: 14 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#FF6B00', marginBottom: 8 }}>⚡ เชื่อมต่อ Flash API</div>
+          <FI label="Apps Script URL" value={flashProxyUrl} onChange={e => setFlashProxyUrl(e.target.value)} placeholder="https://script.google.com/macros/s/xxxxx/exec" />
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Btn full onClick={() => saveFlashProxyUrl(flashProxyUrl)} grad={T.grad2}>💾 บันทึก URL</Btn>
+            <Btn full outline onClick={testFlashConnection}>🔌 ทดสอบ</Btn>
+          </div>
+        </div>
+        {/* ข้อมูลผู้ส่ง */}
+        <div style={{ fontSize: 12, fontWeight: 700, color: T.textDim, marginBottom: 8 }}>📍 ข้อมูลผู้ส่ง</div>
         <FI label="ชื่อผู้ส่ง" value={flashSrcInfo.name||''} onChange={e => setFlashSrcInfo(p=>({...p,name:e.target.value}))} placeholder="THE MT" />
         <FI label="เบอร์โทร" value={flashSrcInfo.phone||''} onChange={e => setFlashSrcInfo(p=>({...p,phone:e.target.value}))} placeholder="08xxxxxxxx" />
         <FI label="ที่อยู่" value={flashSrcInfo.address||''} onChange={e => setFlashSrcInfo(p=>({...p,address:e.target.value}))} placeholder="บ้านเลขที่..." />
@@ -416,7 +481,7 @@ export default function ManagerApp({ profile, onLogout }) {
           <FI label="จังหวัด" value={flashSrcInfo.province||''} onChange={e => setFlashSrcInfo(p=>({...p,province:e.target.value}))} />
           <FI label="รหัส ปณ." value={flashSrcInfo.zip||''} onChange={e => setFlashSrcInfo(p=>({...p,zip:e.target.value}))} />
         </div>
-        <Btn full onClick={() => saveFlashSrc(flashSrcInfo)} grad={T.grad2}>💾 บันทึก</Btn>
+        <Btn full onClick={() => saveFlashSrc(flashSrcInfo)} grad={T.grad2}>💾 บันทึกข้อมูลผู้ส่ง</Btn>
       </Modal>
 
       {/* Tracking Number Modal — สร้าง / แก้ไข / ลบ เลขพัสดุ */}
@@ -1090,14 +1155,21 @@ export default function ManagerApp({ profile, onLogout }) {
           </div>
 
           {/* ปุ่ม bulk action */}
-          {shipFilter === 'waiting' && waitingCount > 0 && (
-            <div style={{ ...glass, padding: 12, marginBottom: 10, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <div style={{ ...glass, padding: 12, marginBottom: 10, display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+            <button onClick={() => setShowFlashSrc(true)} style={{ padding: '8px 14px', borderRadius: 8, border: `1px solid ${T.border}`, background: '#fff', color: T.textDim, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.font, marginRight: 'auto' }}>⚙️ ตั้งค่า Flash</button>
+            {(() => {
+              const pnoOrders = shipOrders.filter(o => o.flash_pno)
+              return pnoOrders.length > 0 && (
+                <button onClick={() => notifyCourier(pnoOrders.map(o => o.flash_pno))} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg, #2980B9, #3498DB)', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: T.font }}>📞 เรียกรับพัสดุ ({pnoOrders.length})</button>
+              )
+            })()}
+            {shipFilter === 'waiting' && waitingCount > 0 && (
               <button onClick={() => {
                 const ids = shipOrders.filter(o => !o.shipping_status || o.shipping_status === 'waiting').map(o => o.id)
                 if (confirm(`✅ เปลี่ยนสถานะ ${ids.length} รายการ เป็น "ปริ้นแล้ว"?`)) markPrinted(ids)
               }} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg, #2D8A4E, #27AE60)', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: T.font }}>🖨 ปริ้นทั้งหมด ({waitingCount})</button>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* ตาราง */}
           <div style={{ overflowX: 'auto' }}>
@@ -1149,12 +1221,17 @@ export default function ManagerApp({ profile, onLogout }) {
                       </td>
                       <td style={{ padding: '8px 6px', textAlign: 'center' }}>
                         {o.flash_pno ? (
-                          <div style={{ display: 'flex', gap: 3, alignItems: 'center', justifyContent: 'center' }}>
-                            <button onClick={() => openPnoModal(o)} style={{ padding: '4px 6px', borderRadius: 4, border: '1px solid rgba(45,138,78,0.2)', background: 'rgba(45,138,78,0.05)', color: T.success, fontSize: 9, cursor: 'pointer', fontFamily: 'monospace', fontWeight: 700, letterSpacing: 0.3, maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={o.flash_pno}>{o.flash_pno.length > 14 ? o.flash_pno.substring(0,14)+'…' : o.flash_pno}</button>
+                          <div style={{ display: 'flex', gap: 3, alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
+                            <button onClick={() => openPnoModal(o)} style={{ padding: '4px 6px', borderRadius: 4, border: '1px solid rgba(45,138,78,0.2)', background: 'rgba(45,138,78,0.05)', color: T.success, fontSize: 9, cursor: 'pointer', fontFamily: 'monospace', fontWeight: 700, letterSpacing: 0.3, maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={'✏️ แก้ไข: ' + o.flash_pno}>{o.flash_pno.length > 14 ? o.flash_pno.substring(0,14)+'…' : o.flash_pno}</button>
+                            <button onClick={() => trackFlash(o.flash_pno)} style={{ padding: '3px 5px', borderRadius: 4, border: '1px solid rgba(41,128,185,0.2)', background: 'rgba(41,128,185,0.05)', color: '#2980B9', fontSize: 9, cursor: 'pointer', fontFamily: T.font, lineHeight: 1 }} title="📍 ติดตามสถานะ">📍</button>
+                            <button onClick={() => printLabel(o.flash_pno)} style={{ padding: '3px 5px', borderRadius: 4, border: '1px solid rgba(255,107,0,0.2)', background: 'rgba(255,107,0,0.05)', color: '#FF6B00', fontSize: 9, cursor: 'pointer', fontFamily: T.font, lineHeight: 1 }} title="🖨 ปริ้นใบปะหน้า">🖨</button>
                             <button onClick={() => deletePno(o.id)} style={{ padding: '3px 5px', borderRadius: 4, border: '1px solid rgba(214,48,49,0.15)', background: '#fff', color: T.danger, fontSize: 9, cursor: 'pointer', fontFamily: T.font, lineHeight: 1 }} title="ลบ">✕</button>
                           </div>
                         ) : (
-                          <button onClick={() => openPnoModal(o)} style={{ padding: '4px 8px', borderRadius: 4, border: '1px solid rgba(184,134,11,0.3)', background: 'rgba(184,134,11,0.05)', color: T.gold, fontSize: 10, cursor: 'pointer', fontFamily: T.font, fontWeight: 600 }}>➕ สร้าง</button>
+                          <div style={{ display: 'flex', gap: 3, justifyContent: 'center' }}>
+                            <button onClick={() => openPnoModal(o)} style={{ padding: '4px 8px', borderRadius: 4, border: '1px solid rgba(184,134,11,0.3)', background: 'rgba(184,134,11,0.05)', color: T.gold, fontSize: 10, cursor: 'pointer', fontFamily: T.font, fontWeight: 600 }}>➕ สร้าง</button>
+                            <button onClick={() => sendToFlash(o)} style={{ padding: '4px 6px', borderRadius: 4, border: '1px solid rgba(255,107,0,0.3)', background: 'rgba(255,107,0,0.05)', color: '#FF6B00', fontSize: 10, cursor: 'pointer', fontFamily: T.font, fontWeight: 600 }} title="ส่งผ่าน Flash API">⚡</button>
+                          </div>
                         )}
                       </td>
                     </tr>
