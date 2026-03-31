@@ -142,7 +142,7 @@ export default function ManagerApp({ profile, onLogout }) {
         setOrders(prev => prev.map(o => o.id === order.id ? { ...o, flash_pno: result.data.pno, flash_status: 'created', shipping_status: 'printed' } : o))
         results.push({ name: order.customer_name, pno: result.data.pno, ok: true })
       } else {
-        results.push({ name: order.customer_name, error: result.message || 'ไม่สำเร็จ', ok: false })
+        results.push({ name: order.customer_name, error: result.message || 'ไม่สำเร็จ', ok: false, debug: result._debug })
       }
       setBulkProgress({ done: i+1, total: noPno.length, results: [...results] })
       // delay เล็กน้อย ป้องกัน rate limit
@@ -170,7 +170,7 @@ export default function ManagerApp({ profile, onLogout }) {
       setFlashModal({ order, result: result.data })
     } else {
       flash('❌ ส่ง Flash ไม่สำเร็จ: ' + (result.message || 'Unknown error'))
-      setFlashModal({ order, error: result.message })
+      setFlashModal({ order, error: result.message, debugInfo: result._debug, fullResponse: result })
     }
   }
 
@@ -473,8 +473,20 @@ export default function ManagerApp({ profile, onLogout }) {
             {flashModal.result.sortCode && <div style={{ fontSize: 12, color: T.textDim }}>Sort Code: {flashModal.result.sortCode}</div>}
           </div>}
           {flashModal.error && <div style={{ padding: 14, borderRadius: T.radiusSm, background: 'rgba(214,48,49,0.05)', border: '1px solid rgba(214,48,49,0.15)', marginBottom: 12 }}>
-            <div style={{ fontWeight: 700, color: T.danger }}>❌ ไม่สำเร็จ</div>
-            <div style={{ fontSize: 13, color: T.textDim }}>{flashModal.error}</div>
+            <div style={{ fontWeight: 700, color: T.danger, marginBottom: 6 }}>❌ ไม่สำเร็จ</div>
+            <div style={{ fontSize: 13, color: T.textDim, marginBottom: 8 }}>{flashModal.error}</div>
+            {flashModal.debugInfo && <details style={{ fontSize: 11 }}>
+              <summary style={{ cursor: 'pointer', color: '#7F8C8D', fontWeight: 600, marginBottom: 6 }}>🔍 ดูข้อมูลที่ส่งไป Flash (Debug)</summary>
+              <div style={{ background: '#F8F9FA', padding: 10, borderRadius: 6, maxHeight: 250, overflowY: 'auto' }}>
+                <pre style={{ margin: 0, fontSize: 10, whiteSpace: 'pre-wrap', wordBreak: 'break-all', color: '#2C3E50' }}>{JSON.stringify(flashModal.debugInfo, null, 2)}</pre>
+              </div>
+            </details>}
+            {flashModal.fullResponse && <details style={{ fontSize: 11, marginTop: 6 }}>
+              <summary style={{ cursor: 'pointer', color: '#7F8C8D', fontWeight: 600, marginBottom: 6 }}>📋 Flash Response</summary>
+              <div style={{ background: '#F8F9FA', padding: 10, borderRadius: 6, maxHeight: 250, overflowY: 'auto' }}>
+                <pre style={{ margin: 0, fontSize: 10, whiteSpace: 'pre-wrap', wordBreak: 'break-all', color: '#2C3E50' }}>{JSON.stringify(flashModal.fullResponse, null, 2)}</pre>
+              </div>
+            </details>}
           </div>}
           {flashModal.tracking && <div>
             {/* Header: PNO + State Badge */}
@@ -519,6 +531,7 @@ export default function ManagerApp({ profile, onLogout }) {
                   <span style={{ fontSize: 12, fontWeight: 600, flex: 1 }}>{r.name}</span>
                   {r.pno && <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#2980B9', fontWeight: 700 }}>{r.pno}</span>}
                   {r.error && <span style={{ fontSize: 11, color: T.danger }}>{r.error}</span>}
+                  {r.debug && <details style={{ width: '100%', marginTop: 4 }}><summary style={{ fontSize: 10, color: '#7F8C8D', cursor: 'pointer' }}>debug</summary><pre style={{ fontSize: 9, margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{JSON.stringify(r.debug, null, 2)}</pre></details>}
                 </div>
               ))}
             </div>

@@ -1,8 +1,6 @@
 // ═══════════════════════════════════════════════════════════
 // Flash Express API Proxy — Cloudflare Worker (Production)
-// ═══════════════════════════════════════════════════════════
-// Deploy: https://dash.cloudflare.com → Workers & Pages → Create
-// วาง code นี้ → Deploy
+// v2 — เพิ่ม debug mode + better error response
 // ═══════════════════════════════════════════════════════════
 
 const MCH_ID = 'CBC9351';
@@ -13,176 +11,150 @@ const BASE_URL = 'https://open-api.flashexpress.com';
 async function sha256(message) {
   const msgBuffer = new TextEncoder().encode(message);
   const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+  return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
 }
 
 async function generateSign(params) {
   const filtered = {};
   for (const [k, v] of Object.entries(params)) {
-    if (k !== 'sign' && v !== '' && v !== null && v !== undefined) {
+    if (k !== 'sign' && v !== '' && v !== null && v !== undefined && String(v).trim() !== '') {
       filtered[k] = v;
     }
   }
   const sortedKeys = Object.keys(filtered).sort();
   const stringA = sortedKeys.map(k => `${k}=${filtered[k]}`).join('&');
-  return await sha256(stringA + '&key=' + API_KEY);
+  const stringSignTemp = stringA + '&key=' + API_KEY;
+  return await sha256(stringSignTemp);
 }
 
-async function buildFormBody(params) {
+async function callFlashAPI(endpoint, params) {
   params.mchId = MCH_ID;
   params.nonceStr = Date.now().toString() + Math.random().toString(36).substring(2, 8);
   params.sign = await generateSign(params);
 
   const body = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
-    if (v !== null && v !== undefined && v !== '') {
+    if (v !== null && v !== undefined && String(v).trim() !== '') {
       body.append(k, String(v));
     }
   }
-  return body;
-}
 
-async function callFlashAPI(endpoint, params) {
   const url = BASE_URL + endpoint;
-  const body = await buildFormBody(params);
-
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: body.toString(),
   });
 
-  return await response.json();
+  const result = await response.json();
+
+  // เพิ่ม debug info ใน response
+  result._debug = {
+    endpoint,
+    sentParams: Object.fromEntries(
+      Object.entries(params).filter(([k]) => k !== 'sign' && k !== 'nonceStr')
+    ),
+    httpStatus: response.status,
+  };
+
+  return result;
 }
 
-// ═══ CORS Headers ═══
+// ═══ CORS ═══
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
   'Content-Type': 'application/json',
 };
-
 function jsonResponse(data, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: corsHeaders });
 }
 
-// ═══ API Handlers ═══
-
-// 1. Create Order — สร้างรายการจัดส่ง
+// ═══ Create Order ═══
 async function createOrder(data) {
   const params = {
-    outTradeNo: data.outTradeNo || ('ORD' + Date.now()),
-    expressCategory: String(data.expressCategory || 1),
-    srcName: data.srcName || '',
-    srcPhone: data.srcPhone || '',
-    srcProvinceName: data.srcProvinceName || '',
-    srcCityName: data.srcCityName || '',
-    srcDistrictName: data.srcDistrictName || '',
-    srcPostalCode: data.srcPostalCode || '',
-    srcDetailAddress: data.srcDetailAddress || '',
-    dstName: data.dstName || '',
-    dstPhone: data.dstPhone || '',
-    dstProvinceName: data.dstProvinceName || '',
-    dstCityName: data.dstCityName || '',
-    dstDistrictName: data.dstDistrictName || '',
-    dstPostalCode: data.dstPostalCode || '',
-    dstDetailAddress: data.dstDetailAddress || '',
-    articleCategory: String(data.articleCategory || 1),
+    outTradeNo: data.outTradeNo || ('MT' + Date.now()),
+    expressCategory: '1',
+    articleCategory: '1',
     weight: String(data.weight || 500),
   };
 
-  if (data.codEnabled) {
+  // ผู้ส่ง (src)
+  if (data.srcName) params.srcName = data.srcName;
+  if (data.srcPhone) params.srcPhone = data.srcPhone;
+  if (data.srcProvinceName) params.srcProvinceName = data.srcProvinceName;
+  if (data.srcCityName) params.srcCityName = data.srcCityName;
+  if (data.srcDistrictName) params.srcDistrictName = data.srcDistrictName;
+  if (data.srcPostalCode) params.srcPostalCode = data.srcPostalCode;
+  if (data.srcDetailAddress) params.srcDetailAddress = data.srcDetailAddress;
+
+  // ผู้รับ (dst) — required
+  if (data.dstName) params.dstName = data.dstName;
+  if (data.dstPhone) params.dstPhone = data.dstPhone;
+  if (data.dstProvinceName) params.dstProvinceName = data.dstProvinceName;
+  if (data.dstCityName) params.dstCityName = data.dstCityName;
+  if (data.dstDistrictName) params.dstDistrictName = data.dstDistrictName;
+  if (data.dstPostalCode) params.dstPostalCode = data.dstPostalCode;
+  if (data.dstDetailAddress) params.dstDetailAddress = data.dstDetailAddress;
+
+  // COD
+  if (data.codEnabled && data.codAmount > 0) {
     params.codEnabled = '1';
-    params.codAmount = String(data.codAmount || 0);
+    params.codAmount = String(data.codAmount);
   }
+
+  // หมายเหตุ
   if (data.remark) params.remark = data.remark;
-  if (data.insured) {
-    params.insured = '1';
-    params.insureDeclareValue = String(data.insureDeclareValue || 0);
-  }
 
   return await callFlashAPI('/open/v1/orders', params);
 }
 
-// 2. Print Label — ปริ้นใบปะหน้า
+// ═══ Print Label ═══
 async function printLabel(data) {
-  const params = { pno: data.pno };
-  if (data.outTradeNo) params.outTradeNo = data.outTradeNo;
-  return await callFlashAPI('/open/v1/orders/label', params);
+  return await callFlashAPI('/open/v1/orders/label', { pno: data.pno });
 }
 
-// 3. Notify Courier — เรียกพนักงานเข้ารับพัสดุ
+// ═══ Notify Courier ═══
 async function notifyCourier(data) {
   const pnoList = data.pnoList || [data.pno];
-  const params = { pnoList: JSON.stringify(pnoList) };
-  return await callFlashAPI('/open/v1/orders/notify', params);
+  return await callFlashAPI('/open/v1/orders/notify', { pnoList: JSON.stringify(pnoList) });
 }
 
-// 4. Status Tracking — ตรวจสอบสถานะ
+// ═══ Track ═══
 async function trackOrder(data) {
-  const params = { pno: data.pno };
-  return await callFlashAPI('/open/v1/orders/tracking', params);
+  return await callFlashAPI('/open/v1/orders/tracking', { pno: data.pno });
 }
 
-// 5. Cancel Order — ยกเลิกออเดอร์
+// ═══ Cancel ═══
 async function cancelOrder(data) {
-  const params = { pno: data.pno };
-  return await callFlashAPI('/open/v1/orders/cancel', params);
+  return await callFlashAPI('/open/v1/orders/cancel', { pno: data.pno });
 }
 
-// ═══ Worker Entry Point ═══
+// ═══ Worker Entry ═══
 export default {
   async fetch(request) {
-    // Handle CORS preflight
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: corsHeaders });
     }
-
-    // GET = health check
     if (request.method === 'GET') {
-      return jsonResponse({
-        code: 1,
-        message: 'Flash Express Proxy (Cloudflare Worker) is ready!',
-        env: 'production',
-        mchId: MCH_ID,
-        endpoints: ['create', 'label', 'notify', 'track', 'cancel', 'ping'],
-      });
+      return jsonResponse({ code: 1, message: 'Flash Express Proxy (Cloudflare Worker) is ready!', env: 'production', mchId: MCH_ID, endpoints: ['create', 'label', 'notify', 'track', 'cancel', 'ping'] });
     }
-
-    // POST = API calls
     try {
       const data = await request.json();
-      const action = data.action || '';
       let result;
-
-      switch (action) {
-        case 'create':
-          result = await createOrder(data);
-          break;
-        case 'label':
-          result = await printLabel(data);
-          break;
-        case 'notify':
-          result = await notifyCourier(data);
-          break;
-        case 'track':
-          result = await trackOrder(data);
-          break;
-        case 'cancel':
-          result = await cancelOrder(data);
-          break;
-        case 'ping':
-          result = { code: 1, message: 'OK', env: 'production', mchId: MCH_ID };
-          break;
-        default:
-          result = { code: -1, message: 'Unknown action: ' + action };
+      switch (data.action) {
+        case 'create': result = await createOrder(data); break;
+        case 'label': result = await printLabel(data); break;
+        case 'notify': result = await notifyCourier(data); break;
+        case 'track': result = await trackOrder(data); break;
+        case 'cancel': result = await cancelOrder(data); break;
+        case 'ping': result = { code: 1, message: 'OK', env: 'production', mchId: MCH_ID }; break;
+        default: result = { code: -1, message: 'Unknown action: ' + data.action };
       }
-
       return jsonResponse(result);
     } catch (err) {
-      return jsonResponse({ code: -1, message: err.message }, 500);
+      return jsonResponse({ code: -1, message: err.message, stack: err.stack }, 500);
     }
   },
 };
