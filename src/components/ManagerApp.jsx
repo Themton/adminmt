@@ -1216,7 +1216,8 @@ export default function ManagerApp({ profile, onLogout }) {
               <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="ค้นหาชื่อ เบอร์ เลขพัสดุ..."
                 style={{ padding: '8px 14px', borderRadius: 6, border: '1px solid #D5D8DC', background: '#fff', color: '#2C3E50', fontSize: 12, fontFamily: T.font, outline: 'none', width: 220, boxSizing: 'border-box' }} />
               <button onClick={() => setShowFlashSrc(true)} style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid #D5D8DC', background: '#fff', color: '#5D6D7E', fontSize: 13, cursor: 'pointer', fontFamily: T.font }}>⚙️</button>
-              <button onClick={() => exportShip('excel')} style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid #D5D8DC', background: '#fff', color: '#5D6D7E', fontSize: 13, cursor: 'pointer', fontFamily: T.font }}>📊</button>
+              <button onClick={() => exportShip('excel')} style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid #27AE60', background: '#EAFAF1', color: '#27AE60', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>📊 Excel</button>
+              <button onClick={() => exportShip('csv')} style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid #D5D8DC', background: '#fff', color: '#5D6D7E', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>📥 CSV</button>
               {(() => { const p = shipOrders.filter(o => o.flash_pno); return p.length > 0 && <button onClick={() => notifyCourier(p.map(o => o.flash_pno))} style={{ padding: '8px 16px', borderRadius: 6, border: 'none', background: '#27AE60', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: T.font, whiteSpace: 'nowrap' }}>📞 เรียกรับพัสดุ</button> })()}
             </div>
 
@@ -1250,13 +1251,38 @@ export default function ManagerApp({ profile, onLogout }) {
 
             {/* Bulk Action Bar */}
             {shipSelected.size > 0 && (
-              <div style={{ padding: '10px 16px', background: '#EBF5FB', border: '1px solid #AED6F1', borderRadius: 8, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ padding: '10px 16px', background: '#EBF5FB', border: '1px solid #AED6F1', borderRadius: 8, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 13, fontWeight: 700, color: '#2980B9' }}>✓ เลือก {shipSelected.size} รายการ</span>
                 <div style={{ flex: 1 }} />
-                <button onClick={() => { const sel = orders.filter(o => shipSelected.has(o.id)); bulkCreateFlash(sel) }} disabled={bulkCreating} style={{ padding: '8px 20px', borderRadius: 6, border: 'none', background: bulkCreating ? '#BDC3C7' : '#E67E22', color: '#fff', fontSize: 12, fontWeight: 700, cursor: bulkCreating ? 'wait' : 'pointer', fontFamily: T.font }}>
-                  {bulkCreating ? `⏳ ${bulkProgress.done}/${bulkProgress.total}...` : `⚡ สร้างเลขพัสดุ Flash (${shipSelected.size})`}
+                {/* เปลี่ยนสถานะ */}
+                <button onClick={() => {
+                  const ids = [...shipSelected]
+                  if (!confirm(`เปลี่ยนสถานะ ${ids.length} รายการ เป็น "เตรียมส่ง"?`)) return
+                  supabase.from('mt_orders').update({ shipping_status: 'waiting' }).in('id', ids).then(({ error }) => {
+                    if (error) { flash('❌ ' + error.message); return }
+                    setOrders(prev => prev.map(o => ids.includes(o.id) ? { ...o, shipping_status: 'waiting' } : o))
+                    flash('✅ เปลี่ยนสถานะ ' + ids.length + ' รายการ'); setShipSelected(new Set())
+                  })
+                }} style={{ padding: '7px 14px', borderRadius: 6, border: '1px solid #E67E22', background: '#FEF5E7', color: '#E67E22', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: T.font }}>🚚 เตรียมส่ง</button>
+                <button onClick={() => {
+                  const ids = [...shipSelected]
+                  if (!confirm(`เปลี่ยนสถานะ ${ids.length} รายการ เป็น "พร้อมส่ง"?`)) return
+                  supabase.from('mt_orders').update({ shipping_status: 'printed' }).in('id', ids).then(({ error }) => {
+                    if (error) { flash('❌ ' + error.message); return }
+                    setOrders(prev => prev.map(o => ids.includes(o.id) ? { ...o, shipping_status: 'printed' } : o))
+                    flash('✅ เปลี่ยนสถานะ ' + ids.length + ' รายการ'); setShipSelected(new Set())
+                  })
+                }} style={{ padding: '7px 14px', borderRadius: 6, border: '1px solid #27AE60', background: '#EAFAF1', color: '#27AE60', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: T.font }}>✅ พร้อมส่ง</button>
+                {/* สร้างเลขพัสดุ */}
+                <button onClick={() => { const sel = orders.filter(o => shipSelected.has(o.id)); bulkCreateFlash(sel) }} disabled={bulkCreating} style={{ padding: '7px 16px', borderRadius: 6, border: 'none', background: bulkCreating ? '#BDC3C7' : '#E67E22', color: '#fff', fontSize: 11, fontWeight: 700, cursor: bulkCreating ? 'wait' : 'pointer', fontFamily: T.font }}>
+                  {bulkCreating ? `⏳ ${bulkProgress.done}/${bulkProgress.total}...` : `⚡ สร้างเลขพัสดุ (${shipSelected.size})`}
                 </button>
-                <button onClick={() => setShipSelected(new Set())} style={{ padding: '8px 14px', borderRadius: 6, border: '1px solid #D5D8DC', background: '#fff', color: '#5D6D7E', fontSize: 12, cursor: 'pointer', fontFamily: T.font }}>✕ ยกเลิก</button>
+                {/* Export ที่เลือก */}
+                <button onClick={() => {
+                  const sel = orders.filter(o => shipSelected.has(o.id))
+                  exportProshipExcel(sel, 'Selected_' + sel.length + '.xlsx', profile, 'shipping').then(() => flash('✅ Export สำเร็จ'))
+                }} style={{ padding: '7px 14px', borderRadius: 6, border: '1px solid #2980B9', background: '#EBF5FB', color: '#2980B9', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: T.font }}>📊 Export ที่เลือก</button>
+                <button onClick={() => setShipSelected(new Set())} style={{ padding: '7px 10px', borderRadius: 6, border: '1px solid #D5D8DC', background: '#fff', color: '#85929E', fontSize: 11, cursor: 'pointer', fontFamily: T.font }}>✕</button>
               </div>
             )}
 
@@ -1340,8 +1366,20 @@ export default function ManagerApp({ profile, onLogout }) {
                 </table>
               </div>
               {shipOrders.length === 0 && <Empty text="ไม่มีออเดอร์" />}
-              <div style={{ padding: '10px 16px', borderTop: '1px solid #EAECEE', background: '#F8F9FA', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ padding: '10px 16px', borderTop: '1px solid #EAECEE', background: '#F8F9FA', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
                 <span style={{ fontSize: 12, color: '#85929E' }}>{shipOrders.length} รายการ</span>
+                <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                  <span style={{ fontSize: 11, color: '#85929E' }}>แสดง</span>
+                  {[100, 200, 500].map(n => (
+                    <button key={n} onClick={() => { setPageSize(n); setCurrentPage(1) }} style={{
+                      padding: '5px 12px', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.font,
+                      border: pageSize === n ? '1px solid #3498DB' : '1px solid #D5D8DC',
+                      background: pageSize === n ? '#3498DB' : '#fff',
+                      color: pageSize === n ? '#fff' : '#5D6D7E'
+                    }}>{n}</button>
+                  ))}
+                  <span style={{ fontSize: 11, color: '#85929E', marginLeft: 4 }}>ต่อหน้า</span>
+                </div>
                 <Pagination total={shipOrders.length} page={currentPage} pageSize={pageSize} onPageChange={setCurrentPage} onPageSizeChange={setPageSize} />
               </div>
             </div>
