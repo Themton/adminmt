@@ -531,7 +531,7 @@ export default function ManagerApp({ profile, onLogout }) {
         {/* API URL */}
         <div style={{ padding: 12, borderRadius: T.radiusSm, background: 'rgba(255,107,0,0.04)', border: '1px solid rgba(255,107,0,0.15)', marginBottom: 14 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: '#FF6B00', marginBottom: 8 }}>⚡ เชื่อมต่อ Flash API</div>
-          <FI label="Apps Script URL" value={flashProxyUrl} onChange={e => setFlashProxyUrl(e.target.value)} placeholder="https://script.google.com/macros/s/xxxxx/exec" />
+          <FI label="Flash Proxy URL (Cloudflare / Apps Script)" value={flashProxyUrl} onChange={e => setFlashProxyUrl(e.target.value)} placeholder="https://flash-proxy.xxx.workers.dev" />
           <div style={{ display: 'flex', gap: 8 }}>
             <Btn full onClick={() => saveFlashProxyUrl(flashProxyUrl)} grad={T.grad2}>💾 บันทึก URL</Btn>
             <Btn full outline onClick={testFlashConnection}>🔌 ทดสอบ</Btn>
