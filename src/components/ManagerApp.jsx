@@ -230,21 +230,34 @@ export default function ManagerApp({ profile, onLogout }) {
   const printLabel = async (pno) => {
     flash('⏳ กำลังดาวน์โหลดใบปะหน้า...')
     const result = await printFlashLabel(pno)
+    console.log('Flash Label Response:', JSON.stringify(result, null, 2))
+
     if (result.code === 1 && result.data) {
-      // ถ้าได้ URL → เปิดหน้าใหม่
-      if (result.data.labelUrl) {
-        window.open(result.data.labelUrl, '_blank')
+      const d = result.data
+      // หลายรูปแบบที่ Flash อาจ return
+      const url = d.labelUrl || d.label_url || d.url || d.pdfUrl || d.pdf_url || (typeof d === 'string' ? d : null)
+      const base64 = d.label || d.labelContent || d.content || d.image || d.base64
+
+      if (url) {
+        window.open(url, '_blank')
         flash('✅ เปิดใบปะหน้าสำเร็จ')
-      } else if (result.data.label) {
-        // ถ้าได้ base64 → แสดงรูป
+      } else if (base64) {
+        const isPdf = base64.startsWith('JVBER') || base64.startsWith('JVBERi0')
         const w = window.open()
-        w.document.write('<html><head><title>ใบปะหน้า ' + pno + '</title></head><body style="margin:0;display:flex;justify-content:center"><img src="data:image/png;base64,' + result.data.label + '" style="max-width:100%;height:auto"/></body></html>')
+        if (isPdf) {
+          w.document.write('<html><head><title>ใบปะหน้า ' + pno + '</title></head><body style="margin:0"><embed src="data:application/pdf;base64,' + base64 + '" type="application/pdf" width="100%" height="100%" style="position:fixed;top:0;left:0;right:0;bottom:0"/></body></html>')
+        } else {
+          w.document.write('<html><head><title>ใบปะหน้า ' + pno + '</title></head><body style="margin:0;display:flex;justify-content:center"><img src="data:image/png;base64,' + base64 + '" style="max-width:100%;height:auto"/></body></html>')
+        }
         flash('✅ โหลดใบปะหน้าสำเร็จ')
       } else {
-        flash('❌ ไม่พบข้อมูลใบปะหน้า')
+        // แสดง debug ให้ดูว่า Flash ส่งอะไรมา
+        flash('❌ ไม่พบข้อมูลใบปะหน้า — ดู Console (F12)')
+        setFlashModal({ error: 'Flash ไม่ return label ในรูปแบบที่รู้จัก', debugInfo: result._debug, fullResponse: result })
       }
     } else {
       flash('❌ ' + (result.message || 'ไม่สามารถดาวน์โหลดใบปะหน้า'))
+      setFlashModal({ error: result.message || 'Label API Error', debugInfo: result._debug, fullResponse: result })
     }
   }
 
@@ -270,14 +283,24 @@ export default function ManagerApp({ profile, onLogout }) {
     for (let i = 0; i < pnoList.length; i++) {
       flash(`⏳ โหลดใบปะหน้า ${i+1}/${pnoList.length}...`)
       const result = await printFlashLabel(pnoList[i])
+      console.log(`Label ${pnoList[i]}:`, result)
       if (result.code === 1 && result.data) {
-        if (result.data.labelUrl) labels.push({ type: 'url', url: result.data.labelUrl, pno: pnoList[i] })
-        else if (result.data.label) labels.push({ type: 'base64', data: result.data.label, pno: pnoList[i] })
+        const d = result.data
+        const url = d.labelUrl || d.label_url || d.url || d.pdfUrl || d.pdf_url || (typeof d === 'string' ? d : null)
+        const base64 = d.label || d.labelContent || d.content || d.image || d.base64
+        if (url) labels.push({ type: 'url', url, pno: pnoList[i] })
+        else if (base64) {
+          const isPdf = base64.startsWith('JVBER')
+          labels.push({ type: isPdf ? 'pdf64' : 'img64', data: base64, pno: pnoList[i] })
+        }
       }
       if (i < pnoList.length - 1) await new Promise(r => setTimeout(r, 200))
     }
 
-    if (labels.length === 0) { flash('❌ ไม่สามารถโหลดใบปะหน้าได้'); return }
+    if (labels.length === 0) {
+      flash('❌ ไม่สามารถโหลดใบปะหน้าได้ — ดู Console (F12)')
+      return
+    }
 
     // เปิดหน้าปริ้นใหม่
     const w = window.open('', '_blank')
