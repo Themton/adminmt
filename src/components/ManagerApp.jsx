@@ -103,6 +103,61 @@ export default function ManagerApp({ profile, onLogout }) {
   const [showExportLogs, setShowExportLogs] = useState(false)
   const loadExportLogs = async () => { setExportLogs(await fetchExportLogs(50)); setShowExportLogs(true) }
 
+  // ═══ เลือกรายชื่อ (Checkbox) ═══
+  const [shipSelected, setShipSelected] = useState(new Set())
+  const [bulkCreating, setBulkCreating] = useState(false)
+  const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0, results: [] })
+
+  const toggleShipSelect = (id) => {
+    setShipSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+  const toggleShipSelectAll = (ids) => {
+    setShipSelected(prev => {
+      const allSelected = ids.every(id => prev.has(id))
+      if (allSelected) return new Set()
+      return new Set(ids)
+    })
+  }
+
+  const bulkCreateFlash = async (selectedOrders) => {
+    if (!selectedOrders.length) { flash('❌ กรุณาเลือกออเดอร์'); return }
+    const noPno = selectedOrders.filter(o => !o.flash_pno)
+    if (!noPno.length) { flash('⚠️ ออเดอร์ที่เลือกมีเลขพัสดุแล้วทั้งหมด'); return }
+    if (!confirm(`⚡ สร้างเลขพัสดุ Flash Express ${noPno.length} รายการ?\n\n${noPno.map(o => '• ' + o.customer_name).join('\n')}`)) return
+
+    setBulkCreating(true)
+    setBulkProgress({ done: 0, total: noPno.length, results: [] })
+
+    const results = []
+    for (let i = 0; i < noPno.length; i++) {
+      const order = noPno[i]
+      flash(`⏳ สร้างเลขพัสดุ ${i+1}/${noPno.length}... ${order.customer_name}`)
+      const result = await createFlashOrder(order, flashSrcInfo)
+      if (result.code === 1 && result.data?.pno) {
+        await supabase.from('mt_orders').update({ flash_pno: result.data.pno, flash_status: 'created', shipping_status: 'printed' }).eq('id', order.id)
+        setOrders(prev => prev.map(o => o.id === order.id ? { ...o, flash_pno: result.data.pno, flash_status: 'created', shipping_status: 'printed' } : o))
+        results.push({ name: order.customer_name, pno: result.data.pno, ok: true })
+      } else {
+        results.push({ name: order.customer_name, error: result.message || 'ไม่สำเร็จ', ok: false })
+      }
+      setBulkProgress({ done: i+1, total: noPno.length, results: [...results] })
+      // delay เล็กน้อย ป้องกัน rate limit
+      if (i < noPno.length - 1) await new Promise(r => setTimeout(r, 300))
+    }
+
+    setBulkCreating(false)
+    setShipSelected(new Set())
+    const okCount = results.filter(r => r.ok).length
+    const failCount = results.filter(r => !r.ok).length
+    flash(`✅ สร้างเลขพัสดุสำเร็จ ${okCount} รายการ` + (failCount ? ` | ❌ ไม่สำเร็จ ${failCount}` : ''))
+    // แสดงผลลัพธ์ใน modal
+    setFlashModal({ bulkResults: results })
+  }
+
   const sendToFlash = async (order) => {
     if (!confirm(`📦 ส่งออเดอร์ไป Flash Express?\n\n${order.customer_name}\n${order.customer_phone}\n${order.district} ${order.province}`)) return
     flash('⏳ กำลังส่งไป Flash...')
@@ -453,6 +508,20 @@ export default function ManagerApp({ profile, onLogout }) {
                 </div>
               </div>
             )) : <div style={{ fontSize: 13, color: T.textDim, textAlign: 'center', padding: 20 }}>ไม่พบข้อมูลการติดตาม</div>}
+          </div>}
+          {/* Bulk Create Results */}
+          {flashModal.bulkResults && <div>
+            <div style={{ fontWeight: 700, marginBottom: 10, fontSize: 14 }}>📦 ผลการสร้างเลขพัสดุ ({flashModal.bulkResults.filter(r=>r.ok).length}/{flashModal.bulkResults.length})</div>
+            <div style={{ maxHeight: 400, overflowY: 'auto' }}>
+              {flashModal.bulkResults.map((r, i) => (
+                <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '8px 10px', marginBottom: 4, borderRadius: 6, background: r.ok ? 'rgba(45,138,78,0.05)' : 'rgba(214,48,49,0.05)', border: `1px solid ${r.ok ? 'rgba(45,138,78,0.15)' : 'rgba(214,48,49,0.15)'}` }}>
+                  <span style={{ fontSize: 14 }}>{r.ok ? '✅' : '❌'}</span>
+                  <span style={{ fontSize: 12, fontWeight: 600, flex: 1 }}>{r.name}</span>
+                  {r.pno && <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#2980B9', fontWeight: 700 }}>{r.pno}</span>}
+                  {r.error && <span style={{ fontSize: 11, color: T.danger }}>{r.error}</span>}
+                </div>
+              ))}
+            </div>
           </div>}
         </>}
       </Modal>
@@ -1169,9 +1238,29 @@ export default function ManagerApp({ profile, onLogout }) {
 
           {/* ═══ Table ═══ */}
           <div style={{ overflowX: 'auto', background: '#fff', borderRadius: 10, border: `1px solid ${T.border}` }}>
+            {/* Bulk action bar */}
+            {shipSelected.size > 0 && (
+              <div style={{ padding: '10px 14px', background: '#EBF5FB', borderBottom: '1px solid #AED6F1', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#2980B9' }}>เลือก {shipSelected.size} รายการ</span>
+                <div style={{ flex: 1 }} />
+                <button onClick={() => {
+                  const sel = orders.filter(o => shipSelected.has(o.id))
+                  bulkCreateFlash(sel)
+                }} disabled={bulkCreating} style={{ padding: '8px 18px', borderRadius: 6, border: 'none', background: bulkCreating ? '#BDC3C7' : '#E67E22', color: '#fff', fontSize: 12, fontWeight: 700, cursor: bulkCreating ? 'wait' : 'pointer', fontFamily: T.font }}>
+                  {bulkCreating ? `⏳ กำลังสร้าง ${bulkProgress.done}/${bulkProgress.total}...` : `⚡ สร้างเลขพัสดุ Flash (${shipSelected.size})`}
+                </button>
+                <button onClick={() => setShipSelected(new Set())} style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid #AED6F1', background: '#fff', color: '#5D6D7E', fontSize: 12, cursor: 'pointer', fontFamily: T.font }}>✕ ยกเลิก</button>
+              </div>
+            )}
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: T.font, minWidth: 1050 }}>
               <thead>
                 <tr style={{ background: '#F8F9FA', borderBottom: '2px solid #DEE2E6' }}>
+                  <th style={{ padding: '10px 6px', textAlign: 'center', width: 32 }}>
+                    <input type="checkbox" onChange={() => {
+                      const ids = shipOrders.map(o => o.id)
+                      toggleShipSelectAll(ids)
+                    }} checked={shipOrders.length > 0 && shipOrders.every(o => shipSelected.has(o.id))} style={{ width: 16, height: 16, cursor: 'pointer', accentColor: '#2980B9' }} />
+                  </th>
                   <th style={{ padding: '10px 6px', textAlign: 'center', fontWeight: 600, color: '#5D6D7E', width: 30 }}>#</th>
                   <th style={{ padding: '10px 6px', textAlign: 'left', fontWeight: 600, color: '#5D6D7E' }}>วันที่</th>
                   <th style={{ padding: '10px 6px', textAlign: 'left', fontWeight: 600, color: '#5D6D7E' }}>เวลา</th>
@@ -1201,7 +1290,10 @@ export default function ManagerApp({ profile, onLogout }) {
                   const dateStr = dt.toLocaleDateString('th-TH', { timeZone: 'Asia/Bangkok', day: '2-digit', month: 'short', year: 'numeric' })
                   const timeStr = dt.toLocaleTimeString('th-TH', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' น.'
                   return (
-                    <tr key={o.id} style={{ borderBottom: '1px solid #EAECEE', background: i % 2 === 0 ? '#fff' : '#FAFBFC' }}>
+                    <tr key={o.id} style={{ borderBottom: '1px solid #EAECEE', background: shipSelected.has(o.id) ? '#EBF5FB' : (i % 2 === 0 ? '#fff' : '#FAFBFC') }}>
+                      <td style={{ padding: '10px 6px', textAlign: 'center' }}>
+                        <input type="checkbox" checked={shipSelected.has(o.id)} onChange={() => toggleShipSelect(o.id)} style={{ width: 16, height: 16, cursor: 'pointer', accentColor: '#2980B9' }} />
+                      </td>
                       <td style={{ padding: '10px 6px', textAlign: 'center' }}>
                         <button onClick={() => hasPno ? printLabel(o.flash_pno) : null} style={{ background: 'none', border: 'none', cursor: hasPno ? 'pointer' : 'default', fontSize: 14, opacity: hasPno ? 1 : 0.3 }} title={hasPno ? 'ปริ้นใบปะหน้า' : 'ยังไม่มีเลขพัสดุ'}>🖨</button>
                       </td>
