@@ -261,6 +261,56 @@ export default function ManagerApp({ profile, onLogout }) {
     }
   }
 
+  // ═══ Bulk Print Labels — ปริ้นใบปะหน้าหลายรายการ ═══
+  const bulkPrintLabels = async (pnoList) => {
+    if (!pnoList.length) { flash('❌ ไม่มีเลขพัสดุ'); return }
+    flash(`⏳ กำลังโหลดใบปะหน้า ${pnoList.length} รายการ...`)
+
+    const labels = []
+    for (let i = 0; i < pnoList.length; i++) {
+      flash(`⏳ โหลดใบปะหน้า ${i+1}/${pnoList.length}...`)
+      const result = await printFlashLabel(pnoList[i])
+      if (result.code === 1 && result.data) {
+        if (result.data.labelUrl) labels.push({ type: 'url', url: result.data.labelUrl, pno: pnoList[i] })
+        else if (result.data.label) labels.push({ type: 'base64', data: result.data.label, pno: pnoList[i] })
+      }
+      if (i < pnoList.length - 1) await new Promise(r => setTimeout(r, 200))
+    }
+
+    if (labels.length === 0) { flash('❌ ไม่สามารถโหลดใบปะหน้าได้'); return }
+
+    // เปิดหน้าปริ้นใหม่
+    const w = window.open('', '_blank')
+    w.document.write(`<html><head><title>ใบปะหน้า ${labels.length} รายการ — THE MT</title>
+      <style>
+        @media print { .no-print { display: none !important; } @page { margin: 0; size: A4; } .label-page { page-break-after: always; } }
+        body { margin: 0; font-family: sans-serif; background: #f5f5f5; }
+        .label-page { display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 10px; box-sizing: border-box; }
+        .label-page img { max-width: 100%; max-height: 95vh; }
+        .toolbar { position: fixed; top: 0; left: 0; right: 0; background: #333; color: #fff; padding: 12px 20px; display: flex; gap: 12px; align-items: center; z-index: 999; }
+        .toolbar button { padding: 8px 20px; border: none; border-radius: 6px; font-size: 14px; font-weight: 700; cursor: pointer; }
+      </style>
+    </head><body>
+      <div class="toolbar no-print">
+        <span>🖨 ใบปะหน้า ${labels.length} รายการ</span>
+        <button onclick="window.print()" style="background:#E67E22;color:#fff">🖨 ปริ้นทั้งหมด</button>
+        <button onclick="window.close()" style="background:#95a5a6;color:#fff">✕ ปิด</button>
+      </div>
+      <div style="margin-top:50px">`)
+
+    labels.forEach((l, i) => {
+      if (l.type === 'url') {
+        w.document.write(`<div class="label-page"><img src="${l.url}" alt="${l.pno}"/></div>`)
+      } else {
+        w.document.write(`<div class="label-page"><img src="data:image/png;base64,${l.data}" alt="${l.pno}"/></div>`)
+      }
+    })
+
+    w.document.write('</div></body></html>')
+    w.document.close()
+    flash(`✅ โหลดใบปะหน้า ${labels.length} รายการสำเร็จ`)
+  }
+
   // ═══ Flash Proxy URL ═══
   const [flashProxyUrl, setFlashProxyUrl] = useState(() => {
     try { return localStorage.getItem('flash_proxy_url') || '' } catch { return '' }
@@ -535,6 +585,9 @@ export default function ManagerApp({ profile, onLogout }) {
                 </div>
               ))}
             </div>
+            {(() => { const pnos = flashModal.bulkResults.filter(r => r.ok && r.pno).map(r => r.pno); return pnos.length > 0 && (
+              <button onClick={() => bulkPrintLabels(pnos)} style={{ width: '100%', marginTop: 12, padding: '12px 20px', borderRadius: 8, border: 'none', background: '#E67E22', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: T.font }}>🖨 ปริ้นใบปะหน้าทั้งหมด ({pnos.length} รายการ)</button>
+            ) })()}
           </div>}
         </>}
       </Modal>
@@ -1282,6 +1335,10 @@ export default function ManagerApp({ profile, onLogout }) {
                   const sel = orders.filter(o => shipSelected.has(o.id))
                   exportProshipExcel(sel, 'Selected_' + sel.length + '.xlsx', profile, 'shipping').then(() => flash('✅ Export สำเร็จ'))
                 }} style={{ padding: '7px 14px', borderRadius: 6, border: '1px solid #2980B9', background: '#EBF5FB', color: '#2980B9', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: T.font }}>📊 Export ที่เลือก</button>
+                {/* ปริ้นใบปะหน้า */}
+                {(() => { const pnos = orders.filter(o => shipSelected.has(o.id) && o.flash_pno).map(o => o.flash_pno); return pnos.length > 0 && (
+                  <button onClick={() => bulkPrintLabels(pnos)} style={{ padding: '7px 14px', borderRadius: 6, border: '1px solid #E67E22', background: '#FEF5E7', color: '#E67E22', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: T.font }}>🖨 ปริ้นใบปะหน้า ({pnos.length})</button>
+                ) })()}
                 <button onClick={() => setShipSelected(new Set())} style={{ padding: '7px 10px', borderRadius: 6, border: '1px solid #D5D8DC', background: '#fff', color: '#85929E', fontSize: 11, cursor: 'pointer', fontFamily: T.font }}>✕</button>
               </div>
             )}
