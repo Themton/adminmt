@@ -76,7 +76,7 @@ async function createOrder(data) {
   const params = {
     outTradeNo: data.outTradeNo || ('MT' + Date.now()),
     expressCategory: '1',
-    articleCategory: '1',
+    articleCategory: '99',
     weight: String(data.weight || 500),
   };
 
@@ -97,6 +97,15 @@ async function createOrder(data) {
   if (data.dstDistrictName) params.dstDistrictName = data.dstDistrictName;
   if (data.dstPostalCode) params.dstPostalCode = data.dstPostalCode;
   if (data.dstDetailAddress) params.dstDetailAddress = data.dstDetailAddress;
+
+  // ที่อยู่ส่งคืน (return) — ใช้ที่อยู่ผู้ส่ง
+  params.returnName = data.srcName || '';
+  params.returnPhone = data.srcPhone || '';
+  params.returnProvinceName = data.srcProvinceName || '';
+  params.returnCityName = data.srcCityName || '';
+  params.returnDistrictName = data.srcDistrictName || '';
+  params.returnPostalCode = data.srcPostalCode || '';
+  params.returnDetailAddress = data.srcDetailAddress || '';
 
   // COD
   if (data.codEnabled && data.codAmount > 0) {
