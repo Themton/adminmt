@@ -99,7 +99,7 @@ export default function PackerApp({ profile, onLogout }) {
     if (!o.flash_pno) return o.shipping_status==='printed'?{l:'พร้อมส่ง',bg:'#D5F5E3',c:'#1E8449',i:'✅'}:{l:'เตรียมส่ง',bg:'#FDEBD0',c:'#CA6F1E',i:'🚚'}
     if (o.flash_status==='cancelled') return {l:'ยกเลิก',bg:'#FADBD8',c:'#C0392B',i:'❌'}
     const n=parseInt((o.flash_status||'').replace('flash_',''))||0
-    return (n>0&&SM[n])?SM[n]:{l:'รับเข้าระบบ',bg:'#D4E6F1',c:'#2471A3',i:'📥'}
+    return (n>0&&SM[n])?SM[n]:{l:'สร้างเลขพัสดุแล้ว',bg:'#F4ECF7',c:'#8E44AD',i:'⚡'}
   }
 
   const bulkCreateFlash = async (sel) => {
@@ -325,7 +325,8 @@ export default function PackerApp({ profile, onLogout }) {
   const shipOrders = dateFiltered.filter(o => {
     if(shipFilter==='preparing')return(!o.shipping_status||o.shipping_status==='waiting')&&!o.flash_pno
     if(shipFilter==='printed')return o.shipping_status==='printed'&&!o.flash_pno
-    if(shipFilter==='insystem')return o.flash_pno&&['created','manual','flash_1'].includes(o.flash_status)
+    if(shipFilter==='created')return o.flash_pno&&['created','manual'].includes(o.flash_status)
+    if(shipFilter==='insystem')return o.flash_pno&&o.flash_status==='flash_1'
     if(shipFilter==='pickedup')return['flash_2','flash_3'].includes(o.flash_status)
     if(shipFilter==='delivering')return o.flash_status==='flash_4'
     if(shipFilter==='delivered')return o.flash_status==='flash_5'
@@ -337,7 +338,7 @@ export default function PackerApp({ profile, onLogout }) {
   const lastRef=useRef(null)
   const toggleSelect=(id,e)=>{const list=searchFiltered.slice((page-1)*pageSize,page*pageSize);const idx=list.findIndex(o=>o.id===id);if(e?.shiftKey&&lastRef.current!==null){const s=Math.min(lastRef.current,idx),en=Math.max(lastRef.current,idx);setSelectedIds(prev=>{const n=new Set(prev);for(let i=s;i<=en;i++)n.add(list[i].id);return n})}else{setSelectedIds(prev=>{const n=new Set(prev);n.has(id)?n.delete(id):n.add(id);return n})};lastRef.current=idx}
   const toggleAll=()=>{const p=searchFiltered.slice((page-1)*pageSize,page*pageSize).map(o=>o.id);const a=p.length>0&&p.every(id=>selectedIds.has(id));setSelectedIds(prev=>{const n=new Set(prev);p.forEach(id=>a?n.delete(id):n.add(id));return n})}
-  const C={all:dateFiltered.length,preparing:dateFiltered.filter(o=>(!o.shipping_status||o.shipping_status==='waiting')&&!o.flash_pno).length,printed:dateFiltered.filter(o=>o.shipping_status==='printed'&&!o.flash_pno).length,insystem:dateFiltered.filter(o=>o.flash_pno&&['created','manual','flash_1'].includes(o.flash_status)).length,pickedup:dateFiltered.filter(o=>['flash_2','flash_3'].includes(o.flash_status)).length,delivering:dateFiltered.filter(o=>o.flash_status==='flash_4').length,delivered:dateFiltered.filter(o=>o.flash_status==='flash_5').length,returned:dateFiltered.filter(o=>o.flash_status==='flash_6'||o.flash_status==='cancelled').length}
+  const C={all:dateFiltered.length,preparing:dateFiltered.filter(o=>(!o.shipping_status||o.shipping_status==='waiting')&&!o.flash_pno).length,printed:dateFiltered.filter(o=>o.shipping_status==='printed'&&!o.flash_pno).length,created:dateFiltered.filter(o=>o.flash_pno&&['created','manual'].includes(o.flash_status)).length,insystem:dateFiltered.filter(o=>o.flash_pno&&o.flash_status==='flash_1').length,pickedup:dateFiltered.filter(o=>['flash_2','flash_3'].includes(o.flash_status)).length,delivering:dateFiltered.filter(o=>o.flash_status==='flash_4').length,delivered:dateFiltered.filter(o=>o.flash_status==='flash_5').length,returned:dateFiltered.filter(o=>o.flash_status==='flash_6'||o.flash_status==='cancelled').length}
 
   return (
     <div style={{fontFamily:T.font,minHeight:'100vh',background:'#F4F6F7',color:T.text,paddingBottom:40}}>
@@ -500,7 +501,7 @@ export default function PackerApp({ profile, onLogout }) {
 
             {/* Status tabs */}
             <div style={{display:'flex',gap:0,borderBottom:'2px solid #EAECEE',marginBottom:12,overflowX:'auto'}}>
-              {[{id:'all',i:'📦',l:'ทั้งหมด',c:'#2980B9'},{id:'preparing',i:'🚚',l:'เตรียมส่ง',c:'#E67E22'},{id:'printed',i:'🖨',l:'ปริ้นแล้ว',c:'#16A085'},{id:'insystem',i:'📥',l:'รับเข้าระบบ',c:'#5D6D7E'},{id:'pickedup',i:'📦',l:'รับพัสดุแล้ว',c:'#2471A3'},{id:'delivering',i:'🛵',l:'กำลังจัดส่ง',c:'#CA6F1E'},{id:'delivered',i:'✅',l:'เซ็นรับแล้ว',c:'#1E8449'},{id:'returned',i:'↩️',l:'ตีกลับ',c:'#C0392B'}].map(f=>(<button key={f.id} onClick={()=>{setShipFilter(f.id);setPage(1)}} style={{padding:'8px 12px',border:'none',cursor:'pointer',fontFamily:T.font,fontSize:11,fontWeight:500,background:'transparent',color:shipFilter===f.id?f.c:'#85929E',borderBottom:shipFilter===f.id?'3px solid '+f.c:'3px solid transparent',marginBottom:-2,whiteSpace:'nowrap'}}>{f.i} {f.l} <strong style={{marginLeft:2}}>{C[f.id]}</strong></button>))}
+              {[{id:'all',i:'📦',l:'ทั้งหมด',c:'#2980B9'},{id:'preparing',i:'🚚',l:'เตรียมส่ง',c:'#E67E22'},{id:'printed',i:'🖨',l:'ปริ้นแล้ว',c:'#16A085'},{id:'created',i:'⚡',l:'สร้างเลขพัสดุแล้ว',c:'#8E44AD'},{id:'insystem',i:'📥',l:'รับเข้าระบบ',c:'#5D6D7E'},{id:'pickedup',i:'📦',l:'รับพัสดุแล้ว',c:'#2471A3'},{id:'delivering',i:'🛵',l:'กำลังจัดส่ง',c:'#CA6F1E'},{id:'delivered',i:'✅',l:'เซ็นรับแล้ว',c:'#1E8449'},{id:'returned',i:'↩️',l:'ตีกลับ',c:'#C0392B'}].map(f=>(<button key={f.id} onClick={()=>{setShipFilter(f.id);setPage(1)}} style={{padding:'8px 12px',border:'none',cursor:'pointer',fontFamily:T.font,fontSize:11,fontWeight:500,background:'transparent',color:shipFilter===f.id?f.c:'#85929E',borderBottom:shipFilter===f.id?'3px solid '+f.c:'3px solid transparent',marginBottom:-2,whiteSpace:'nowrap'}}>{f.i} {f.l} <strong style={{marginLeft:2}}>{C[f.id]}</strong></button>))}
             </div>
 
             {/* Bulk Actions */}

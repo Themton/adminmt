@@ -289,8 +289,8 @@ export default function ManagerApp({ profile, onLogout }) {
     const stateNum = parseInt((order.flash_status || '').replace('flash_', '')) || 0
     if (stateNum > 0 && flashStateMap[stateNum]) return flashStateMap[stateNum]
     // fallback
-    if (order.flash_status === 'created' || order.flash_status === 'manual') return { label: 'รับเข้าระบบ', bg: '#D4E6F1', color: '#2471A3' }
-    return { label: 'รับเข้าระบบ', bg: '#D4E6F1', color: '#2471A3' }
+    if (order.flash_status === 'created' || order.flash_status === 'manual') return { label: 'สร้างเลขพัสดุแล้ว', bg: '#F4ECF7', color: '#8E44AD' }
+    return { label: 'สร้างเลขพัสดุแล้ว', bg: '#F4ECF7', color: '#8E44AD' }
   }
 
   // ═══ Print Label — ปริ้นใบปะหน้า ═══
@@ -1311,7 +1311,8 @@ export default function ManagerApp({ profile, onLogout }) {
           })
           const shipOrders = allShipOrders.filter(o => {
             if (shipFilter === 'preparing') return (!o.shipping_status || o.shipping_status === 'waiting') && !o.flash_pno
-            if (shipFilter === 'insystem') return o.flash_pno && ['created','manual','flash_1'].includes(o.flash_status)
+            if (shipFilter === 'created') return o.flash_pno && ['created','manual'].includes(o.flash_status)
+            if (shipFilter === 'insystem') return o.flash_pno && o.flash_status === 'flash_1'
             if (shipFilter === 'pickedup') return ['flash_2','flash_3'].includes(o.flash_status)
             if (shipFilter === 'delivering') return o.flash_status === 'flash_4'
             if (shipFilter === 'delivered') return o.flash_status === 'flash_5'
@@ -1382,7 +1383,8 @@ export default function ManagerApp({ profile, onLogout }) {
             <div style={{ display: 'flex', gap: 0, borderBottom: '2px solid #EAECEE', marginBottom: 16, overflowX: 'auto' }}>
               {(() => {
                 const preparing = allShipOrders.filter(o => (!o.shipping_status || o.shipping_status === 'waiting') && !o.flash_pno)
-                const inSystem = allShipOrders.filter(o => o.flash_pno && ['created','manual','flash_1'].includes(o.flash_status))
+                const created = allShipOrders.filter(o => o.flash_pno && ['created','manual'].includes(o.flash_status))
+                const inSystem = allShipOrders.filter(o => o.flash_pno && o.flash_status === 'flash_1')
                 const pickedUp = allShipOrders.filter(o => ['flash_2','flash_3'].includes(o.flash_status))
                 const delivering = allShipOrders.filter(o => o.flash_status === 'flash_4')
                 const delivered = allShipOrders.filter(o => o.flash_status === 'flash_5')
@@ -1390,6 +1392,7 @@ export default function ManagerApp({ profile, onLogout }) {
                 const filters = [
                   { id: 'all', icon: '📦', label: 'ทั้งหมด', count: allShipOrders.length, color: '#2980B9' },
                   { id: 'preparing', icon: '🚚', label: 'เตรียมส่ง', count: preparing.length, color: '#E67E22' },
+                  { id: 'created', icon: '⚡', label: 'สร้างเลขพัสดุแล้ว', count: created.length, color: '#8E44AD' },
                   { id: 'insystem', icon: '📥', label: 'รับเข้าระบบ', count: inSystem.length, color: '#5D6D7E' },
                   { id: 'pickedup', icon: '📦', label: 'รับพัสดุแล้ว', count: pickedUp.length, color: '#2471A3' },
                   { id: 'delivering', icon: '🛵', label: 'กำลังจัดส่ง', count: delivering.length, color: '#CA6F1E' },
