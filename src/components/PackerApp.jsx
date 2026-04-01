@@ -23,6 +23,8 @@ export default function PackerApp({ profile, onLogout }) {
   const [flashModal, setFlashModal] = useState(null)
   const [showSettings, setShowSettings] = useState(false)
   const [pnoModal, setPnoModal] = useState(null)
+  const [showCreateOrder, setShowCreateOrder] = useState(false)
+  const [newOrder, setNewOrder] = useState({ customer_name:'', customer_phone:'', customer_address:'', sub_district:'', district:'', province:'', zip_code:'', payment_type:'cod', sale_price:'', cod_amount:'', remark:'' })
   const [pnoInput, setPnoInput] = useState('')
   const flash = (m) => { setToast(m); setTimeout(() => setToast(null), 3500) }
 
@@ -70,6 +72,49 @@ export default function PackerApp({ profile, onLogout }) {
   const savePno = async () => { if(!pnoModal)return; const v=pnoInput.trim(); await supabase.from('mt_orders').update({flash_pno:v,flash_status:v?'manual':''}).eq('id',pnoModal.orderId); setOrders(prev=>prev.map(o=>o.id===pnoModal.orderId?{...o,flash_pno:v,flash_status:v?'manual':''}:o)); setPnoModal(null);flash('OK') }
 
   const cancelFlash = async (o) => { if(!confirm('ยกเลิก '+o.flash_pno+'?\nต้องยกเลิกใน Flash portal ด้วย'))return; await supabase.from('mt_orders').update({flash_pno:'',flash_status:'cancelled',flash_sort_code:'',shipping_status:'waiting'}).eq('id',o.id); setOrders(prev=>prev.map(x=>x.id===o.id?{...x,flash_pno:'',flash_status:'cancelled',flash_sort_code:'',shipping_status:'waiting'}:x)); flash('ลบแล้ว') }
+
+  // ═══ สร้างออเดอร์ใหม่ + สร้างเลขพัสดุ Flash ═══
+  const createNewOrder = async (andFlash) => {
+    const n = newOrder
+    if (!n.customer_name || !n.customer_phone) { flash('กรุณาใส่ชื่อและเบอร์โทร'); return }
+    if (!n.district || !n.province || !n.zip_code) { flash('กรุณาใส่ อำเภอ จังหวัด รหัสไปรษณีย์'); return }
+    flash('⏳ กำลังบันทึก...')
+    const orderData = {
+      customer_name: n.customer_name.trim(),
+      customer_phone: n.customer_phone.trim(),
+      customer_address: n.customer_address.trim(),
+      sub_district: n.sub_district.trim(),
+      district: n.district.trim(),
+      province: n.province.trim(),
+      zip_code: n.zip_code.trim(),
+      payment_type: n.payment_type,
+      sale_price: parseFloat(n.sale_price) || 0,
+      cod_amount: parseFloat(n.cod_amount || n.sale_price) || 0,
+      remark: n.remark.trim(),
+      order_date: new Date().toISOString().split('T')[0],
+      employee_name: profile.full_name || '',
+      shipping_status: 'waiting',
+    }
+    const { data, error } = await supabase.from('mt_orders').insert(orderData).select().single()
+    if (error) { flash('❌ ' + error.message); return }
+    setOrders(prev => [data, ...prev])
+    flash('✅ สร้างออเดอร์สำเร็จ')
+
+    // สร้างเลขพัสดุ Flash ด้วย
+    if (andFlash) {
+      flash('⏳ สร้างเลขพัสดุ Flash...')
+      const r = await createFlashOrder(data, flashSrcInfo)
+      if (r.code === 1 && r.data?.pno) {
+        await supabase.from('mt_orders').update({ flash_pno: r.data.pno, flash_status: 'created', shipping_status: 'printed', flash_sort_code: r.data.sortCode || '' }).eq('id', data.id)
+        setOrders(prev => prev.map(o => o.id === data.id ? { ...o, flash_pno: r.data.pno, flash_status: 'created', shipping_status: 'printed', flash_sort_code: r.data.sortCode || '' } : o))
+        flash('✅ สร้างเลขพัสดุ Flash สำเร็จ! ' + r.data.pno)
+      } else {
+        flash('❌ สร้างเลขพัสดุไม่สำเร็จ: ' + (r.message || 'Error'))
+      }
+    }
+    setShowCreateOrder(false)
+    setNewOrder({ customer_name:'', customer_phone:'', customer_address:'', sub_district:'', district:'', province:'', zip_code:'', payment_type:'cod', sale_price:'', cod_amount:'', remark:'' })
+  }
 
   const refreshStatus = async () => {
     const wp=dateFiltered.filter(o=>o.flash_pno&&o.flash_status!=='cancelled'); if(!wp.length){flash('ไม่มี');return}
@@ -148,6 +193,49 @@ export default function PackerApp({ profile, onLogout }) {
         </>}
       </Modal>
       <Modal show={!!pnoModal} onClose={()=>setPnoModal(null)} title="แก้ไขเลขพัสดุ">{pnoModal&&<div><div style={{marginBottom:8,fontSize:12,color:'#85929E'}}>{pnoModal.customerName}</div><input value={pnoInput} onChange={e=>setPnoInput(e.target.value)} placeholder="เลขพัสดุ..." style={{width:'100%',padding:'10px 12px',borderRadius:6,border:'1px solid #ddd',fontSize:14,fontFamily:'monospace',marginBottom:10}} /><div style={{display:'flex',gap:8}}><button onClick={savePno} style={{flex:1,padding:10,borderRadius:6,border:'none',background:'#3498DB',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer'}}>บันทึก</button><button onClick={()=>{setPnoInput('');savePno()}} style={{padding:'10px 14px',borderRadius:6,border:'1px solid #E74C3C',background:'#FDEDEC',color:'#E74C3C',fontSize:13,fontWeight:700,cursor:'pointer'}}>ลบ</button></div></div>}</Modal>
+      {/* ═══ Create Order Modal ═══ */}
+      <Modal show={showCreateOrder} onClose={()=>setShowCreateOrder(false)} title="📦 สร้างออเดอร์ใหม่">
+        <div>
+          {[
+            {l:'ชื่อลูกค้า *',k:'customer_name',ph:'ชื่อ-นามสกุล'},
+            {l:'เบอร์โทร *',k:'customer_phone',ph:'0812345678'},
+            {l:'ที่อยู่',k:'customer_address',ph:'บ้านเลขที่ ซอย ถนน'},
+            {l:'ตำบล/แขวง',k:'sub_district',ph:'ตำบล'},
+            {l:'อำเภอ/เขต *',k:'district',ph:'อำเภอ'},
+            {l:'จังหวัด *',k:'province',ph:'จังหวัด'},
+            {l:'รหัสไปรษณีย์ *',k:'zip_code',ph:'10000'},
+          ].map(f=><div key={f.k} style={{marginBottom:6}}>
+            <div style={{fontSize:10,color:'#85929E',marginBottom:2}}>{f.l}</div>
+            <input value={newOrder[f.k]} onChange={e=>setNewOrder({...newOrder,[f.k]:e.target.value})} placeholder={f.ph} style={{width:'100%',padding:'7px 10px',borderRadius:6,border:'1px solid #DEE2E6',fontSize:13,fontFamily:T.font}} />
+          </div>)}
+          <div style={{display:'flex',gap:8,marginBottom:6}}>
+            <div style={{flex:1}}>
+              <div style={{fontSize:10,color:'#85929E',marginBottom:2}}>ประเภทชำระ</div>
+              <select value={newOrder.payment_type} onChange={e=>setNewOrder({...newOrder,payment_type:e.target.value})} style={{width:'100%',padding:'7px 10px',borderRadius:6,border:'1px solid #DEE2E6',fontSize:13,fontFamily:T.font}}>
+                <option value="cod">COD (เก็บเงินปลายทาง)</option>
+                <option value="transfer">โอนแล้ว</option>
+              </select>
+            </div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:10,color:'#85929E',marginBottom:2}}>ราคา</div>
+              <input value={newOrder.sale_price} onChange={e=>setNewOrder({...newOrder,sale_price:e.target.value})} placeholder="0" type="number" style={{width:'100%',padding:'7px 10px',borderRadius:6,border:'1px solid #DEE2E6',fontSize:13,fontFamily:T.font}} />
+            </div>
+          </div>
+          {newOrder.payment_type==='cod'&&<div style={{marginBottom:6}}>
+            <div style={{fontSize:10,color:'#85929E',marginBottom:2}}>ยอด COD (ถ้าต่างจากราคา)</div>
+            <input value={newOrder.cod_amount} onChange={e=>setNewOrder({...newOrder,cod_amount:e.target.value})} placeholder={newOrder.sale_price||'เท่ากับราคา'} type="number" style={{width:'100%',padding:'7px 10px',borderRadius:6,border:'1px solid #DEE2E6',fontSize:13,fontFamily:T.font}} />
+          </div>}
+          <div style={{marginBottom:10}}>
+            <div style={{fontSize:10,color:'#85929E',marginBottom:2}}>หมายเหตุ/สินค้า</div>
+            <input value={newOrder.remark} onChange={e=>setNewOrder({...newOrder,remark:e.target.value})} placeholder="Rong 1 (50g) เซรั่ม 1..." style={{width:'100%',padding:'7px 10px',borderRadius:6,border:'1px solid #DEE2E6',fontSize:13,fontFamily:T.font}} />
+          </div>
+          <div style={{display:'flex',gap:8}}>
+            <button onClick={()=>createNewOrder(false)} style={{flex:1,padding:'12px',borderRadius:8,border:'1px solid #3498DB',background:'#EBF5FB',color:'#3498DB',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>💾 บันทึกออเดอร์</button>
+            <button onClick={()=>createNewOrder(true)} style={{flex:1,padding:'12px',borderRadius:8,border:'none',background:'#E67E22',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>⚡ บันทึก + สร้างเลขพัสดุ</button>
+          </div>
+        </div>
+      </Modal>
+
       <Modal show={showSettings} onClose={()=>setShowSettings(false)} title="ตั้งค่า Flash">
         <div style={{marginBottom:14,padding:10,borderRadius:6,background:'rgba(255,107,0,0.04)',border:'1px solid rgba(255,107,0,0.15)'}}>
           <div style={{fontSize:11,fontWeight:700,marginBottom:6}}>Flash Proxy URL</div>
@@ -164,7 +252,10 @@ export default function PackerApp({ profile, onLogout }) {
       </div>
 
       <div style={{maxWidth:1600,margin:'0 auto',padding:'16px 20px'}}>
-        <div style={{fontSize:20,fontWeight:800,marginBottom:14}}>🚚 ระบบจัดการขนส่ง Flash Express</div>
+        <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:14}}>
+          <div style={{fontSize:20,fontWeight:800}}>🚚 ระบบจัดการขนส่ง Flash Express</div>
+          <button onClick={()=>setShowCreateOrder(true)} style={{padding:'8px 16px',borderRadius:8,border:'none',background:'#E67E22',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:T.font,boxShadow:'0 2px 8px rgba(230,126,34,0.3)'}}>+ สร้างออเดอร์</button>
+        </div>
 
         <div style={{display:'flex',gap:6,marginBottom:12,alignItems:'center',flexWrap:'wrap'}}>
           <input type="date" value={dateFilter} onChange={e=>{setDateFilter(e.target.value);if(!dateFilterEnd||e.target.value>dateFilterEnd)setDateFilterEnd(e.target.value);setQuickFilter('');setPage(1)}} style={{padding:'7px 10px',borderRadius:6,background:'#fff',border:'1px solid #DEE2E6',fontSize:12,fontFamily:T.font}} />
