@@ -49,13 +49,14 @@ export default function PackerApp({ profile, onLogout }) {
   const [dateFilter, setDateFilter] = useState(todayStr)
   const [dateFilterEnd, setDateFilterEnd] = useState(todayStr)
   const [quickFilter, setQuickFilter] = useState('today')
-  const [refreshing, setRefreshing] = useState(false)
   const [bulkCreating, setBulkCreating] = useState(false)
   const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0 })
   const [flashModal, setFlashModal] = useState(null)
   const [showSettings, setShowSettings] = useState(false)
   const [pnoModal, setPnoModal] = useState(null)
   const [showCreateOrder, setShowCreateOrder] = useState(false)
+  // ═══ Global Progress ═══
+  const [gProgress, setGProgress] = useState(null) // { label, done, total, color }
   const [newOrder, setNewOrder] = useState({ customer_name:'', customer_phone:'', customer_address:'', sub_district:'', district:'', province:'', zip_code:'', payment_type:'cod', sale_price:'', cod_amount:'', remark:'' })
   const [pasteText, setPasteText] = useState('')
   const [addresses, setAddresses] = useState([])
@@ -144,8 +145,7 @@ export default function PackerApp({ profile, onLogout }) {
   }
 
   // ═══ ลบออเดอร์ ═══
-  const [deleting, setDeleting] = useState(false)
-  const [deleteProgress, setDeleteProgress] = useState(0)
+  // (using gProgress for all operations)
 
   const deleteOrder = async (o) => {
     if (!confirm(`🗑 ลบออเดอร์?\n\n${o.customer_name}\n${o.customer_phone}\n\n⚠️ ลบถาวร — ไม่สามารถกู้คืนได้`)) return
@@ -159,17 +159,15 @@ export default function PackerApp({ profile, onLogout }) {
   const bulkDeleteOrders = async (ids) => {
     if (!ids.length) return
     if (!confirm(`🗑 ลบ ${ids.length} ออเดอร์?\n\n⚠️ ลบถาวร — ไม่สามารถกู้คืนได้`)) return
-    setDeleting(true); setDeleteProgress(0)
+    setGProgress({ label: '🗑 กำลังลบ', done: 0, total: ids.length, color: '#E74C3C' })
     let done = 0, fail = 0
     for (let i = 0; i < ids.length; i++) {
-      const pct = Math.round(((i + 1) / ids.length) * 100)
-      setDeleteProgress(pct)
-      flash(`🗑 กำลังลบ ${i + 1}/${ids.length} (${pct}%)`)
+      setGProgress(p => ({ ...p, done: i + 1 }))
       const { error } = await supabase.from('mt_orders').delete().eq('id', ids[i])
       if (!error) { setOrders(prev => prev.filter(x => x.id !== ids[i])); done++ } else { fail++ }
       if (i < ids.length - 1) await new Promise(r => setTimeout(r, 100))
     }
-    setDeleting(false); setDeleteProgress(0); setSelectedIds(new Set())
+    setGProgress(null); setSelectedIds(new Set())
     flash(`✅ ลบสำเร็จ ${done} รายการ` + (fail ? ` | ❌ ไม่สำเร็จ ${fail}` : ''))
   }
 
@@ -238,9 +236,15 @@ export default function PackerApp({ profile, onLogout }) {
 
   const refreshStatus = async () => {
     const wp=dateFiltered.filter(o=>o.flash_pno&&o.flash_status!=='cancelled'); if(!wp.length){flash('ไม่มี');return}
-    setRefreshing(true); let u=0
-    for(let i=0;i<wp.length;i++){ if(i%5===0)flash('อัพเดท '+(i+1)+'/'+wp.length); const r=await trackFlashOrder(wp[i].flash_pno); if(r.code===1&&r.data){const ns='flash_'+(r.data.state||0);await supabase.from('mt_orders').update({flash_status:ns}).eq('id',wp[i].id);setOrders(prev=>prev.map(o=>o.id===wp[i].id?{...o,flash_status:ns}:o));u++}; if(i<wp.length-1)await new Promise(r=>setTimeout(r,150)) }
-    setRefreshing(false);flash('อัพเดท '+u+' รายการ')
+    setGProgress({ label: '🔄 อัพเดทสถานะ', done: 0, total: wp.length, color: '#3498DB' })
+    let u=0
+    for(let i=0;i<wp.length;i++){
+      setGProgress(p=>({...p,done:i+1}))
+      const r=await trackFlashOrder(wp[i].flash_pno)
+      if(r.code===1&&r.data){const ns='flash_'+(r.data.state||0);await supabase.from('mt_orders').update({flash_status:ns}).eq('id',wp[i].id);setOrders(prev=>prev.map(o=>o.id===wp[i].id?{...o,flash_status:ns}:o));u++}
+      if(i<wp.length-1)await new Promise(r=>setTimeout(r,150))
+    }
+    setGProgress(null);flash('✅ อัพเดท '+u+' รายการ')
   }
 
   const labelHTML = (order, idx, total) => {
@@ -352,7 +356,18 @@ export default function PackerApp({ profile, onLogout }) {
     return true
   }).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))
   const searchFiltered = shipOrders.filter(o => { if(!searchQuery)return true; const q=searchQuery.toLowerCase(); return(o.customer_name||'').toLowerCase().includes(q)||(o.customer_phone||'').includes(q)||(o.flash_pno||'').includes(q)||(o.remark||'').toLowerCase().includes(q) })
-  const markStatus = async (ids,st) => { await supabase.from('mt_orders').update({shipping_status:st}).in('id',ids); setOrders(prev=>prev.map(o=>ids.includes(o.id)?{...o,shipping_status:st}:o)); flash('OK '+ids.length); setSelectedIds(new Set()) }
+  const markStatus = async (ids, st) => {
+    const labels = { waiting: '🚚 เตรียมส่ง', printed: '🖨 ปริ้นแล้ว', upsell: '💰 รออัพเซล' }
+    setGProgress({ label: labels[st] || 'อัพเดท', done: 0, total: ids.length, color: '#3498DB' })
+    for (let i = 0; i < ids.length; i++) {
+      setGProgress(p => ({ ...p, done: i + 1 }))
+      await supabase.from('mt_orders').update({ shipping_status: st }).eq('id', ids[i])
+      setOrders(prev => prev.map(o => o.id === ids[i] ? { ...o, shipping_status: st } : o))
+      if (i < ids.length - 1) await new Promise(r => setTimeout(r, 50))
+    }
+    setGProgress(null); setSelectedIds(new Set())
+    flash(`✅ ${labels[st] || 'อัพเดท'} ${ids.length} รายการ`)
+  }
   const lastRef=useRef(null)
   const toggleSelect=(id,e)=>{const list=searchFiltered.slice((page-1)*pageSize,page*pageSize);const idx=list.findIndex(o=>o.id===id);if(e?.shiftKey&&lastRef.current!==null){const s=Math.min(lastRef.current,idx),en=Math.max(lastRef.current,idx);setSelectedIds(prev=>{const n=new Set(prev);for(let i=s;i<=en;i++)n.add(list[i].id);return n})}else{setSelectedIds(prev=>{const n=new Set(prev);n.has(id)?n.delete(id):n.add(id);return n})};lastRef.current=idx}
   const toggleAll=()=>{const p=searchFiltered.slice((page-1)*pageSize,page*pageSize).map(o=>o.id);const a=p.length>0&&p.every(id=>selectedIds.has(id));setSelectedIds(prev=>{const n=new Set(prev);p.forEach(id=>a?n.delete(id):n.add(id));return n})}
@@ -361,6 +376,16 @@ export default function PackerApp({ profile, onLogout }) {
   return (
     <div style={{fontFamily:T.font,minHeight:'100vh',background:'#F4F6F7',color:T.text,paddingBottom:40}}>
       <Toast message={toast} />
+      {/* ═══ Global Progress Bar (fixed top) ═══ */}
+      {gProgress&&<div style={{position:'fixed',top:52,left:220,right:0,zIndex:199,padding:'8px 20px',background:'rgba(255,255,255,0.97)',borderBottom:'1px solid #EAECEE',boxShadow:'0 2px 8px rgba(0,0,0,0.06)'}}>
+        <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
+          <span style={{fontSize:12,fontWeight:700,color:gProgress.color}}>{gProgress.label}</span>
+          <span style={{fontSize:12,fontWeight:700,color:gProgress.color}}>{gProgress.done}/{gProgress.total} ({Math.round((gProgress.done/gProgress.total)*100)}%)</span>
+        </div>
+        <div style={{width:'100%',height:6,background:'#EAECEE',borderRadius:3,overflow:'hidden'}}>
+          <div style={{width:Math.round((gProgress.done/gProgress.total)*100)+'%',height:'100%',background:gProgress.color,borderRadius:3,transition:'width 0.15s'}} />
+        </div>
+      </div>}
       <Modal show={!!flashModal} onClose={()=>setFlashModal(null)} title="Flash Express">
         {flashModal&&<>{flashModal.bulkResults&&<div><div style={{fontWeight:700,marginBottom:10,fontSize:14}}>ผลสร้างเลขพัสดุ ({flashModal.bulkResults.filter(r=>r.ok).length}/{flashModal.bulkResults.length})</div><div style={{maxHeight:400,overflowY:'auto'}}>{flashModal.bulkResults.map((r,i)=>(<div key={i} style={{display:'flex',gap:8,alignItems:'center',padding:'8px 10px',marginBottom:4,borderRadius:6,background:r.ok?'rgba(45,138,78,0.05)':'rgba(214,48,49,0.05)',border:'1px solid '+(r.ok?'rgba(45,138,78,0.15)':'rgba(214,48,49,0.15)')}}><span>{r.ok?'OK':'FAIL'}</span><span style={{fontSize:12,fontWeight:600,flex:1}}>{r.name}</span>{r.pno&&<span style={{fontFamily:'monospace',fontSize:11,color:'#2980B9',fontWeight:700}}>{r.pno}</span>}{r.error&&<span style={{fontSize:11,color:'#E74C3C'}}>{r.error}</span>}{r.debug&&<details style={{width:'100%',marginTop:4}}><summary style={{fontSize:10,color:'#999',cursor:'pointer'}}>debug</summary><pre style={{fontSize:9,whiteSpace:'pre-wrap',wordBreak:'break-all'}}>{JSON.stringify(r.debug,null,2)}</pre></details>}</div>))}</div>{(()=>{const p=flashModal.bulkResults.filter(r=>r.ok&&r.pno);return p.length>0&&<button onClick={()=>printLabels(orders.filter(o=>p.some(x=>x.pno===o.flash_pno)))} style={{width:'100%',marginTop:12,padding:'12px',borderRadius:8,border:'none',background:'#E67E22',color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer'}}>ปริ้นใบปะหน้า ({p.length})</button>})()}</div>}
         {flashModal.pno&&flashModal.trackState&&<div><div style={{textAlign:'center',marginBottom:12}}><span style={{fontFamily:'monospace',fontSize:16,fontWeight:900}}>{flashModal.pno}</span></div><div style={{textAlign:'center',padding:12,borderRadius:8,background:(SM[flashModal.trackState]||{}).bg||'#f0f0f0',marginBottom:12}}><div style={{fontSize:20,marginBottom:4}}>{(SM[flashModal.trackState]||{}).i||'📦'}</div><div style={{fontWeight:700,color:(SM[flashModal.trackState]||{}).c||'#333'}}>{flashModal.trackStateText||(SM[flashModal.trackState]||{}).l||'?'}</div></div>{flashModal.tracking?.length>0&&<div style={{maxHeight:300,overflowY:'auto'}}>{flashModal.tracking.map((r,i)=>(<div key={i} style={{display:'flex',gap:8,padding:'6px 0',borderBottom:'1px solid #eee',fontSize:11}}><span style={{color:'#999',minWidth:100}}>{r.dateTime||r.datetime||''}</span><span>{r.message||r.routeDesc||''}</span></div>))}</div>}</div>}
@@ -535,7 +560,7 @@ export default function PackerApp({ profile, onLogout }) {
               {[{id:'today',label:'วันนี้',fn:()=>{setDateFilter(todayStr);setDateFilterEnd(todayStr)}},{id:'7days',label:'7 วัน',fn:()=>{const d=new Date();d.setDate(d.getDate()-6);setDateFilter(d.toISOString().split('T')[0]);setDateFilterEnd(todayStr)}},{id:'month',label:'เดือนนี้',fn:()=>{setDateFilter(new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0')+'-01');setDateFilterEnd(todayStr)}}].map(b=><button key={b.id} onClick={()=>{b.fn();setQuickFilter(b.id);setPage(1)}} style={{padding:'7px 14px',borderRadius:6,border:quickFilter===b.id?'none':'1px solid #DEE2E6',background:quickFilter===b.id?'#E67E22':'#fff',color:quickFilter===b.id?'#fff':'#85929E',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>{b.label}</button>)}
               <div style={{flex:1}} />
               <input placeholder="ค้นหา ชื่อ เบอร์ เลขพัสดุ..." value={searchQuery} onChange={e=>{setSearchQuery(e.target.value);setPage(1)}} style={{padding:'7px 12px',borderRadius:6,border:'1px solid #DEE2E6',fontSize:12,fontFamily:T.font,width:220}} />
-              <button onClick={refreshStatus} disabled={refreshing} style={{padding:'7px 14px',borderRadius:6,border:'1px solid #3498DB',background:'#EBF5FB',color:'#3498DB',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>{refreshing?'⏳...':'🔄 อัพเดทสถานะ'}</button>
+              <button onClick={refreshStatus} disabled={!!gProgress} style={{padding:'7px 14px',borderRadius:6,border:'1px solid #3498DB',background:'#EBF5FB',color:'#3498DB',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>{gProgress?'⏳...':'🔄 อัพเดทสถานะ'}</button>
             </div>
 
             {/* Status tabs */}
@@ -552,14 +577,19 @@ export default function PackerApp({ profile, onLogout }) {
               <button onClick={()=>printLabels(orders.filter(o=>selectedIds.has(o.id)))} style={{padding:'6px 12px',borderRadius:6,border:'1px solid #E67E22',background:'#FEF5E7',color:'#E67E22',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>🖨 ปริ้นใบปะหน้า</button>
               <button onClick={()=>{exportProshipExcel(orders.filter(o=>selectedIds.has(o.id)),'Selected.xlsx',profile,'shipping');flash('Export OK')}} style={{padding:'6px 12px',borderRadius:6,border:'1px solid #2980B9',background:'#EBF5FB',color:'#2980B9',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>📊 Export</button>
               {(()=>{const wp=orders.filter(o=>selectedIds.has(o.id)&&o.flash_pno);return wp.length>0&&<button onClick={()=>markStatus([...selectedIds].filter(id=>orders.find(o=>o.id===id)?.flash_pno),'upsell')} style={{padding:'6px 12px',borderRadius:6,border:'1px solid #8E44AD',background:'#F4ECF7',color:'#8E44AD',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>💰 รออัพเซล ({wp.length})</button>})()}
-              <button onClick={()=>bulkDeleteOrders([...selectedIds])} disabled={deleting} style={{padding:'6px 12px',borderRadius:6,border:'1px solid #E74C3C',background:'#FDEDEC',color:'#E74C3C',fontSize:11,fontWeight:700,cursor:deleting?'wait':'pointer',fontFamily:T.font}}>{deleting?`🗑 ${deleteProgress}%`:`🗑 ลบ (${selectedIds.size})`}</button>
+              <button onClick={()=>bulkDeleteOrders([...selectedIds])} disabled={!!gProgress} style={{padding:'6px 12px',borderRadius:6,border:'1px solid #E74C3C',background:'#FDEDEC',color:'#E74C3C',fontSize:11,fontWeight:700,cursor:gProgress?'wait':'pointer',fontFamily:T.font}}>🗑 ลบ ({selectedIds.size})</button>
               <button onClick={()=>setSelectedIds(new Set())} style={{padding:'6px 8px',borderRadius:6,border:'1px solid #DEE2E6',background:'#fff',color:'#85929E',fontSize:11,cursor:'pointer'}}>✕</button>
             </div>}
 
-            {/* Delete Progress */}
-            {deleting&&<div style={{marginBottom:10,padding:'10px 14px',background:'#FDEDEC',borderRadius:8}}>
-              <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}><span style={{fontSize:12,fontWeight:700,color:'#E74C3C'}}>🗑 กำลังลบ...</span><span style={{fontSize:12,fontWeight:700,color:'#E74C3C'}}>{deleteProgress}%</span></div>
-              <div style={{width:'100%',height:8,background:'#F5B7B1',borderRadius:4,overflow:'hidden'}}><div style={{width:deleteProgress+'%',height:'100%',background:'#E74C3C',borderRadius:4,transition:'width 0.2s'}} /></div>
+            {/* Global Progress Bar */}
+            {gProgress&&<div style={{marginBottom:10,padding:'10px 14px',background:'rgba(0,0,0,0.03)',borderRadius:8,border:`1px solid ${gProgress.color}22`}}>
+              <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}>
+                <span style={{fontSize:12,fontWeight:700,color:gProgress.color}}>{gProgress.label}</span>
+                <span style={{fontSize:12,fontWeight:700,color:gProgress.color}}>{gProgress.done}/{gProgress.total} ({Math.round((gProgress.done/gProgress.total)*100)}%)</span>
+              </div>
+              <div style={{width:'100%',height:8,background:'#EAECEE',borderRadius:4,overflow:'hidden'}}>
+                <div style={{width:Math.round((gProgress.done/gProgress.total)*100)+'%',height:'100%',background:gProgress.color,borderRadius:4,transition:'width 0.2s'}} />
+              </div>
             </div>}
 
             {/* Table */}
@@ -692,9 +722,14 @@ export default function PackerApp({ profile, onLogout }) {
             {(() => {
               const upsellOrders = orders.filter(o => o.shipping_status === 'upsell' && o.flash_pno)
               const doneUpsell = async (ids) => {
-                await supabase.from('mt_orders').update({ shipping_status: 'printed' }).in('id', ids)
-                setOrders(prev => prev.map(o => ids.includes(o.id) ? { ...o, shipping_status: 'printed' } : o))
-                setUpsellSelected(new Set())
+                setGProgress({ label: '✅ อัพเซลเสร็จ', done: 0, total: ids.length, color: '#27AE60' })
+                for (let i = 0; i < ids.length; i++) {
+                  setGProgress(p => ({ ...p, done: i + 1 }))
+                  await supabase.from('mt_orders').update({ shipping_status: 'printed' }).eq('id', ids[i])
+                  setOrders(prev => prev.map(o => o.id === ids[i] ? { ...o, shipping_status: 'printed' } : o))
+                  if (i < ids.length - 1) await new Promise(r => setTimeout(r, 50))
+                }
+                setGProgress(null); setUpsellSelected(new Set())
                 flash('✅ เสร็จแล้ว ' + ids.length + ' รายการ')
               }
               return <>
