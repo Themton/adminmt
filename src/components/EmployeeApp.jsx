@@ -249,6 +249,18 @@ export default function EmployeeApp({ profile, onLogout }) {
     const q = (pnoOverride || trackSearchQuery).trim(); if (!q) return
     setTrackSearchQuery(q)
     setTrackSearching(true); setTrackSearchResult(null)
+    // ถ้าเป็นเบอร์โทร (ขึ้นต้น 0 + ตัวเลข 9-10 ตัว) → ค้นจาก Supabase
+    if (/^0\d{8,9}$/.test(q)) {
+      const { data } = await supabase.from('mt_orders').select('*').eq('customer_phone', q).order('created_at', { ascending: false })
+      setTrackSearching(false)
+      if (data && data.length > 0) {
+        setTrackSearchResult({ type: 'phone', phone: q, orders: data })
+      } else {
+        setTrackSearchResult({ pno: q, error: 'ไม่พบออเดอร์จากเบอร์ ' + q })
+      }
+      return
+    }
+    // ถ้าเป็นเลขพัสดุ → ค้นจาก Flash API
     const result = await trackFlashOrder(q)
     setTrackSearching(false)
     if (result.code === 1 && result.data) {
@@ -673,14 +685,41 @@ export default function EmployeeApp({ profile, onLogout }) {
 
         {/* ═══ ค้นหาเลขพัสดุ ═══ */}
         {tab === 'tracking' && <div style={{ ...glass, padding: 20, marginBottom: 20 }}>
-          <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 16, color: T.gold }}>🔍 ค้นหาเลขพัสดุ</div>
+          <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 16, color: T.gold }}>🔍 ค้นหาเลขพัสดุ / เบอร์โทร</div>
           <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
             <input value={trackSearchQuery} onChange={e => setTrackSearchQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && searchTracking()}
-              placeholder="พิมพ์เลขพัสดุ เช่น TH37128J1XJ69A" style={{ flex: 1, padding: '12px 16px', borderRadius: 8, border: `1px solid ${T.border}`, background: T.surfaceAlt, fontSize: 15, fontFamily: 'monospace', color: T.text, outline: 'none' }} />
+              placeholder="เลขพัสดุ TH... หรือ เบอร์โทร 08..." style={{ flex: 1, padding: '12px 16px', borderRadius: 8, border: `1px solid ${T.border}`, background: T.surfaceAlt, fontSize: 15, fontFamily: 'monospace', color: T.text, outline: 'none' }} />
             <button onClick={searchTracking} disabled={trackSearching} style={{ padding: '12px 24px', borderRadius: 8, border: 'none', background: T.grad1, color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: T.font }}>{trackSearching ? '⏳...' : '🔍 ค้นหา'}</button>
           </div>
 
           {trackSearchResult && <div style={{ ...glass, padding: 0, overflow: 'hidden' }}>
+            {/* ═══ ผลค้นหาจากเบอร์โทร ═══ */}
+            {trackSearchResult.type === 'phone' ? <>
+              <div style={{ padding: '16px 20px', borderBottom: `1px solid ${T.border}`, background: T.surfaceAlt }}>
+                <div style={{ fontSize: 14, fontWeight: 700 }}>📱 ผลค้นหาจากเบอร์ <span style={{ color: T.gold }}>{trackSearchResult.phone}</span></div>
+                <div style={{ fontSize: 12, color: T.textDim, marginTop: 2 }}>พบ {trackSearchResult.orders.length} ออเดอร์</div>
+              </div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: T.font }}>
+                <thead><tr style={{ background: T.surfaceAlt }}>
+                  {['วันที่', 'ลูกค้า', 'เลขพัสดุ', 'สถานะ', 'COD', 'หมายเหตุ', ''].map(h => <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}`, fontSize: 11 }}>{h}</th>)}
+                </tr></thead>
+                <tbody>
+                  {trackSearchResult.orders.map(o => {
+                    const st = o.flash_pno ? (SM[parseInt((o.flash_status||'').replace('flash_',''))||0] || {l:'รับเข้าระบบ',bg:'#D4E6F1',c:'#2471A3',i:'📥'}) : {l:'ไม่มีเลขพัสดุ',bg:'#EBEDEF',c:'#85929E',i:'—'}
+                    return <tr key={o.id} style={{ borderBottom: `1px solid ${T.border}` }}>
+                      <td style={{ padding: '10px', fontSize: 11 }}>{new Date(o.created_at).toLocaleDateString('th-TH', { timeZone: 'Asia/Bangkok', day: '2-digit', month: 'short', year: 'numeric' })}</td>
+                      <td style={{ padding: '10px', fontWeight: 600 }}>{o.customer_name}</td>
+                      <td style={{ padding: '10px' }}>{o.flash_pno ? <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#2980B9', fontWeight: 700 }}>{o.flash_pno}</span> : <span style={{ color: T.textMuted, fontSize: 10 }}>—</span>}</td>
+                      <td style={{ padding: '10px' }}><span style={{ padding: '3px 8px', borderRadius: 6, fontSize: 10, fontWeight: 700, background: st.bg, color: st.c }}>{st.i} {st.l}</span></td>
+                      <td style={{ padding: '10px', fontWeight: 700 }}>{o.payment_type === 'cod' ? <span style={{ color: '#E74C3C' }}>฿{fmt(parseFloat(o.cod_amount || o.sale_price) || 0)}</span> : <span style={{ color: '#27AE60', fontSize: 10 }}>โอน</span>}</td>
+                      <td style={{ padding: '10px', fontSize: 10, color: T.textDim, maxWidth: 150, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{o.remark || ''}</td>
+                      <td style={{ padding: '10px' }}>{o.flash_pno && <button onClick={() => searchTracking(o.flash_pno)} style={{ padding: '4px 10px', borderRadius: 4, border: 'none', background: T.grad1, color: '#fff', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>🔍 Track</button>}</td>
+                    </tr>
+                  })}
+                </tbody>
+              </table>
+            </> : <>
+            {/* ═══ ผลค้นหาจากเลขพัสดุ ═══ */}
             <div style={{ padding: '16px 20px', borderBottom: `1px solid ${T.border}` }}>
               <div style={{ fontFamily: 'monospace', fontSize: 18, fontWeight: 900 }}>{trackSearchResult.pno}</div>
             </div>
@@ -716,6 +755,7 @@ export default function EmployeeApp({ profile, onLogout }) {
                 ))}
               </div>}
             </>)}
+            </>}
           </div>}
 
           {/* ออเดอร์ของฉันที่มีเลขพัสดุ */}

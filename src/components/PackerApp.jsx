@@ -283,13 +283,24 @@ export default function PackerApp({ profile, onLogout }) {
   const printLabels = async (t) => { const w=t.filter(o=>o.flash_pno); if(!w.length){flash('ไม่มีเลขพัสดุ');return}; await buildLabelPDF(w) }
 
   // ═══ ค้นหาเลขพัสดุ ═══
-  const searchTracking = async () => {
-    const q = trackSearchQuery.trim()
-    if (!q) { flash('กรุณากรอกเลขพัสดุ'); return }
+  const searchTracking = async (pnoOverride) => {
+    const q = (pnoOverride || trackSearchQuery).trim()
+    if (!q) { flash('กรุณากรอกเลขพัสดุหรือเบอร์โทร'); return }
+    setTrackSearchQuery(q)
     setTrackSearching(true); setTrackSearchResult(null)
-    // ค้นในระบบก่อน
+    // ถ้าเป็นเบอร์โทร → ค้นจาก Supabase
+    if (/^0\d{8,9}$/.test(q)) {
+      const { data } = await supabase.from('mt_orders').select('*').eq('customer_phone', q).order('created_at', { ascending: false })
+      setTrackSearching(false)
+      if (data && data.length > 0) {
+        setTrackSearchResult({ type: 'phone', phone: q, orders: data })
+      } else {
+        setTrackSearchResult({ pno: q, error: 'ไม่พบออเดอร์จากเบอร์ ' + q })
+      }
+      return
+    }
+    // ถ้าเป็นเลขพัสดุ → ค้นจาก Flash API
     const local = orders.find(o => o.flash_pno === q)
-    // ค้นจาก Flash API
     const result = await trackFlashOrder(q)
     setTrackSearching(false)
     if (result.code === 1 && result.data) {
@@ -550,16 +561,41 @@ export default function PackerApp({ profile, onLogout }) {
 
           {/* ═══ PAGE: ค้นหาเลขพัสดุ ═══ */}
           {sidebarPage === 'tracking' && <div>
-            <div style={{fontSize:20,fontWeight:800,marginBottom:20}}>🔍 ค้นหาเลขพัสดุ</div>
-            <div style={{maxWidth:600}}>
+            <div style={{fontSize:20,fontWeight:800,marginBottom:20}}>🔍 ค้นหาเลขพัสดุ / เบอร์โทร</div>
+            <div style={{maxWidth:700}}>
               <div style={{display:'flex',gap:8,marginBottom:20}}>
                 <input value={trackSearchQuery} onChange={e=>setTrackSearchQuery(e.target.value)} onKeyDown={e=>e.key==='Enter'&&searchTracking()}
-                  placeholder="พิมพ์เลขพัสดุ เช่น TH37128J1XJ69A" style={{flex:1,padding:'12px 16px',borderRadius:8,border:'1px solid #DEE2E6',fontSize:15,fontFamily:'monospace'}} />
-                <button onClick={searchTracking} disabled={trackSearching} style={{padding:'12px 24px',borderRadius:8,border:'none',background:'#E67E22',color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>{trackSearching?'⏳...':'🔍 ค้นหา'}</button>
+                  placeholder="เลขพัสดุ TH... หรือ เบอร์โทร 08..." style={{flex:1,padding:'12px 16px',borderRadius:8,border:'1px solid #DEE2E6',fontSize:15,fontFamily:'monospace'}} />
+                <button onClick={()=>searchTracking()} disabled={trackSearching} style={{padding:'12px 24px',borderRadius:8,border:'none',background:'#E67E22',color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>{trackSearching?'⏳...':'🔍 ค้นหา'}</button>
               </div>
 
               {trackSearchResult && <div style={{background:'#fff',borderRadius:12,border:'1px solid #DEE2E6',overflow:'hidden'}}>
-                {/* Header */}
+                {/* ═══ ผลค้นหาจากเบอร์โทร ═══ */}
+                {trackSearchResult.type === 'phone' ? <>
+                  <div style={{padding:'16px 20px',borderBottom:'1px solid #EAECEE',background:'#F8F9FA'}}>
+                    <div style={{fontSize:14,fontWeight:700}}>📱 ผลค้นหาจากเบอร์ <span style={{color:'#E67E22'}}>{trackSearchResult.phone}</span></div>
+                    <div style={{fontSize:12,color:'#85929E',marginTop:2}}>พบ {trackSearchResult.orders.length} ออเดอร์</div>
+                  </div>
+                  <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,fontFamily:T.font}}>
+                    <thead><tr style={{background:'#F8F9FA'}}>
+                      {['วันที่','ลูกค้า','เลขพัสดุ','สถานะ','COD','หมายเหตุ',''].map(h=><th key={h} style={{padding:'8px 10px',textAlign:'left',fontWeight:600,color:'#5D6D7E',borderBottom:'1px solid #DEE2E6',fontSize:11}}>{h}</th>)}
+                    </tr></thead>
+                    <tbody>
+                      {trackSearchResult.orders.map(o=>{
+                        const st=o.flash_pno?(SM[parseInt((o.flash_status||'').replace('flash_',''))||0]||{l:'รับเข้าระบบ',bg:'#D4E6F1',c:'#2471A3',i:'📥'}):{l:'ไม่มีเลขพัสดุ',bg:'#EBEDEF',c:'#85929E',i:'—'}
+                        return <tr key={o.id} style={{borderBottom:'1px solid #EAECEE'}}>
+                          <td style={{padding:'10px',fontSize:11}}>{new Date(o.created_at).toLocaleDateString('th-TH',{timeZone:'Asia/Bangkok',day:'2-digit',month:'short',year:'numeric'})}</td>
+                          <td style={{padding:'10px',fontWeight:600}}>{o.customer_name}</td>
+                          <td style={{padding:'10px'}}>{o.flash_pno?<span style={{fontFamily:'monospace',fontSize:11,color:'#2980B9',fontWeight:700}}>{o.flash_pno}</span>:<span style={{color:'#CCD1D1',fontSize:10}}>—</span>}</td>
+                          <td style={{padding:'10px'}}><span style={{padding:'3px 8px',borderRadius:6,fontSize:10,fontWeight:700,background:st.bg,color:st.c}}>{st.i} {st.l}</span></td>
+                          <td style={{padding:'10px',fontWeight:700}}>{o.payment_type==='cod'?<span style={{color:'#E74C3C'}}>฿{fmt(parseFloat(o.cod_amount||o.sale_price)||0)}</span>:<span style={{color:'#27AE60',fontSize:10}}>โอน</span>}</td>
+                          <td style={{padding:'10px',fontSize:10,color:'#85929E',maxWidth:150,overflow:'hidden',whiteSpace:'nowrap',textOverflow:'ellipsis'}}>{o.remark||''}</td>
+                          <td style={{padding:'10px'}}>{o.flash_pno&&<button onClick={()=>searchTracking(o.flash_pno)} style={{padding:'4px 10px',borderRadius:4,border:'none',background:'#E67E22',color:'#fff',fontSize:10,fontWeight:700,cursor:'pointer'}}>🔍 Track</button>}</td>
+                        </tr>})}
+                    </tbody>
+                  </table>
+                </> : <>
+                {/* ═══ ผลค้นหาจากเลขพัสดุ ═══ */}
                 <div style={{padding:'16px 20px',borderBottom:'1px solid #EAECEE'}}>
                   <div style={{fontFamily:'monospace',fontSize:18,fontWeight:900,color:'#2C3E50'}}>{trackSearchResult.pno}</div>
                   {trackSearchResult.local && <div style={{fontSize:12,color:'#85929E',marginTop:4}}>ลูกค้า: <strong style={{color:'#2C3E50'}}>{trackSearchResult.local.customer_name}</strong> | {trackSearchResult.local.customer_phone}</div>}
@@ -568,27 +604,22 @@ export default function PackerApp({ profile, onLogout }) {
                 {trackSearchResult.error ? (
                   <div style={{padding:20,textAlign:'center',color:'#E74C3C',fontSize:14}}>{trackSearchResult.error}</div>
                 ) : (<>
-                  {/* Status */}
                   <div style={{padding:'16px 20px',textAlign:'center',background:(SM[trackSearchResult.state]||{}).bg||'#f5f5f5'}}>
                     <div style={{fontSize:28,marginBottom:4}}>{(SM[trackSearchResult.state]||{}).i||'📦'}</div>
                     <div style={{fontSize:16,fontWeight:700,color:(SM[trackSearchResult.state]||{}).c||'#333'}}>{trackSearchResult.stateText||(SM[trackSearchResult.state]||{}).l||'ไม่ทราบสถานะ'}</div>
                   </div>
-
-                  {/* Progress Bar */}
                   <div style={{padding:'12px 20px',display:'flex',gap:4,alignItems:'center'}}>
                     {[1,2,3,4,5].map(s=><div key={s} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:4}}>
                       <div style={{width:24,height:24,borderRadius:12,background:trackSearchResult.state>=s?'#E67E22':'#DEE2E6',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700}}>{s}</div>
                       <div style={{fontSize:8,color:trackSearchResult.state>=s?'#E67E22':'#ABB2B9',textAlign:'center'}}>{['สร้าง','รับ','คัดแยก','จัดส่ง','สำเร็จ'][s-1]}</div>
                     </div>)}
                   </div>
-
-                  {/* Timeline */}
                   {trackSearchResult.routes?.length>0 && <div style={{padding:'0 20px 16px'}}>
                     <div style={{fontSize:13,fontWeight:700,marginBottom:10,color:'#2C3E50'}}>📍 Timeline</div>
                     {trackSearchResult.routes.map((r,i)=>(
-                      <div key={i} style={{display:'flex',gap:12,paddingBottom:12,position:'relative'}}>
+                      <div key={i} style={{display:'flex',gap:12,paddingBottom:12}}>
                         <div style={{display:'flex',flexDirection:'column',alignItems:'center'}}>
-                          <div style={{width:10,height:10,borderRadius:5,background:i===0?'#E67E22':'#DEE2E6',border:'2px solid '+(i===0?'#E67E22':'#DEE2E6')}} />
+                          <div style={{width:10,height:10,borderRadius:5,background:i===0?'#E67E22':'#DEE2E6'}} />
                           {i<trackSearchResult.routes.length-1&&<div style={{width:2,flex:1,background:'#EAECEE'}} />}
                         </div>
                         <div style={{flex:1}}>
@@ -598,8 +629,6 @@ export default function PackerApp({ profile, onLogout }) {
                       </div>
                     ))}
                   </div>}
-
-                  {/* Local info */}
                   {trackSearchResult.local && <div style={{padding:'12px 20px',borderTop:'1px solid #EAECEE',background:'#FAFAFA'}}>
                     <div style={{fontSize:11,color:'#85929E',marginBottom:6}}>ข้อมูลในระบบ</div>
                     <div style={{fontSize:12}}>
@@ -609,6 +638,7 @@ export default function PackerApp({ profile, onLogout }) {
                     {trackSearchResult.local.remark&&<div style={{fontSize:11,color:'#85929E',marginTop:2}}>Note: {trackSearchResult.local.remark}</div>}
                   </div>}
                 </>)}
+                </>}
               </div>}
             </div>
           </div>}
