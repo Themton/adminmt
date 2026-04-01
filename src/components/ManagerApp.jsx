@@ -241,126 +241,42 @@ export default function ManagerApp({ profile, onLogout }) {
   }
 
   // ═══ สร้างใบปะหน้า (Client-side — ไม่ต้องใช้ Flash Label API) ═══
-  // ═══ PDF Label Generator (jsPDF) — exact 100x75mm ═══
-  const generateLabelPDF = async (labelOrders) => {
-    // โหลด jsPDF + JsBarcode + QRCode
-    const loadScript = (url) => new Promise((resolve) => {
-      if (document.querySelector(`script[src="${url}"]`)) { resolve(); return }
-      const s = document.createElement('script'); s.src = url; s.onload = resolve; document.head.appendChild(s)
-    })
-    await loadScript('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js')
-    await loadScript('https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js')
-    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js')
-
-    const { jsPDF } = window.jspdf
-    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [75, 100] })
-
-    for (let i = 0; i < labelOrders.length; i++) {
-      if (i > 0) doc.addPage([75, 100], 'landscape')
-      const o = labelOrders[i]
-      const pno = o.flash_pno || ''
-      const phone = o.customer_phone || ''
-      const maskedPhone = phone.length >= 7 ? phone.substring(0,3) + '****' + phone.substring(phone.length-3) : phone
-      const cod = o.payment_type === 'cod' ? (parseFloat(o.cod_amount || o.sale_price) || 0) : 0
-      const now = new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-      const dst = (o.district || '') + ' — ' + (o.province || '')
-      const srcLine = (flashSrcInfo.name || 'THE MT') + ' ' + (flashSrcInfo.phone || '') + ' ' + (flashSrcInfo.address || '') + ' ' + (flashSrcInfo.district || '') + ' ' + (flashSrcInfo.province || '') + ' ' + (flashSrcInfo.zip || '')
-      let y = 1
-
-      // Sort Code
-      if (o.flash_sort_code) {
-        doc.setFillColor(230,126,34); doc.roundedRect(1, y, 5, 5, 1, 1, 'F')
-        doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(255,255,255)
-        doc.text(String(i+1), 3.5, y+3.8, { align: 'center' })
-        doc.setTextColor(0,0,0); doc.setFontSize(16)
-        doc.text(o.flash_sort_code, 50, y+4.5, { align: 'center' })
-        y += 6.5; doc.setDrawColor(0); doc.line(0, y, 100, y)
-      }
-
-      // Barcode (as text fallback — barcode image would require canvas)
-      doc.setFillColor(0,0,0)
-      // Draw barcode-like lines
-      const bcY = y + 0.5
-      for (let b = 0; b < 80; b++) {
-        const x = 10 + b * 1
-        if (Math.random() > 0.35) doc.rect(x, bcY, 0.6, 8, 'F')
-      }
-      y += 10; doc.line(0, y, 100, y)
-
-      // PNO
-      doc.setFillColor(240,240,240); doc.rect(0, y, 100, 5.5, 'F')
-      doc.setTextColor(0,0,0); doc.setFontSize(11); doc.setFont('courier','bold')
-      doc.text(pno, 50, y + 4, { align: 'center' })
-      y += 5.5; doc.setDrawColor(0); doc.line(0, y, 100, y)
-
-      // DST
-      doc.setFillColor(68,68,68); doc.rect(0, y, 100, 4, 'F')
-      doc.setTextColor(255,255,255); doc.setFontSize(8); doc.setFont('helvetica','bold')
-      doc.text('DST   ' + dst, 2, y + 2.8)
-      y += 4
-
-      // Src line
-      doc.setTextColor(150,150,150); doc.setFontSize(5); doc.setFont('helvetica','normal')
-      doc.text(srcLine.trim().substring(0, 80), 2, y + 2.5)
-      y += 3; doc.setDrawColor(200); doc.line(0, y, 100, y)
-
-      // Receiver + QR
-      const rcvY = y + 1
-      doc.setTextColor(0,0,0); doc.setFont('helvetica','bold'); doc.setFontSize(9)
-      doc.text('ผู้รับ ' + (o.customer_name || ''), 2, rcvY + 3)
-      doc.setFontSize(14)
-      doc.text(maskedPhone, 2, rcvY + 8.5)
-      doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(50,50,50)
-      const addr = (o.customer_address || '').substring(0, 50)
-      doc.text(addr, 2, rcvY + 12)
-      doc.text((o.sub_district || '') + ', ' + (o.district || ''), 2, rcvY + 15)
-      doc.text((o.province || '') + ' ' + (o.zip_code || ''), 2, rcvY + 18)
-
-      // QR placeholder (square)
-      const qrX = 83, qrY2 = rcvY + 1, qrS = 14
-      doc.setDrawColor(0); doc.rect(qrX, qrY2, qrS, qrS)
-      doc.setFontSize(5); doc.setTextColor(150); doc.text('QR', qrX + 5.5, qrY2 + 8)
-
-      y = rcvY + 20
-
-      // COD
-      if (cod > 0) {
-        doc.setFillColor(26,26,26); doc.rect(0, y, 100, 5.5, 'F')
-        doc.setFillColor(230,126,34); doc.roundedRect(2, y+0.8, 8, 3.8, 1, 1, 'F')
-        doc.setTextColor(255,255,255); doc.setFontSize(7); doc.setFont('helvetica','bold')
-        doc.text('COD', 3, y + 3.5)
-        doc.setFontSize(12)
-        doc.text('เก็บเงินค่าสินค้า COD ' + cod.toLocaleString(), 12, y + 4)
-        y += 5.5
-      }
-
-      // Note
-      if (o.remark) {
-        doc.setTextColor(0,0,0); doc.setFontSize(8); doc.setFont('helvetica','bold')
-        doc.text('Note: ' + o.remark.substring(0, 45), 2, y + 3)
-        y += 4
-      }
-
-      // Footer
-      doc.setDrawColor(230); doc.line(0, y, 100, y)
-      doc.setTextColor(180); doc.setFontSize(5); doc.setFont('helvetica','normal')
-      doc.text('Print-: ' + now, 2, y + 2.5)
-      doc.text((i+1) + '/' + labelOrders.length, 50, y + 2.5, { align: 'center' })
-      doc.text('THE MT', 98, y + 2.5, { align: 'right' })
-    }
-
-    // เปิด PDF ในหน้าใหม่
-    const pdfBlob = doc.output('blob')
-    const url = URL.createObjectURL(pdfBlob)
-    window.open(url, '_blank')
+  // ═══ Label System: HTML → Canvas → PDF (รองรับภาษาไทย) ═══
+  const labelHTML = (order, idx, total) => {
+    const pno = order.flash_pno || ''
+    const phone = order.customer_phone || ''
+    const mp = phone.length >= 7 ? phone.substring(0,3) + '****' + phone.substring(phone.length-3) : phone
+    const cod = order.payment_type === 'cod' ? (parseFloat(order.cod_amount || order.sale_price) || 0) : 0
+    const now = new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    const dst = (order.district || '') + ' — ' + (order.province || '')
+    const src = (flashSrcInfo.name || 'THE MT') + ' ' + (flashSrcInfo.phone || '') + ' ' + (flashSrcInfo.address || '') + ' ' + (flashSrcInfo.district || '') + ' ' + (flashSrcInfo.province || '') + ' ' + (flashSrcInfo.zip || '')
+    return `<div style="width:400px;height:300px;background:#fff;font-family:sans-serif;overflow:hidden;position:relative">
+      ${order.flash_sort_code ? `<div style="text-align:center;padding:2px 0;font-size:20px;font-weight:900;font-family:monospace;border-bottom:2px solid #000;position:relative"><span style="position:absolute;left:4px;top:3px;background:#E67E22;color:#fff;width:20px;height:20px;border-radius:3px;display:inline-flex;align-items:center;justify-content:center;font-size:12px">${idx}</span>${order.flash_sort_code}</div>` : ''}
+      <div style="text-align:center;padding:1px 8px;border-bottom:2px solid #000"><svg id="lbc-${idx}" style="width:384px;height:40px"></svg></div>
+      <div style="text-align:center;padding:2px;font-size:13px;font-weight:900;font-family:monospace;letter-spacing:1px;background:#f0f0f0;border-bottom:2px solid #000">${pno}</div>
+      <div style="background:#444;color:#fff;padding:2px 8px;font-size:10px;font-weight:700">DST &nbsp; ${dst}</div>
+      <div style="padding:1px 8px;font-size:7px;color:#777;border-bottom:1px solid #ddd;overflow:hidden;white-space:nowrap">${src.trim()}</div>
+      <div style="display:flex">
+        <div style="flex:1;padding:3px 8px">
+          <div style="font-weight:700;font-size:12px">ผู้รับ ${order.customer_name || ''}</div>
+          <div style="font-size:18px;font-weight:900;letter-spacing:1px">${mp}</div>
+          <div style="font-size:9px;color:#333;line-height:1.3">${order.customer_address || ''}</div>
+          <div style="font-size:9px;color:#333">${order.sub_district || ''}, ${order.district || ''}</div>
+          <div style="font-size:9px;color:#333">${order.province || ''} ${order.zip_code || ''}</div>
+        </div>
+        <div id="lqr-${idx}" style="width:70px;display:flex;align-items:center;justify-content:center;padding:2px"></div>
+      </div>
+      ${cod > 0 ? `<div style="background:#1a1a1a;color:#fff;padding:3px 8px;font-size:15px;font-weight:900;display:flex;align-items:center;gap:6px"><span style="background:#E67E22;padding:1px 6px;border-radius:3px;font-size:10px">COD</span>เก็บเงินค่าสินค้า COD ${cod.toLocaleString()}</div>` : ''}
+      ${order.remark ? `<div style="padding:2px 8px;font-size:11px;font-weight:700;border-top:1px solid #ddd;overflow:hidden;white-space:nowrap">Note: ${order.remark}</div>` : ''}
+      <div style="padding:1px 8px;font-size:7px;color:#999;display:flex;justify-content:space-between;border-top:1px solid #eee"><span>Print-: ${now}</span><span>${idx}/${total}</span><span>THE MT</span></div>
+    </div>`
   }
 
   const printLabel = async (pnoOrOrder) => {
     let order = typeof pnoOrOrder === 'string' ? orders.find(o => o.flash_pno === pnoOrOrder) : pnoOrOrder
     if (!order) { flash('❌ ไม่พบข้อมูลออเดอร์'); return }
     flash('⏳ กำลังสร้างใบปะหน้า...')
-    await generateLabelPDF([order])
-    flash('✅ เปิดใบปะหน้าสำเร็จ')
+    await buildLabelPDF([order])
   }
 
   const bulkPrintLabels = async (pnoListOrOrders) => {
@@ -370,6 +286,64 @@ export default function ManagerApp({ profile, onLogout }) {
     } else {
       labelOrders = pnoListOrOrders.filter(o => o.flash_pno)
     }
+    if (!labelOrders.length) { flash('❌ ไม่มีออเดอร์ที่มีเลขพัสดุ'); return }
+    flash(`⏳ กำลังสร้างใบปะหน้า ${labelOrders.length} รายการ...`)
+    await buildLabelPDF(labelOrders)
+  }
+
+  const buildLabelPDF = async (labelOrders) => {
+    // Load libraries
+    const loadScript = (url) => new Promise((resolve) => {
+      if (document.querySelector(`script[src="${url}"]`)) { resolve(); return }
+      const s = document.createElement('script'); s.src = url; s.onload = resolve; document.head.appendChild(s)
+    })
+    await loadScript('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js')
+    await loadScript('https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js')
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js')
+    await loadScript('https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js')
+
+    const container = document.createElement('div')
+    container.style.cssText = 'position:fixed;top:-9999px;left:-9999px'
+    document.body.appendChild(container)
+
+    const { jsPDF } = window.jspdf
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [75, 100] })
+
+    for (let i = 0; i < labelOrders.length; i++) {
+      flash(`⏳ สร้างใบปะหน้า ${i+1}/${labelOrders.length}...`)
+      if (i > 0) doc.addPage([75, 100], 'landscape')
+
+      // สร้าง HTML label
+      const div = document.createElement('div')
+      div.innerHTML = labelHTML(labelOrders[i], i+1, labelOrders.length)
+      container.appendChild(div)
+
+      // Barcode + QR
+      const pno = labelOrders[i].flash_pno || ''
+      try { JsBarcode('#lbc-' + (i+1), pno, { format:'CODE128', width:1.8, height:34, displayValue:false, margin:0 }) } catch(e) {}
+      try { new QRCode(document.getElementById('lqr-' + (i+1)), { text:pno, width:58, height:58, correctLevel: QRCode.CorrectLevel.M }) } catch(e) {}
+
+      // รอ render
+      await new Promise(r => setTimeout(r, 200))
+
+      // Capture เป็นรูป
+      const canvas = await html2canvas(div.firstChild, { scale: 3, backgroundColor: '#ffffff', useCORS: true })
+      const imgData = canvas.toDataURL('image/png')
+
+      // ใส่ใน PDF — พอดี 100x75mm
+      doc.addImage(imgData, 'PNG', 0, 0, 100, 75)
+
+      container.removeChild(div)
+    }
+
+    document.body.removeChild(container)
+
+    // เปิด PDF
+    const blob = doc.output('blob')
+    window.open(URL.createObjectURL(blob), '_blank')
+    flash(`✅ สร้างใบปะหน้า ${labelOrders.length} รายการสำเร็จ`)
+  }
+
     if (!labelOrders.length) { flash('❌ ไม่มีออเดอร์ที่มีเลขพัสดุ'); return }
     flash(`⏳ กำลังสร้างใบปะหน้า ${labelOrders.length} รายการ...`)
     await generateLabelPDF(labelOrders)
