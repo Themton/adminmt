@@ -1376,6 +1376,15 @@ export default function ManagerApp({ profile, onLogout }) {
                     flash('✅ เปลี่ยนสถานะ ' + ids.length + ' รายการ'); setShipSelected(new Set())
                   })
                 }} style={{ padding: '7px 14px', borderRadius: 6, border: '1px solid #27AE60', background: '#EAFAF1', color: '#27AE60', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: T.font }}>✅ พร้อมส่ง</button>
+                <button onClick={() => {
+                  const ids = [...shipSelected]
+                  if (!confirm(`เปลี่ยนสถานะ ${ids.length} รายการ เป็น "ปริ้นแล้ว"?`)) return
+                  supabase.from('mt_orders').update({ shipping_status: 'printed' }).in('id', ids).then(({ error }) => {
+                    if (error) { flash('❌ ' + error.message); return }
+                    setOrders(prev => prev.map(o => ids.includes(o.id) ? { ...o, shipping_status: 'printed' } : o))
+                    flash('✅ เปลี่ยนสถานะ ' + ids.length + ' รายการ'); setShipSelected(new Set())
+                  })
+                }} style={{ padding: '7px 14px', borderRadius: 6, border: '1px solid #16A085', background: '#E8F8F5', color: '#16A085', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: T.font }}>🖨 ปริ้นแล้ว</button>
                 {/* สร้างเลขพัสดุ */}
                 <button onClick={() => { const sel = orders.filter(o => shipSelected.has(o.id)); bulkCreateFlash(sel) }} disabled={bulkCreating} style={{ padding: '7px 16px', borderRadius: 6, border: 'none', background: bulkCreating ? '#BDC3C7' : '#E67E22', color: '#fff', fontSize: 11, fontWeight: 700, cursor: bulkCreating ? 'wait' : 'pointer', fontFamily: T.font }}>
                   {bulkCreating ? `⏳ ${bulkProgress.done}/${bulkProgress.total}...` : `⚡ สร้างเลขพัสดุ (${shipSelected.size})`}
