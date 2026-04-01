@@ -344,12 +344,6 @@ export default function ManagerApp({ profile, onLogout }) {
     flash(`✅ สร้างใบปะหน้า ${labelOrders.length} รายการสำเร็จ`)
   }
 
-    if (!labelOrders.length) { flash('❌ ไม่มีออเดอร์ที่มีเลขพัสดุ'); return }
-    flash(`⏳ กำลังสร้างใบปะหน้า ${labelOrders.length} รายการ...`)
-    await generateLabelPDF(labelOrders)
-    flash(`✅ สร้างใบปะหน้า ${labelOrders.length} รายการสำเร็จ`)
-  }
-
 
   // ═══ Flash Proxy URL ═══
   const [flashProxyUrl, setFlashProxyUrl] = useState(() => {
