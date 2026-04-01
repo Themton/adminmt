@@ -875,7 +875,7 @@ export default function ManagerApp({ profile, onLogout }) {
             const pOrders = orders.filter(o => o.employee_id === p.id)
             const pToday = pOrders.filter(o => sameDay(o.created_at, new Date()))
             const pMonth = pOrders.filter(o => thisMonth(o.created_at))
-            return { ...p, team: p.mt_teams?.name || (p.role === 'manager' ? '🏢 หัวหน้า' : p.role === 'admin' ? '🔑 แอดมิน' : p.role === 'packer' ? '📦 แพค' : '—'), todayCount: pToday.length, todaySales: pToday.reduce((s,o) => s+(parseFloat(o.sale_price)||0), 0), monthCount: pMonth.length, monthSales: pMonth.reduce((s,o) => s+(parseFloat(o.sale_price)||0), 0) }
+            return { ...p, team: p.mt_teams?.name || (p.role === 'manager' ? '🏢 ผู้จัดการ' : p.role === 'admin' ? '🔑 แอดมิน' : p.role === 'packer' ? '📦 จัดส่ง' : p.role === 'head' ? '👑 หัวหน้า' : p.role === 'export' ? '📊 Export' : '—'), todayCount: pToday.length, todaySales: pToday.reduce((s,o) => s+(parseFloat(o.sale_price)||0), 0), monthCount: pMonth.length, monthSales: pMonth.reduce((s,o) => s+(parseFloat(o.sale_price)||0), 0) }
           }).sort((a,b) => b.monthSales - a.monthSales)
 
           return <>
@@ -1604,7 +1604,7 @@ export default function ManagerApp({ profile, onLogout }) {
             <FI label="อีเมล *" type="email" value={userForm.email} onChange={e => setUserForm(p=>({...p,email:e.target.value}))} placeholder="user@mail.com" />
             <FI label="รหัสผ่าน *" value={userForm.password} onChange={e => setUserForm(p=>({...p,password:e.target.value}))} placeholder="6 ตัวขึ้นไป" />
             <div style={{ marginBottom: 14 }}><label style={{ display: 'block', fontSize: 12, color: T.textDim, fontWeight: 500, marginBottom: 6 }}>ตำแหน่ง</label>
-              <select value={userForm.role} onChange={e => setUserForm(p=>({...p,role:e.target.value}))} style={{ width: '100%', padding: '13px 16px', borderRadius: T.radiusSm, border: `1px solid ${T.border}`, background: T.surfaceAlt, color: T.text, fontSize: 15, fontFamily: T.font, outline: 'none', boxSizing: 'border-box' }}><option value="employee">👤 พนักงาน</option><option value="packer">📦 พนักงานแพค</option><option value="admin">🔑 แอดมิน</option><option value="manager">🏢 หัวหน้า</option></select>
+              <select value={userForm.role} onChange={e => setUserForm(p=>({...p,role:e.target.value}))} style={{ width: '100%', padding: '13px 16px', borderRadius: T.radiusSm, border: `1px solid ${T.border}`, background: T.surfaceAlt, color: T.text, fontSize: 15, fontFamily: T.font, outline: 'none', boxSizing: 'border-box' }}><option value="employee">👤 พนักงาน</option><option value="packer">📦 พนักงานจัดส่ง</option><option value="head">👑 หัวหน้าจัดส่ง</option><option value="export">📊 Export รายงาน</option><option value="admin">🔑 แอดมิน</option><option value="manager">🏢 ผู้จัดการ</option></select>
             </div>
             {userForm.role === 'employee' && <div style={{ marginBottom: 14 }}><label style={{ display: 'block', fontSize: 12, color: T.textDim, fontWeight: 500, marginBottom: 6 }}>ทีม</label>
               <select value={userForm.teamId} onChange={e => setUserForm(p=>({...p,teamId:e.target.value}))} style={{ width: '100%', padding: '13px 16px', borderRadius: T.radiusSm, border: `1px solid ${T.border}`, background: T.surfaceAlt, color: T.text, fontSize: 15, fontFamily: T.font, outline: 'none', boxSizing: 'border-box' }}><option value="">— เลือกทีม —</option>{teams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select>
@@ -1619,7 +1619,7 @@ export default function ManagerApp({ profile, onLogout }) {
               <FI label="อีเมล" value={editUserData.email||''} onChange={e => setEditUserData(p=>({...p,email:e.target.value}))} />
               <FI label="รหัสผ่าน" value={editUserData.password_text||''} onChange={e => setEditUserData(p=>({...p,password_text:e.target.value}))} />
               <div style={{ marginBottom: 14 }}><label style={{ display: 'block', fontSize: 12, color: T.textDim, fontWeight: 500, marginBottom: 6 }}>ตำแหน่ง</label>
-                <select value={editUserData.role} onChange={e => setEditUserData(p=>({...p,role:e.target.value}))} style={{ width: '100%', padding: '13px 16px', borderRadius: T.radiusSm, border: `1px solid ${T.border}`, background: T.surfaceAlt, color: T.text, fontSize: 15, fontFamily: T.font, outline: 'none', boxSizing: 'border-box' }}><option value="employee">👤 พนักงาน</option><option value="packer">📦 พนักงานแพค</option><option value="admin">🔑 แอดมิน</option><option value="manager">🏢 หัวหน้า</option></select>
+                <select value={editUserData.role} onChange={e => setEditUserData(p=>({...p,role:e.target.value}))} style={{ width: '100%', padding: '13px 16px', borderRadius: T.radiusSm, border: `1px solid ${T.border}`, background: T.surfaceAlt, color: T.text, fontSize: 15, fontFamily: T.font, outline: 'none', boxSizing: 'border-box' }}><option value="employee">👤 พนักงาน</option><option value="packer">📦 พนักงานจัดส่ง</option><option value="head">👑 หัวหน้าจัดส่ง</option><option value="export">📊 Export รายงาน</option><option value="admin">🔑 แอดมิน</option><option value="manager">🏢 ผู้จัดการ</option></select>
               </div>
               <div style={{ marginBottom: 14 }}><label style={{ display: 'block', fontSize: 12, color: T.textDim, fontWeight: 500, marginBottom: 6 }}>ทีม</label>
                 <select value={editUserData.team_id||''} onChange={e => setEditUserData(p=>({...p,team_id:e.target.value||null}))} style={{ width: '100%', padding: '13px 16px', borderRadius: T.radiusSm, border: `1px solid ${T.border}`, background: T.surfaceAlt, color: T.text, fontSize: 15, fontFamily: T.font, outline: 'none', boxSizing: 'border-box' }}><option value="">— ไม่มีทีม —</option>{teams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select>
@@ -1645,7 +1645,7 @@ export default function ManagerApp({ profile, onLogout }) {
                   <div style={{ width: 46, height: 46, borderRadius: T.radiusSm, background: p.role === 'manager' ? T.grad3 : T.grad1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 800, color: '#fff' }}>{p.full_name?.[0]||'?'}</div>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 700, fontSize: 15 }}>{p.full_name}</div>
-                    <div style={{ fontSize: 11, color: T.textDim }}>{p.role === 'manager' ? '🏢 หัวหน้า' : p.role === 'admin' ? '🔑 แอดมิน' : p.role === 'packer' ? '📦 พนักงานแพค' : '👤 พนักงาน'}{p.mt_teams?.name && ` · ${p.mt_teams.name}`}</div>
+                    <div style={{ fontSize: 11, color: T.textDim }}>{p.role === 'manager' ? '🏢 ผู้จัดการ' : p.role === 'admin' ? '🔑 แอดมิน' : p.role === 'packer' ? '📦 พนักงานจัดส่ง' : p.role === 'head' ? '👑 หัวหน้าจัดส่ง' : p.role === 'export' ? '📊 Export' : '👤 พนักงาน'}{p.mt_teams?.name && ` · ${p.mt_teams.name}`}</div>
                   </div>
                 </div>
 
