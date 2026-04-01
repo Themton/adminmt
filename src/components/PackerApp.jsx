@@ -61,6 +61,11 @@ export default function PackerApp({ profile, onLogout }) {
   const [addresses, setAddresses] = useState([])
   useEffect(() => { getAddresses().then(setAddresses) }, [])
   const [pnoInput, setPnoInput] = useState('')
+  const [sidebarPage, setSidebarPage] = useState('shipping')
+  const [trackSearchQuery, setTrackSearchQuery] = useState('')
+  const [trackSearchResult, setTrackSearchResult] = useState(null)
+  const [trackSearching, setTrackSearching] = useState(false)
+  const [activityLogs, setActivityLogs] = useState([])
   const flash = (m) => { setToast(m); setTimeout(() => setToast(null), 3500) }
 
   const [flashSrcInfo, setFlashSrcInfo] = useState(() => { try { return JSON.parse(localStorage.getItem('flash_src') || '{}') } catch { return {} } })
@@ -277,6 +282,34 @@ export default function PackerApp({ profile, onLogout }) {
   }
   const printLabels = async (t) => { const w=t.filter(o=>o.flash_pno); if(!w.length){flash('ไม่มีเลขพัสดุ');return}; await buildLabelPDF(w) }
 
+  // ═══ ค้นหาเลขพัสดุ ═══
+  const searchTracking = async () => {
+    const q = trackSearchQuery.trim()
+    if (!q) { flash('กรุณากรอกเลขพัสดุ'); return }
+    setTrackSearching(true); setTrackSearchResult(null)
+    // ค้นในระบบก่อน
+    const local = orders.find(o => o.flash_pno === q)
+    // ค้นจาก Flash API
+    const result = await trackFlashOrder(q)
+    setTrackSearching(false)
+    if (result.code === 1 && result.data) {
+      setTrackSearchResult({ pno: q, local, state: result.data.state, stateText: result.data.stateText || '', routes: Array.isArray(result.data.routes) ? result.data.routes : [] })
+    } else {
+      setTrackSearchResult({ pno: q, local, error: result.message || 'ไม่พบข้อมูล' })
+    }
+  }
+
+  // ═══ ประวัติการอัพเดต ═══
+  const loadActivityLogs = async () => {
+    // ดึงออเดอร์ที่มีการอัพเดตล่าสุด (เรียงตาม updated_at)
+    const { data } = await supabase.from('mt_orders')
+      .select('id, customer_name, customer_phone, flash_pno, flash_status, shipping_status, updated_at, created_at, employee_name, remark')
+      .order('updated_at', { ascending: false })
+      .limit(200)
+    setActivityLogs(data || [])
+  }
+  useEffect(() => { if (sidebarPage === 'history') loadActivityLogs() }, [sidebarPage])
+
   const dateFiltered = orders.filter(o => { if(dateFilter){const od=(o.order_date||'').substring(0,10);if(od<dateFilter)return false}; if(dateFilterEnd){const od=(o.order_date||'').substring(0,10);if(od>dateFilterEnd)return false}; return true })
   const shipOrders = dateFiltered.filter(o => {
     if(shipFilter==='preparing')return(!o.shipping_status||o.shipping_status==='waiting')&&!o.flash_pno
@@ -400,82 +433,225 @@ export default function PackerApp({ profile, onLogout }) {
         {(()=>{const[f,setF]=useState({name:flashSrcInfo.name||'',phone:flashSrcInfo.phone||'',address:flashSrcInfo.address||'',district:flashSrcInfo.district||'',province:flashSrcInfo.province||'',zip:flashSrcInfo.zip||''});const I=(l,k)=><div style={{marginBottom:6}}><div style={{fontSize:10,color:'#999',marginBottom:2}}>{l}</div><input value={f[k]} onChange={e=>setF({...f,[k]:e.target.value})} style={{width:'100%',padding:'6px 8px',borderRadius:4,border:'1px solid #ddd',fontSize:12}} /></div>;return<div>{I('ชื่อร้าน','name')}{I('เบอร์โทร','phone')}{I('ที่อยู่','address')}{I('อำเภอ','district')}{I('จังหวัด','province')}{I('รหัสไปรษณีย์','zip')}<button onClick={()=>saveFlashSrc(f)} style={{width:'100%',padding:10,borderRadius:6,border:'none',background:'#27AE60',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',marginTop:6}}>บันทึก</button></div>})()}
       </Modal>
 
-      <div style={{background:'#fff',padding:'14px 20px',display:'flex',justifyContent:'space-between',alignItems:'center',position:'sticky',top:0,zIndex:100,borderBottom:'1px solid #DEE2E6',boxShadow:'0 1px 4px rgba(0,0,0,0.06)'}}>
-        <div><div style={{display:'flex',alignItems:'center',gap:10}}><img src="./logo.png" alt="" style={{height:32}} /><span style={{fontSize:18,fontWeight:900}}>ADMIN THE MT</span><LiveDot /></div><div style={{fontSize:11,color:'#85929E'}}>{profile.full_name} — {profile.role === 'head' ? '👑 หัวหน้า' : '🚚 พนักงานจัดส่ง'}</div></div>
-        <div style={{display:'flex',gap:8}}><button onClick={()=>setShowSettings(true)} style={{padding:'8px 14px',borderRadius:6,border:'1px solid #E67E22',background:'#FEF5E7',color:'#E67E22',fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>⚙️ Flash</button><button onClick={onLogout} style={{padding:'8px 14px',borderRadius:6,border:'1px solid #DEE2E6',background:'transparent',color:'#85929E',fontSize:12,cursor:'pointer',fontFamily:T.font}}>ออก</button></div>
+      {/* ═══ Header ═══ */}
+      <div style={{background:'#fff',padding:'12px 20px',display:'flex',justifyContent:'space-between',alignItems:'center',position:'fixed',top:0,left:0,right:0,zIndex:200,borderBottom:'1px solid #DEE2E6',boxShadow:'0 1px 4px rgba(0,0,0,0.06)'}}>
+        <div style={{display:'flex',alignItems:'center',gap:10}}><img src="./logo.png" alt="" style={{height:28}} /><span style={{fontSize:16,fontWeight:900}}>ADMIN THE MT</span><LiveDot /></div>
+        <div style={{display:'flex',gap:8,alignItems:'center'}}>
+          <span style={{fontSize:11,color:'#85929E'}}>{profile.full_name} — {profile.role === 'head' ? '👑 หัวหน้า' : '🚚 จัดส่ง'}</span>
+          <button onClick={()=>setShowSettings(true)} style={{padding:'6px 12px',borderRadius:6,border:'1px solid #E67E22',background:'#FEF5E7',color:'#E67E22',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>⚙️</button>
+          <button onClick={onLogout} style={{padding:'6px 12px',borderRadius:6,border:'1px solid #DEE2E6',background:'transparent',color:'#85929E',fontSize:11,cursor:'pointer',fontFamily:T.font}}>ออก</button>
+        </div>
       </div>
 
-      <div style={{maxWidth:1600,margin:'0 auto',padding:'16px 20px'}}>
-        <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:14}}>
-          <div style={{fontSize:20,fontWeight:800}}>🚚 ระบบจัดการขนส่ง Flash Express</div>
-          <button onClick={()=>setShowCreateOrder(true)} style={{padding:'8px 16px',borderRadius:8,border:'none',background:'#E67E22',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:T.font,boxShadow:'0 2px 8px rgba(230,126,34,0.3)'}}>+ สร้างออเดอร์</button>
+      {/* ═══ Sidebar + Content ═══ */}
+      <div style={{display:'flex',marginTop:52,minHeight:'calc(100vh - 52px)'}}>
+        {/* Sidebar */}
+        <div style={{width:220,minWidth:220,background:'#2C3E50',color:'#fff',padding:'20px 0',position:'fixed',top:52,bottom:0,overflowY:'auto',zIndex:100}}>
+          <div style={{padding:'0 16px 16px',borderBottom:'1px solid rgba(255,255,255,0.1)',marginBottom:12}}>
+            <div style={{fontSize:13,fontWeight:700,color:'#E67E22'}}>⚡ Flash Express</div>
+            <div style={{fontSize:10,color:'rgba(255,255,255,0.5)',marginTop:2}}>ระบบจัดการขนส่ง</div>
+          </div>
+          {[
+            { id: 'shipping', icon: '🚚', label: 'การจัดส่ง' },
+            { id: 'tracking', icon: '🔍', label: 'ค้นหาเลขพัสดุ' },
+            { id: 'history', icon: '📋', label: 'ประวัติการอัพเดต' },
+          ].map(m => (
+            <button key={m.id} onClick={() => setSidebarPage(m.id)} style={{
+              display:'flex',gap:10,alignItems:'center',width:'100%',padding:'12px 20px',border:'none',cursor:'pointer',fontFamily:T.font,fontSize:13,fontWeight:sidebarPage===m.id?700:400,
+              background:sidebarPage===m.id?'rgba(230,126,34,0.15)':'transparent',color:sidebarPage===m.id?'#E67E22':'rgba(255,255,255,0.7)',
+              borderLeft:sidebarPage===m.id?'3px solid #E67E22':'3px solid transparent',transition:'all 0.15s'
+            }}>
+              <span style={{fontSize:16}}>{m.icon}</span>{m.label}
+            </button>
+          ))}
         </div>
 
-        <div style={{display:'flex',gap:6,marginBottom:12,alignItems:'center',flexWrap:'wrap'}}>
-          <input type="date" value={dateFilter} onChange={e=>{setDateFilter(e.target.value);if(!dateFilterEnd||e.target.value>dateFilterEnd)setDateFilterEnd(e.target.value);setQuickFilter('');setPage(1)}} style={{padding:'7px 10px',borderRadius:6,background:'#fff',border:'1px solid #DEE2E6',fontSize:12,fontFamily:T.font}} />
-          <span style={{color:'#ABB2B9'}}>—</span>
-          <input type="date" value={dateFilterEnd} onChange={e=>{setDateFilterEnd(e.target.value);setQuickFilter('');setPage(1)}} style={{padding:'7px 10px',borderRadius:6,background:'#fff',border:'1px solid #DEE2E6',fontSize:12,fontFamily:T.font}} />
-          {[{id:'today',label:'วันนี้',fn:()=>{setDateFilter(todayStr);setDateFilterEnd(todayStr)}},{id:'7days',label:'7 วัน',fn:()=>{const d=new Date();d.setDate(d.getDate()-6);setDateFilter(d.toISOString().split('T')[0]);setDateFilterEnd(todayStr)}},{id:'month',label:'เดือนนี้',fn:()=>{setDateFilter(new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0')+'-01');setDateFilterEnd(todayStr)}}].map(b=><button key={b.id} onClick={()=>{b.fn();setQuickFilter(b.id);setPage(1)}} style={{padding:'7px 14px',borderRadius:6,border:quickFilter===b.id?'none':'1px solid #DEE2E6',background:quickFilter===b.id?'#E67E22':'#fff',color:quickFilter===b.id?'#fff':'#85929E',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>{b.label}</button>)}
-          <div style={{flex:1}} />
-          <input placeholder="ค้นหา ชื่อ เบอร์ เลขพัสดุ..." value={searchQuery} onChange={e=>{setSearchQuery(e.target.value);setPage(1)}} style={{padding:'7px 12px',borderRadius:6,border:'1px solid #DEE2E6',fontSize:12,fontFamily:T.font,width:220}} />
-          <button onClick={refreshStatus} disabled={refreshing} style={{padding:'7px 14px',borderRadius:6,border:'1px solid #3498DB',background:'#EBF5FB',color:'#3498DB',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>{refreshing?'⏳...':'🔄 อัพเดทสถานะ'}</button>
+        {/* Main Content */}
+        <div style={{flex:1,marginLeft:220,padding:'20px 24px',minHeight:'100%'}}>
+
+          {/* ═══ PAGE: การจัดส่ง ═══ */}
+          {sidebarPage === 'shipping' && <>
+            <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:14}}>
+              <div style={{fontSize:20,fontWeight:800}}>🚚 การจัดส่ง</div>
+              <button onClick={()=>setShowCreateOrder(true)} style={{padding:'8px 16px',borderRadius:8,border:'none',background:'#E67E22',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',fontFamily:T.font,boxShadow:'0 2px 8px rgba(230,126,34,0.3)'}}>+ สร้างออเดอร์</button>
+            </div>
+
+            {/* Date filters */}
+            <div style={{display:'flex',gap:6,marginBottom:12,alignItems:'center',flexWrap:'wrap'}}>
+              <input type="date" value={dateFilter} onChange={e=>{setDateFilter(e.target.value);if(!dateFilterEnd||e.target.value>dateFilterEnd)setDateFilterEnd(e.target.value);setQuickFilter('');setPage(1)}} style={{padding:'7px 10px',borderRadius:6,background:'#fff',border:'1px solid #DEE2E6',fontSize:12,fontFamily:T.font}} />
+              <span style={{color:'#ABB2B9'}}>—</span>
+              <input type="date" value={dateFilterEnd} onChange={e=>{setDateFilterEnd(e.target.value);setQuickFilter('');setPage(1)}} style={{padding:'7px 10px',borderRadius:6,background:'#fff',border:'1px solid #DEE2E6',fontSize:12,fontFamily:T.font}} />
+              {[{id:'today',label:'วันนี้',fn:()=>{setDateFilter(todayStr);setDateFilterEnd(todayStr)}},{id:'7days',label:'7 วัน',fn:()=>{const d=new Date();d.setDate(d.getDate()-6);setDateFilter(d.toISOString().split('T')[0]);setDateFilterEnd(todayStr)}},{id:'month',label:'เดือนนี้',fn:()=>{setDateFilter(new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0')+'-01');setDateFilterEnd(todayStr)}}].map(b=><button key={b.id} onClick={()=>{b.fn();setQuickFilter(b.id);setPage(1)}} style={{padding:'7px 14px',borderRadius:6,border:quickFilter===b.id?'none':'1px solid #DEE2E6',background:quickFilter===b.id?'#E67E22':'#fff',color:quickFilter===b.id?'#fff':'#85929E',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>{b.label}</button>)}
+              <div style={{flex:1}} />
+              <input placeholder="ค้นหา ชื่อ เบอร์ เลขพัสดุ..." value={searchQuery} onChange={e=>{setSearchQuery(e.target.value);setPage(1)}} style={{padding:'7px 12px',borderRadius:6,border:'1px solid #DEE2E6',fontSize:12,fontFamily:T.font,width:220}} />
+              <button onClick={refreshStatus} disabled={refreshing} style={{padding:'7px 14px',borderRadius:6,border:'1px solid #3498DB',background:'#EBF5FB',color:'#3498DB',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>{refreshing?'⏳...':'🔄 อัพเดทสถานะ'}</button>
+            </div>
+
+            {/* Status tabs */}
+            <div style={{display:'flex',gap:0,borderBottom:'2px solid #EAECEE',marginBottom:12,overflowX:'auto'}}>
+              {[{id:'all',i:'📦',l:'ทั้งหมด',c:'#2980B9'},{id:'preparing',i:'🚚',l:'เตรียมส่ง',c:'#E67E22'},{id:'printed',i:'🖨',l:'ปริ้นแล้ว',c:'#16A085'},{id:'insystem',i:'📥',l:'รับเข้าระบบ',c:'#5D6D7E'},{id:'pickedup',i:'📦',l:'รับพัสดุแล้ว',c:'#2471A3'},{id:'delivering',i:'🛵',l:'กำลังจัดส่ง',c:'#CA6F1E'},{id:'delivered',i:'✅',l:'เซ็นรับแล้ว',c:'#1E8449'},{id:'returned',i:'↩️',l:'ตีกลับ',c:'#C0392B'}].map(f=>(<button key={f.id} onClick={()=>{setShipFilter(f.id);setPage(1)}} style={{padding:'8px 12px',border:'none',cursor:'pointer',fontFamily:T.font,fontSize:11,fontWeight:500,background:'transparent',color:shipFilter===f.id?f.c:'#85929E',borderBottom:shipFilter===f.id?'3px solid '+f.c:'3px solid transparent',marginBottom:-2,whiteSpace:'nowrap'}}>{f.i} {f.l} <strong style={{marginLeft:2}}>{C[f.id]}</strong></button>))}
+            </div>
+
+            {/* Bulk Actions */}
+            {selectedIds.size>0&&<div style={{display:'flex',gap:6,marginBottom:10,padding:'10px 14px',background:'#EBF5FB',borderRadius:8,alignItems:'center',flexWrap:'wrap'}}>
+              <span style={{fontSize:12,fontWeight:700,color:'#2980B9'}}>✔ เลือก {selectedIds.size}</span>
+              <button onClick={()=>markStatus([...selectedIds],'waiting')} style={{padding:'6px 12px',borderRadius:6,border:'1px solid #E67E22',background:'#FEF5E7',color:'#E67E22',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>🚚 เตรียมส่ง</button>
+              <button onClick={()=>markStatus([...selectedIds],'printed')} style={{padding:'6px 12px',borderRadius:6,border:'1px solid #27AE60',background:'#EAFAF1',color:'#27AE60',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>🖨 ปริ้นแล้ว</button>
+              <button onClick={()=>bulkCreateFlash(orders.filter(o=>selectedIds.has(o.id)))} disabled={bulkCreating} style={{padding:'6px 14px',borderRadius:6,border:'none',background:bulkCreating?'#BDC3C7':'#E67E22',color:'#fff',fontSize:11,fontWeight:700,cursor:bulkCreating?'wait':'pointer',fontFamily:T.font}}>{bulkCreating?'⏳ '+bulkProgress.done+'/'+bulkProgress.total:'⚡ สร้างเลขพัสดุ ('+selectedIds.size+')'}</button>
+              <button onClick={()=>printLabels(orders.filter(o=>selectedIds.has(o.id)))} style={{padding:'6px 12px',borderRadius:6,border:'1px solid #E67E22',background:'#FEF5E7',color:'#E67E22',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>🖨 ปริ้นใบปะหน้า</button>
+              <button onClick={()=>{exportProshipExcel(orders.filter(o=>selectedIds.has(o.id)),'Selected.xlsx',profile,'shipping');flash('Export OK')}} style={{padding:'6px 12px',borderRadius:6,border:'1px solid #2980B9',background:'#EBF5FB',color:'#2980B9',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>📊 Export</button>
+              <button onClick={()=>bulkDeleteOrders([...selectedIds])} disabled={deleting} style={{padding:'6px 12px',borderRadius:6,border:'1px solid #E74C3C',background:'#FDEDEC',color:'#E74C3C',fontSize:11,fontWeight:700,cursor:deleting?'wait':'pointer',fontFamily:T.font}}>{deleting?`🗑 ${deleteProgress}%`:`🗑 ลบ (${selectedIds.size})`}</button>
+              <button onClick={()=>setSelectedIds(new Set())} style={{padding:'6px 8px',borderRadius:6,border:'1px solid #DEE2E6',background:'#fff',color:'#85929E',fontSize:11,cursor:'pointer'}}>✕</button>
+            </div>}
+
+            {/* Delete Progress */}
+            {deleting&&<div style={{marginBottom:10,padding:'10px 14px',background:'#FDEDEC',borderRadius:8}}>
+              <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}><span style={{fontSize:12,fontWeight:700,color:'#E74C3C'}}>🗑 กำลังลบ...</span><span style={{fontSize:12,fontWeight:700,color:'#E74C3C'}}>{deleteProgress}%</span></div>
+              <div style={{width:'100%',height:8,background:'#F5B7B1',borderRadius:4,overflow:'hidden'}}><div style={{width:deleteProgress+'%',height:'100%',background:'#E74C3C',borderRadius:4,transition:'width 0.2s'}} /></div>
+            </div>}
+
+            {/* Table */}
+            <div style={{background:'#fff',borderRadius:8,border:'1px solid #DEE2E6',overflow:'hidden'}}><div style={{overflowX:'auto'}}>
+              <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,fontFamily:T.font,minWidth:1100}}>
+                <thead><tr style={{background:'#F8F9FA'}}>
+                  <th style={{padding:'10px 6px',textAlign:'center',borderBottom:'1px solid #DEE2E6',width:36}}><input type="checkbox" checked={(()=>{const p=searchFiltered.slice((page-1)*pageSize,page*pageSize).map(o=>o.id);return p.length>0&&p.every(id=>selectedIds.has(id))})() } onChange={toggleAll} style={{cursor:'pointer'}} /></th>
+                  {['#','วันที่','เวลา','ลูกค้า','เบอร์','สถานะ','ขนส่ง','หมายเลขติดตาม','COD','หมายเหตุ','จัดการ'].map(h=><th key={h} style={{padding:'10px 6px',textAlign:'left',fontWeight:600,color:'#5D6D7E',borderBottom:'1px solid #DEE2E6',fontSize:11}}>{h}</th>)}
+                </tr></thead>
+                <tbody>
+                  {searchFiltered.slice((page-1)*pageSize,page*pageSize).map((o,i)=>{const dt=new Date(o.created_at);const b=getBadge(o);const hp=!!o.flash_pno;return(
+                    <tr key={o.id} style={{borderBottom:'1px solid #EAECEE',background:selectedIds.has(o.id)?'#EBF5FB':'#fff'}}>
+                      <td style={{padding:'8px 6px',textAlign:'center'}}><input type="checkbox" checked={selectedIds.has(o.id)} onClick={e=>toggleSelect(o.id,e)} readOnly style={{cursor:'pointer'}} /></td>
+                      <td style={{padding:'8px 6px',textAlign:'center',color:'#ABB2B9',fontSize:10}}>{(page-1)*pageSize+i+1}</td>
+                      <td style={{padding:'8px 6px',fontSize:11}}>{dt.toLocaleDateString('th-TH',{timeZone:'Asia/Bangkok',day:'2-digit',month:'short',year:'numeric'})}</td>
+                      <td style={{padding:'8px 6px',fontSize:11,color:'#85929E'}}>{dt.toLocaleTimeString('th-TH',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit'})}</td>
+                      <td style={{padding:'8px 6px',fontWeight:600}}>{o.customer_name}</td>
+                      <td style={{padding:'8px 6px',color:'#85929E',fontSize:11}}>{o.customer_phone}</td>
+                      <td style={{padding:'8px 6px'}}><span style={{padding:'3px 8px',borderRadius:6,fontSize:10,fontWeight:700,background:b.bg,color:b.c}}>{b.i} {b.l}</span></td>
+                      <td style={{padding:'8px 6px',fontSize:11}}>{hp?'flash':'—'}</td>
+                      <td style={{padding:'8px 6px'}}>{hp?<div style={{display:'flex',alignItems:'center',gap:4}}><span style={{fontFamily:'monospace',fontSize:11,color:'#2980B9',fontWeight:700}}>{o.flash_pno}</span><button onClick={()=>{setPnoModal({orderId:o.id,pno:o.flash_pno,customerName:o.customer_name});setPnoInput(o.flash_pno||'')}} style={{background:'none',border:'none',cursor:'pointer',fontSize:12,padding:0,opacity:0.5}} title="แก้ไข">✏️</button></div>:<span style={{color:'#CCD1D1',fontSize:10}}>—</span>}</td>
+                      <td style={{padding:'8px 6px',textAlign:'right',fontWeight:700}}>{o.payment_type==='cod'?<span style={{color:'#E74C3C'}}>฿{fmt(parseFloat(o.cod_amount||o.sale_price)||0)}</span>:<span style={{color:'#27AE60',fontSize:10}}>โอน</span>}</td>
+                      <td style={{padding:'8px 6px',fontSize:10,color:'#85929E',maxWidth:120,overflow:'hidden',whiteSpace:'nowrap',textOverflow:'ellipsis'}}>{o.remark||''}</td>
+                      <td style={{padding:'8px 6px'}}><div style={{display:'flex',gap:4}}>
+                        <button onClick={()=>openEditOrder(o)} style={{background:'none',border:'none',cursor:'pointer',fontSize:14,padding:0}} title="แก้ไขข้อมูล">✏️</button>
+                        {hp&&<button onClick={()=>trackFlash(o.flash_pno)} style={{background:'none',border:'none',cursor:'pointer',fontSize:14,padding:0}} title="ดูสถานะ">👁</button>}
+                        {hp&&<button onClick={()=>printLabels([o])} style={{background:'none',border:'none',cursor:'pointer',fontSize:14,padding:0}} title="ปริ้นใบปะหน้า">🖨</button>}
+                        {hp&&<button onClick={()=>cancelFlash(o)} style={{background:'none',border:'none',cursor:'pointer',fontSize:14,padding:0,opacity:0.5}} title="ยกเลิก Flash">❌</button>}
+                        {!hp&&<button onClick={async()=>{if(!confirm('สร้างเลขพัสดุ?\n'+o.customer_name))return;flash('...');const r=await createFlashOrder(o,flashSrcInfo);if(r.code===1&&r.data?.pno){await supabase.from('mt_orders').update({flash_pno:r.data.pno,flash_status:'created',flash_sort_code:r.data.sortCode||''}).eq('id',o.id);setOrders(prev=>prev.map(x=>x.id===o.id?{...x,flash_pno:r.data.pno,flash_status:'created',flash_sort_code:r.data.sortCode||''}:x));flash('OK '+r.data.pno)}else{flash(r.message||'Error')}}} style={{padding:'4px 8px',borderRadius:4,border:'none',background:'#E67E22',color:'#fff',fontSize:10,fontWeight:700,cursor:'pointer'}}>⚡</button>}
+                        <button onClick={()=>deleteOrder(o)} style={{background:'none',border:'none',cursor:'pointer',fontSize:14,padding:0,opacity:0.4}} title="ลบออเดอร์">🗑</button>
+                      </div></td>
+                    </tr>)})}
+                </tbody>
+              </table>
+              {searchFiltered.length===0&&!loading&&<Empty text="ไม่มีออเดอร์" />}
+              {loading&&<div style={{textAlign:'center',padding:40,color:'#85929E'}}>⏳ กำลังโหลด...</div>}
+            </div></div>
+            <Pagination total={searchFiltered.length} page={page} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />
+          </>}
+
+          {/* ═══ PAGE: ค้นหาเลขพัสดุ ═══ */}
+          {sidebarPage === 'tracking' && <div>
+            <div style={{fontSize:20,fontWeight:800,marginBottom:20}}>🔍 ค้นหาเลขพัสดุ</div>
+            <div style={{maxWidth:600}}>
+              <div style={{display:'flex',gap:8,marginBottom:20}}>
+                <input value={trackSearchQuery} onChange={e=>setTrackSearchQuery(e.target.value)} onKeyDown={e=>e.key==='Enter'&&searchTracking()}
+                  placeholder="พิมพ์เลขพัสดุ เช่น TH37128J1XJ69A" style={{flex:1,padding:'12px 16px',borderRadius:8,border:'1px solid #DEE2E6',fontSize:15,fontFamily:'monospace'}} />
+                <button onClick={searchTracking} disabled={trackSearching} style={{padding:'12px 24px',borderRadius:8,border:'none',background:'#E67E22',color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>{trackSearching?'⏳...':'🔍 ค้นหา'}</button>
+              </div>
+
+              {trackSearchResult && <div style={{background:'#fff',borderRadius:12,border:'1px solid #DEE2E6',overflow:'hidden'}}>
+                {/* Header */}
+                <div style={{padding:'16px 20px',borderBottom:'1px solid #EAECEE'}}>
+                  <div style={{fontFamily:'monospace',fontSize:18,fontWeight:900,color:'#2C3E50'}}>{trackSearchResult.pno}</div>
+                  {trackSearchResult.local && <div style={{fontSize:12,color:'#85929E',marginTop:4}}>ลูกค้า: <strong style={{color:'#2C3E50'}}>{trackSearchResult.local.customer_name}</strong> | {trackSearchResult.local.customer_phone}</div>}
+                </div>
+
+                {trackSearchResult.error ? (
+                  <div style={{padding:20,textAlign:'center',color:'#E74C3C',fontSize:14}}>{trackSearchResult.error}</div>
+                ) : (<>
+                  {/* Status */}
+                  <div style={{padding:'16px 20px',textAlign:'center',background:(SM[trackSearchResult.state]||{}).bg||'#f5f5f5'}}>
+                    <div style={{fontSize:28,marginBottom:4}}>{(SM[trackSearchResult.state]||{}).i||'📦'}</div>
+                    <div style={{fontSize:16,fontWeight:700,color:(SM[trackSearchResult.state]||{}).c||'#333'}}>{trackSearchResult.stateText||(SM[trackSearchResult.state]||{}).l||'ไม่ทราบสถานะ'}</div>
+                  </div>
+
+                  {/* Progress Bar */}
+                  <div style={{padding:'12px 20px',display:'flex',gap:4,alignItems:'center'}}>
+                    {[1,2,3,4,5].map(s=><div key={s} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:4}}>
+                      <div style={{width:24,height:24,borderRadius:12,background:trackSearchResult.state>=s?'#E67E22':'#DEE2E6',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700}}>{s}</div>
+                      <div style={{fontSize:8,color:trackSearchResult.state>=s?'#E67E22':'#ABB2B9',textAlign:'center'}}>{['สร้าง','รับ','คัดแยก','จัดส่ง','สำเร็จ'][s-1]}</div>
+                    </div>)}
+                  </div>
+
+                  {/* Timeline */}
+                  {trackSearchResult.routes?.length>0 && <div style={{padding:'0 20px 16px'}}>
+                    <div style={{fontSize:13,fontWeight:700,marginBottom:10,color:'#2C3E50'}}>📍 Timeline</div>
+                    {trackSearchResult.routes.map((r,i)=>(
+                      <div key={i} style={{display:'flex',gap:12,paddingBottom:12,position:'relative'}}>
+                        <div style={{display:'flex',flexDirection:'column',alignItems:'center'}}>
+                          <div style={{width:10,height:10,borderRadius:5,background:i===0?'#E67E22':'#DEE2E6',border:'2px solid '+(i===0?'#E67E22':'#DEE2E6')}} />
+                          {i<trackSearchResult.routes.length-1&&<div style={{width:2,flex:1,background:'#EAECEE'}} />}
+                        </div>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:11,color:'#85929E'}}>{r.dateTime||r.datetime||''}</div>
+                          <div style={{fontSize:12,color:'#2C3E50',fontWeight:i===0?600:400}}>{r.message||r.routeDesc||''}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>}
+
+                  {/* Local info */}
+                  {trackSearchResult.local && <div style={{padding:'12px 20px',borderTop:'1px solid #EAECEE',background:'#FAFAFA'}}>
+                    <div style={{fontSize:11,color:'#85929E',marginBottom:6}}>ข้อมูลในระบบ</div>
+                    <div style={{fontSize:12}}>
+                      <span style={{color:'#2C3E50',fontWeight:600}}>{trackSearchResult.local.customer_name}</span> | {trackSearchResult.local.customer_phone} | {trackSearchResult.local.district} {trackSearchResult.local.province}
+                      {trackSearchResult.local.payment_type==='cod'&&<span style={{marginLeft:8,color:'#E74C3C',fontWeight:700}}>COD ฿{fmt(parseFloat(trackSearchResult.local.cod_amount||trackSearchResult.local.sale_price)||0)}</span>}
+                    </div>
+                    {trackSearchResult.local.remark&&<div style={{fontSize:11,color:'#85929E',marginTop:2}}>Note: {trackSearchResult.local.remark}</div>}
+                  </div>}
+                </>)}
+              </div>}
+            </div>
+          </div>}
+
+          {/* ═══ PAGE: ประวัติการอัพเดต ═══ */}
+          {sidebarPage === 'history' && <div>
+            <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:20}}>
+              <div style={{fontSize:20,fontWeight:800}}>📋 ประวัติการอัพเดตข้อมูล</div>
+              <button onClick={loadActivityLogs} style={{padding:'7px 14px',borderRadius:6,border:'1px solid #3498DB',background:'#EBF5FB',color:'#3498DB',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>🔄 รีเฟรช</button>
+            </div>
+
+            <div style={{background:'#fff',borderRadius:8,border:'1px solid #DEE2E6',overflow:'hidden'}}>
+              <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,fontFamily:T.font}}>
+                <thead><tr style={{background:'#F8F9FA'}}>
+                  {['#','อัพเดตล่าสุด','ลูกค้า','เบอร์','เลขพัสดุ','สถานะ Flash','สถานะจัดส่ง','พนักงาน','หมายเหตุ'].map(h=>(
+                    <th key={h} style={{padding:'10px 8px',textAlign:'left',fontWeight:600,color:'#5D6D7E',borderBottom:'1px solid #DEE2E6',fontSize:11}}>{h}</th>
+                  ))}
+                </tr></thead>
+                <tbody>
+                  {activityLogs.map((o,i)=>{
+                    const badge = getBadge(o)
+                    const updatedAt = o.updated_at ? new Date(o.updated_at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '—'
+                    return (
+                      <tr key={o.id} style={{borderBottom:'1px solid #EAECEE'}}>
+                        <td style={{padding:'8px',textAlign:'center',color:'#ABB2B9',fontSize:10}}>{i+1}</td>
+                        <td style={{padding:'8px',fontSize:11,color:'#2C3E50',fontWeight:600}}>{updatedAt}</td>
+                        <td style={{padding:'8px',fontWeight:600}}>{o.customer_name}</td>
+                        <td style={{padding:'8px',color:'#85929E'}}>{o.customer_phone}</td>
+                        <td style={{padding:'8px'}}>{o.flash_pno?<span style={{fontFamily:'monospace',fontSize:11,color:'#2980B9',fontWeight:700}}>{o.flash_pno}</span>:'—'}</td>
+                        <td style={{padding:'8px'}}><span style={{padding:'3px 8px',borderRadius:6,fontSize:10,fontWeight:700,background:badge.bg,color:badge.c}}>{badge.i} {badge.l}</span></td>
+                        <td style={{padding:'8px',fontSize:11}}>{o.shipping_status||'waiting'}</td>
+                        <td style={{padding:'8px',fontSize:11,color:'#85929E'}}>{o.employee_name||'—'}</td>
+                        <td style={{padding:'8px',fontSize:10,color:'#85929E',maxWidth:150,overflow:'hidden',whiteSpace:'nowrap',textOverflow:'ellipsis'}}>{o.remark||''}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+              {activityLogs.length===0&&<div style={{textAlign:'center',padding:40,color:'#85929E'}}>ไม่มีข้อมูล</div>}
+            </div>
+          </div>}
+
         </div>
-
-        <div style={{display:'flex',gap:0,borderBottom:'2px solid #EAECEE',marginBottom:12,overflowX:'auto'}}>
-          {[{id:'all',i:'📦',l:'ทั้งหมด',c:'#2980B9'},{id:'preparing',i:'🚚',l:'เตรียมส่ง',c:'#E67E22'},{id:'printed',i:'🖨',l:'ปริ้นแล้ว',c:'#16A085'},{id:'insystem',i:'📥',l:'รับเข้าระบบ',c:'#5D6D7E'},{id:'pickedup',i:'📦',l:'รับพัสดุแล้ว',c:'#2471A3'},{id:'delivering',i:'🛵',l:'กำลังจัดส่ง',c:'#CA6F1E'},{id:'delivered',i:'✅',l:'เซ็นรับแล้ว',c:'#1E8449'},{id:'returned',i:'↩️',l:'ตีกลับ',c:'#C0392B'}].map(f=>(<button key={f.id} onClick={()=>{setShipFilter(f.id);setPage(1)}} style={{padding:'8px 12px',border:'none',cursor:'pointer',fontFamily:T.font,fontSize:11,fontWeight:500,background:'transparent',color:shipFilter===f.id?f.c:'#85929E',borderBottom:shipFilter===f.id?'3px solid '+f.c:'3px solid transparent',marginBottom:-2,whiteSpace:'nowrap'}}>{f.i} {f.l} <strong style={{marginLeft:2}}>{C[f.id]}</strong></button>))}
-        </div>
-
-        {selectedIds.size>0&&<div style={{display:'flex',gap:6,marginBottom:10,padding:'10px 14px',background:'#EBF5FB',borderRadius:8,alignItems:'center',flexWrap:'wrap'}}>
-          <span style={{fontSize:12,fontWeight:700,color:'#2980B9'}}>✔ เลือก {selectedIds.size}</span>
-          <button onClick={()=>markStatus([...selectedIds],'waiting')} style={{padding:'6px 12px',borderRadius:6,border:'1px solid #E67E22',background:'#FEF5E7',color:'#E67E22',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>🚚 เตรียมส่ง</button>
-          <button onClick={()=>markStatus([...selectedIds],'printed')} style={{padding:'6px 12px',borderRadius:6,border:'1px solid #27AE60',background:'#EAFAF1',color:'#27AE60',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>🖨 ปริ้นแล้ว</button>
-          <button onClick={()=>bulkCreateFlash(orders.filter(o=>selectedIds.has(o.id)))} disabled={bulkCreating} style={{padding:'6px 14px',borderRadius:6,border:'none',background:bulkCreating?'#BDC3C7':'#E67E22',color:'#fff',fontSize:11,fontWeight:700,cursor:bulkCreating?'wait':'pointer',fontFamily:T.font}}>{bulkCreating?'⏳ '+bulkProgress.done+'/'+bulkProgress.total:'⚡ สร้างเลขพัสดุ ('+selectedIds.size+')'}</button>
-          <button onClick={()=>printLabels(orders.filter(o=>selectedIds.has(o.id)))} style={{padding:'6px 12px',borderRadius:6,border:'1px solid #E67E22',background:'#FEF5E7',color:'#E67E22',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>🖨 ปริ้นใบปะหน้า</button>
-          <button onClick={()=>{exportProshipExcel(orders.filter(o=>selectedIds.has(o.id)),'Selected.xlsx',profile,'shipping');flash('Export OK')}} style={{padding:'6px 12px',borderRadius:6,border:'1px solid #2980B9',background:'#EBF5FB',color:'#2980B9',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>📊 Export</button>
-            <button onClick={()=>bulkDeleteOrders([...selectedIds])} disabled={deleting} style={{padding:'6px 12px',borderRadius:6,border:'1px solid #E74C3C',background:'#FDEDEC',color:'#E74C3C',fontSize:11,fontWeight:700,cursor:deleting?'wait':'pointer',fontFamily:T.font}}>{deleting?`🗑 ${deleteProgress}%`:`🗑 ลบ (${selectedIds.size})`}</button>
-          <button onClick={()=>setSelectedIds(new Set())} style={{padding:'6px 8px',borderRadius:6,border:'1px solid #DEE2E6',background:'#fff',color:'#85929E',fontSize:11,cursor:'pointer'}}>✕</button>
-        </div>}
-
-        {deleting&&<div style={{marginBottom:10,padding:'10px 14px',background:'#FDEDEC',borderRadius:8}}>
-          <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}><span style={{fontSize:12,fontWeight:700,color:'#E74C3C'}}>🗑 กำลังลบ...</span><span style={{fontSize:12,fontWeight:700,color:'#E74C3C'}}>{deleteProgress}%</span></div>
-          <div style={{width:'100%',height:8,background:'#F5B7B1',borderRadius:4,overflow:'hidden'}}><div style={{width:deleteProgress+'%',height:'100%',background:'#E74C3C',borderRadius:4,transition:'width 0.2s'}} /></div>
-        </div>}
-
-        <div style={{background:'#fff',borderRadius:8,border:'1px solid #DEE2E6',overflow:'hidden'}}><div style={{overflowX:'auto'}}>
-          <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,fontFamily:T.font,minWidth:1100}}>
-            <thead><tr style={{background:'#F8F9FA'}}>
-              <th style={{padding:'10px 6px',textAlign:'center',borderBottom:'1px solid #DEE2E6',width:36}}><input type="checkbox" checked={(()=>{const p=searchFiltered.slice((page-1)*pageSize,page*pageSize).map(o=>o.id);return p.length>0&&p.every(id=>selectedIds.has(id))})() } onChange={toggleAll} style={{cursor:'pointer'}} /></th>
-              {['#','วันที่','เวลา','ลูกค้า','เบอร์','สถานะ','ขนส่ง','หมายเลขติดตาม','COD','หมายเหตุ','จัดการ'].map(h=><th key={h} style={{padding:'10px 6px',textAlign:'left',fontWeight:600,color:'#5D6D7E',borderBottom:'1px solid #DEE2E6',fontSize:11}}>{h}</th>)}
-            </tr></thead>
-            <tbody>
-              {searchFiltered.slice((page-1)*pageSize,page*pageSize).map((o,i)=>{const dt=new Date(o.created_at);const b=getBadge(o);const hp=!!o.flash_pno;return(
-                <tr key={o.id} style={{borderBottom:'1px solid #EAECEE',background:selectedIds.has(o.id)?'#EBF5FB':'#fff'}}>
-                  <td style={{padding:'8px 6px',textAlign:'center'}}><input type="checkbox" checked={selectedIds.has(o.id)} onClick={e=>toggleSelect(o.id,e)} readOnly style={{cursor:'pointer'}} /></td>
-                  <td style={{padding:'8px 6px',textAlign:'center',color:'#ABB2B9',fontSize:10}}>{(page-1)*pageSize+i+1}</td>
-                  <td style={{padding:'8px 6px',fontSize:11}}>{dt.toLocaleDateString('th-TH',{timeZone:'Asia/Bangkok',day:'2-digit',month:'short',year:'numeric'})}</td>
-                  <td style={{padding:'8px 6px',fontSize:11,color:'#85929E'}}>{dt.toLocaleTimeString('th-TH',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit'})}</td>
-                  <td style={{padding:'8px 6px',fontWeight:600}}>{o.customer_name}</td>
-                  <td style={{padding:'8px 6px',color:'#85929E',fontSize:11}}>{o.customer_phone}</td>
-                  <td style={{padding:'8px 6px'}}><span style={{padding:'3px 8px',borderRadius:6,fontSize:10,fontWeight:700,background:b.bg,color:b.c}}>{b.i} {b.l}</span></td>
-                  <td style={{padding:'8px 6px',fontSize:11}}>{hp?'flash':'—'}</td>
-                  <td style={{padding:'8px 6px'}}>{hp?<div style={{display:'flex',alignItems:'center',gap:4}}><span style={{fontFamily:'monospace',fontSize:11,color:'#2980B9',fontWeight:700}}>{o.flash_pno}</span><button onClick={()=>{setPnoModal({orderId:o.id,pno:o.flash_pno,customerName:o.customer_name});setPnoInput(o.flash_pno||'')}} style={{background:'none',border:'none',cursor:'pointer',fontSize:12,padding:0,opacity:0.5}} title="แก้ไข">✏️</button></div>:<span style={{color:'#CCD1D1',fontSize:10}}>—</span>}</td>
-                  <td style={{padding:'8px 6px',textAlign:'right',fontWeight:700}}>{o.payment_type==='cod'?<span style={{color:'#E74C3C'}}>฿{fmt(parseFloat(o.cod_amount||o.sale_price)||0)}</span>:<span style={{color:'#27AE60',fontSize:10}}>โอน</span>}</td>
-                  <td style={{padding:'8px 6px',fontSize:10,color:'#85929E',maxWidth:120,overflow:'hidden',whiteSpace:'nowrap',textOverflow:'ellipsis'}}>{o.remark||''}</td>
-                  <td style={{padding:'8px 6px'}}><div style={{display:'flex',gap:4}}>
-                    <button onClick={()=>openEditOrder(o)} style={{background:'none',border:'none',cursor:'pointer',fontSize:14,padding:0}} title="แก้ไขข้อมูล">✏️</button>
-                    {hp&&<button onClick={()=>trackFlash(o.flash_pno)} style={{background:'none',border:'none',cursor:'pointer',fontSize:14,padding:0}} title="ดูสถานะ">👁</button>}
-                    {hp&&<button onClick={()=>printLabels([o])} style={{background:'none',border:'none',cursor:'pointer',fontSize:14,padding:0}} title="ปริ้นใบปะหน้า">🖨</button>}
-                    {hp&&<button onClick={()=>cancelFlash(o)} style={{background:'none',border:'none',cursor:'pointer',fontSize:14,padding:0,opacity:0.5}} title="ยกเลิก Flash">❌</button>}
-                    {!hp&&<button onClick={async()=>{if(!confirm('สร้างเลขพัสดุ?\n'+o.customer_name))return;flash('...');const r=await createFlashOrder(o,flashSrcInfo);if(r.code===1&&r.data?.pno){await supabase.from('mt_orders').update({flash_pno:r.data.pno,flash_status:'created',flash_sort_code:r.data.sortCode||''}).eq('id',o.id);setOrders(prev=>prev.map(x=>x.id===o.id?{...x,flash_pno:r.data.pno,flash_status:'created',flash_sort_code:r.data.sortCode||''}:x));flash('OK '+r.data.pno)}else{flash(r.message||'Error')}}} style={{padding:'4px 8px',borderRadius:4,border:'none',background:'#E67E22',color:'#fff',fontSize:10,fontWeight:700,cursor:'pointer'}}>⚡</button>}
-                    <button onClick={()=>deleteOrder(o)} style={{background:'none',border:'none',cursor:'pointer',fontSize:14,padding:0,opacity:0.4}} title="ลบออเดอร์">🗑</button>
-                  </div></td>
-                </tr>)})}
-            </tbody>
-          </table>
-          {searchFiltered.length===0&&!loading&&<Empty text="ไม่มีออเดอร์" />}
-          {loading&&<div style={{textAlign:'center',padding:40,color:'#85929E'}}>⏳ กำลังโหลด...</div>}
-        </div></div>
-        <Pagination total={searchFiltered.length} page={page} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={setPageSize} />
       </div>
     </div>
   )
