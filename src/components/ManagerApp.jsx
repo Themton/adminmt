@@ -551,24 +551,23 @@ export default function ManagerApp({ profile, onLogout }) {
     if (f.password.length < 6) { flash('❌ รหัสผ่าน 6 ตัวขึ้นไป'); return }
     flash('⏳ กำลังสร้างบัญชี...')
     try {
-      // บันทึก session ปัจจุบัน
-      const { data: { session: cur } } = await supabase.auth.getSession()
-      if (!cur) { flash('❌ ไม่มี session — กรุณา login ใหม่'); return }
-
-      // สร้าง auth user
-      const { data, error } = await supabase.auth.signUp({ email: f.email, password: f.password, options: { data: { full_name: f.fullName } } })
-      if (error) { flash('❌ สร้าง auth ไม่สำเร็จ: ' + error.message); return }
-      const newUserId = data.user?.id
+      // ใช้ fetch ตรง → ไม่กระทบ session admin
+      const sbUrl = import.meta.env.VITE_SUPABASE_URL
+      const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+      const res = await fetch(`${sbUrl}/auth/v1/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': sbKey },
+        body: JSON.stringify({ email: f.email, password: f.password })
+      })
+      const result = await res.json()
+      if (!res.ok || result.error) { flash('❌ ' + (result.error?.message || result.msg || 'สร้าง auth ไม่สำเร็จ')); return }
+      const newUserId = result.id || result.user?.id
       if (!newUserId) { flash('❌ ไม่ได้ user ID'); return }
 
-      // กู้ session admin กลับ
-      await supabase.auth.setSession({ access_token: cur.access_token, refresh_token: cur.refresh_token })
-      await new Promise(r => setTimeout(r, 800))
-
-      // สร้าง profile
+      // insert profile (admin session ยังอยู่)
+      await new Promise(r => setTimeout(r, 300))
       const { error: profErr } = await supabase.from('mt_profiles').insert({ id: newUserId, full_name: f.fullName, role: f.role, team_id: f.teamId || null, email: f.email, password_text: f.password })
       if (profErr) {
-        // ลองอีกครั้ง
         await new Promise(r => setTimeout(r, 500))
         const { error: retry } = await supabase.from('mt_profiles').insert({ id: newUserId, full_name: f.fullName, role: f.role, team_id: f.teamId || null, email: f.email, password_text: f.password })
         if (retry) { flash('❌ สร้าง profile ไม่สำเร็จ: ' + retry.message); return }
