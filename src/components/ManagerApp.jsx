@@ -250,110 +250,64 @@ export default function ManagerApp({ profile, onLogout }) {
     const dst = `${order.district || ''} — ${order.province || ''}`
     const srcLine = `ผู้ส่ง ${flashSrcInfo.name || 'THE MT'} ${flashSrcInfo.phone || ''} ${flashSrcInfo.address || ''} ${flashSrcInfo.district || ''} ${flashSrcInfo.province || ''} ${flashSrcInfo.zip || ''}`
 
-    return `
-    <div class="label-page">
-      <div class="label">
-        ${order.flash_sort_code ? `<div class="sort-code-bar"><span class="sort-num">${idx}</span>${order.flash_sort_code}</div>` : ''}
-        <div class="barcode-section">
-          <svg id="bc-${idx}"></svg>
+    return `<div style="width:98mm;height:73mm;overflow:hidden;border:0.3mm solid #000;margin:1mm auto;page-break-after:always;font-family:sans-serif">
+      ${order.flash_sort_code ? `<div style="text-align:center;padding:0.8mm 0;font-size:5mm;font-weight:900;font-family:monospace;border-bottom:0.5mm solid #000;position:relative"><span style="position:absolute;left:1mm;top:0.8mm;background:#E67E22;color:#fff;width:5mm;height:5mm;border-radius:1mm;display:inline-flex;align-items:center;justify-content:center;font-size:3mm">${idx}</span>${order.flash_sort_code}</div>` : ''}
+      <div style="text-align:center;padding:0.5mm 2mm;border-bottom:0.5mm solid #000"><svg id="bc-${idx}" style="width:94mm;height:10mm"></svg></div>
+      <div style="text-align:center;padding:0.5mm;font-size:3.5mm;font-weight:900;font-family:monospace;letter-spacing:0.5mm;background:#f0f0f0;border-bottom:0.5mm solid #000">${pno}</div>
+      <div style="background:#444;color:#fff;padding:0.5mm 2mm;font-size:2.5mm;font-weight:700">DST &nbsp; ${dst}</div>
+      <div style="padding:0.3mm 2mm;font-size:1.8mm;color:#777;border-bottom:0.2mm solid #ddd;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${srcLine.trim()}</div>
+      <div style="display:flex">
+        <div style="flex:1;padding:1mm 2mm">
+          <div style="font-weight:700;font-size:3mm">ผู้รับ ${order.customer_name || ''}</div>
+          <div style="font-size:4.5mm;font-weight:900;letter-spacing:0.3mm">${maskedPhone}</div>
+          <div style="font-size:2.2mm;color:#333;line-height:1.3">${order.customer_address || ''}</div>
+          <div style="font-size:2.2mm;color:#333">${order.sub_district || ''}, ${order.district || ''}</div>
+          <div style="font-size:2.2mm;color:#333">${order.province || ''} ${order.zip_code || ''}</div>
         </div>
-        <div class="pno-bar">${pno}</div>
-        <div class="dst-bar">DST &nbsp;&nbsp; ${dst}</div>
-        <div class="src-line">${srcLine.trim()}</div>
-        <div class="rcv-qr-row">
-          <div class="rcv-section">
-            <div class="rcv-name">ผู้รับ ${order.customer_name || ''}</div>
-            <div class="rcv-phone">${maskedPhone}</div>
-            <div class="rcv-addr">${order.customer_address || ''}</div>
-            <div class="rcv-addr2">${order.sub_district || ''}, ${order.district || ''}</div>
-            <div class="rcv-addr3">${order.province || ''} ${order.zip_code || ''}</div>
-          </div>
-          <div class="qr-section" id="qr-${idx}"></div>
-        </div>
-        ${cod > 0 ? `<div class="cod-bar"><span class="cod-badge">COD</span> เก็บเงินค่าสินค้า COD ${cod.toLocaleString()}</div>` : '<div class="cod-bar" style="background:#eee;color:#999">ชำระแล้ว (โอน)</div>'}
-        ${order.remark ? `<div class="note-bar">Note: ${order.remark}</div>` : ''}
-        <div class="footer-bar">
-          <span>Print-: ${now}</span>
-          <span>${idx}/${total}</span>
-          <span>THE MT</span>
-        </div>
+        <div id="qr-${idx}" style="width:16mm;min-width:16mm;display:flex;align-items:center;justify-content:center;padding:1mm"></div>
       </div>
+      ${cod > 0 ? `<div style="background:#1a1a1a;color:#fff;padding:1mm 2mm;font-size:3.8mm;font-weight:900;display:flex;align-items:center;gap:1.5mm"><span style="background:#E67E22;padding:0.3mm 2mm;border-radius:0.8mm;font-size:2.5mm">COD</span>เก็บเงินค่าสินค้า COD ${cod.toLocaleString()}</div>` : ''}
+      ${order.remark ? `<div style="padding:0.5mm 2mm;font-size:2.8mm;font-weight:700;border-top:0.2mm solid #ddd;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">Note: ${order.remark}</div>` : ''}
+      <div style="padding:0.3mm 2mm;font-size:1.8mm;color:#999;display:flex;justify-content:space-between;border-top:0.2mm solid #eee"><span>Print-: ${now}</span><span>${idx}/${total}</span><span>THE MT</span></div>
     </div>`
   }
 
   const openLabelWindow = (labelHTMLs, count, labelOrders) => {
     const w = window.open('', '_blank')
-    w.document.write(`<html><head><title>ใบปะหน้า ${count} รายการ — THE MT</title>
+    w.document.write(`<html><head><title>ใบปะหน้า ${count} รายการ</title>
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
     <style>
-      * { margin:0; padding:0; box-sizing:border-box; }
-      body { font-family: 'Sarabun','Noto Sans Thai',sans-serif; background:#eee; -webkit-print-color-adjust:exact; print-color-adjust:exact }
-      @media print {
-        .no-print{display:none!important}
-        @page{margin:0;size:100mm 75mm}
-        body{background:#fff}
-        .label-page{page-break-after:always;padding:0;margin:0}
-        .label{border:none!important}
-      }
-      .toolbar{position:fixed;top:0;left:0;right:0;background:#2C3E50;color:#fff;padding:10px 20px;display:flex;gap:12px;align-items:center;z-index:999}
-      .toolbar button{padding:8px 20px;border:none;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer}
-      .label-page{display:flex;justify-content:center;padding:12px}
-      .label{width:378px;background:#fff;border:2px solid #222;overflow:hidden}
-      .sort-code-bar{text-align:center;padding:2px 8px;font-size:19px;font-weight:900;font-family:'Courier New',monospace;position:relative;border-bottom:2px solid #222}
-      .sort-num{position:absolute;left:5px;top:3px;background:#E67E22;color:#fff;width:20px;height:20px;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900}
-      .barcode-section{text-align:center;padding:1px 8px 0;border-bottom:2px solid #222}
-      .barcode-section svg{width:100%;height:36px}
-      .pno-bar{background:#F0F0F0;padding:1px 8px;text-align:center;font-size:12px;font-weight:900;letter-spacing:1px;font-family:'Courier New',monospace;border-bottom:2px solid #222}
-      .dst-bar{background:#444;color:#fff;padding:1px 8px;font-weight:700;font-size:10px}
-      .src-line{padding:1px 8px;font-size:7px;color:#777;border-bottom:1px solid #ddd;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-      .rcv-qr-row{display:flex}
-      .rcv-section{flex:1;padding:3px 8px}
-      .rcv-name{font-weight:700;font-size:11px}
-      .rcv-phone{font-size:16px;font-weight:900;letter-spacing:1px}
-      .rcv-addr,.rcv-addr2,.rcv-addr3{font-size:9px;color:#333;line-height:1.25}
-      .qr-section{width:66px;min-width:66px;display:flex;align-items:center;justify-content:center;padding:2px}
-      .cod-bar{background:#1a1a1a;color:#fff;padding:2px 8px;font-size:14px;font-weight:900;display:flex;align-items:center;gap:6px}
-      .cod-badge{background:#E67E22;color:#fff;padding:0 6px;border-radius:3px;font-size:10px;font-weight:900}
-      .note-bar{padding:1px 8px;font-size:10px;font-weight:700;border-top:1px solid #ddd;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-      .footer-bar{padding:1px 8px;font-size:7px;color:#999;display:flex;justify-content:space-between;border-top:1px solid #eee}
+      *{margin:0;padding:0;box-sizing:border-box}
+      body{background:#eee;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+      @media print{.np{display:none!important}@page{margin:0;size:100mm 75mm}body{background:#fff}}
     </style></head><body>
-    <div class="toolbar no-print">
+    <div class="np" style="position:fixed;top:0;left:0;right:0;background:#2C3E50;color:#fff;padding:10px 20px;display:flex;gap:12px;align-items:center;z-index:999">
       <span style="font-size:15px;font-weight:700">🖨 ใบปะหน้า ${count} รายการ</span>
-      <button onclick="window.print()" style="background:#E67E22;color:#fff">🖨 ปริ้นทั้งหมด</button>
-      <button onclick="window.close()" style="background:#95a5a6;color:#fff">✕ ปิด</button>
+      <button onclick="window.print()" style="padding:8px 20px;border:none;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer;background:#E67E22;color:#fff">🖨 ปริ้นทั้งหมด</button>
+      <button onclick="window.close()" style="padding:8px 20px;border:none;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer;background:#95a5a6;color:#fff">✕ ปิด</button>
     </div>
-    <div style="margin-top:56px">${labelHTMLs}</div>
+    <div style="padding-top:50px">${labelHTMLs}</div>
     <script>
       window.addEventListener('load', function() {
         var pnos = ${JSON.stringify(labelOrders.map(o => o.flash_pno || ''))};
         pnos.forEach(function(pno, i) {
-          // Barcode
-          try {
-            JsBarcode('#bc-' + (i+1), pno, { format: 'CODE128', width: 1.8, height: 32, displayValue: false, margin: 0 });
-          } catch(e) { console.log('Barcode error:', e); }
-          try {
-            new QRCode(document.getElementById('qr-' + (i+1)), { text: pno, width: 58, height: 58, correctLevel: QRCode.CorrectLevel.M });
-          } catch(e) { console.log('QR error:', e); }
+          try { JsBarcode('#bc-'+(i+1), pno, {format:'CODE128',width:1.5,height:28,displayValue:false,margin:0}); } catch(e) {}
+          try { new QRCode(document.getElementById('qr-'+(i+1)), {text:pno,width:52,height:52,correctLevel:QRCode.CorrectLevel.M}); } catch(e) {}
         });
       });
-    <\/script>
-    </body></html>`)
+    <\/script></body></html>`)
     w.document.close()
   }
 
   const printLabel = (pnoOrOrder) => {
-    let order = typeof pnoOrOrder === 'string'
-      ? orders.find(o => o.flash_pno === pnoOrOrder)
-      : pnoOrOrder
+    let order = typeof pnoOrOrder === 'string' ? orders.find(o => o.flash_pno === pnoOrOrder) : pnoOrOrder
     if (!order) { flash('❌ ไม่พบข้อมูลออเดอร์'); return }
-    const html = generateLabelHTML(order, 1, 1)
-    openLabelWindow(html, 1, [order])
+    openLabelWindow(generateLabelHTML(order, 1, 1), 1, [order])
     flash('✅ เปิดใบปะหน้าสำเร็จ')
   }
 
   const bulkPrintLabels = (pnoListOrOrders) => {
-    // รับได้ทั้ง array ของ pno หรือ array ของ orders
     let labelOrders
     if (typeof pnoListOrOrders[0] === 'string') {
       labelOrders = pnoListOrOrders.map(pno => orders.find(o => o.flash_pno === pno)).filter(Boolean)
@@ -361,10 +315,10 @@ export default function ManagerApp({ profile, onLogout }) {
       labelOrders = pnoListOrOrders.filter(o => o.flash_pno)
     }
     if (!labelOrders.length) { flash('❌ ไม่มีออเดอร์ที่มีเลขพัสดุ'); return }
-    const htmls = labelOrders.map((o, i) => generateLabelHTML(o, i+1, labelOrders.length)).join('')
-    openLabelWindow(htmls, labelOrders.length, labelOrders)
+    openLabelWindow(labelOrders.map((o, i) => generateLabelHTML(o, i+1, labelOrders.length)).join(''), labelOrders.length, labelOrders)
     flash(`✅ เปิดใบปะหน้า ${labelOrders.length} รายการสำเร็จ`)
   }
+
 
   // ═══ Flash Proxy URL ═══
   const [flashProxyUrl, setFlashProxyUrl] = useState(() => {
