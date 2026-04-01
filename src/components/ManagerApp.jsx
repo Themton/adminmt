@@ -138,9 +138,9 @@ export default function ManagerApp({ profile, onLogout }) {
       flash(`⏳ สร้างเลขพัสดุ ${i+1}/${noPno.length}... ${order.customer_name}`)
       const result = await createFlashOrder(order, flashSrcInfo)
       if (result.code === 1 && result.data?.pno) {
-        await supabase.from('mt_orders').update({ flash_pno: result.data.pno, flash_status: 'created', shipping_status: 'printed' }).eq('id', order.id)
-        setOrders(prev => prev.map(o => o.id === order.id ? { ...o, flash_pno: result.data.pno, flash_status: 'created', shipping_status: 'printed' } : o))
-        results.push({ name: order.customer_name, pno: result.data.pno, ok: true })
+        await supabase.from('mt_orders').update({ flash_pno: result.data.pno, flash_status: 'created', shipping_status: 'printed', flash_sort_code: result.data.sortCode || '' }).eq('id', order.id)
+        setOrders(prev => prev.map(o => o.id === order.id ? { ...o, flash_pno: result.data.pno, flash_status: 'created', shipping_status: 'printed', flash_sort_code: result.data.sortCode || '' } : o))
+        results.push({ name: order.customer_name, pno: result.data.pno, sortCode: result.data.sortCode || '', ok: true })
       } else {
         results.push({ name: order.customer_name, error: result.message || 'ไม่สำเร็จ', ok: false, debug: result._debug })
       }
@@ -164,8 +164,8 @@ export default function ManagerApp({ profile, onLogout }) {
     const result = await createFlashOrder(order, flashSrcInfo)
     if (result.code === 1 && result.data?.pno) {
       // บันทึก tracking number ใน Supabase
-      await supabase.from('mt_orders').update({ flash_pno: result.data.pno, flash_status: 'created' }).eq('id', order.id)
-      setOrders(prev => prev.map(o => o.id === order.id ? { ...o, flash_pno: result.data.pno, flash_status: 'created' } : o))
+      await supabase.from('mt_orders').update({ flash_pno: result.data.pno, flash_status: 'created', flash_sort_code: result.data.sortCode || '' }).eq('id', order.id)
+      setOrders(prev => prev.map(o => o.id === order.id ? { ...o, flash_pno: result.data.pno, flash_status: 'created', flash_sort_code: result.data.sortCode || '' } : o))
       flash('✅ ส่ง Flash สำเร็จ! ' + result.data.pno)
       setFlashModal({ order, result: result.data })
     } else {
@@ -253,6 +253,7 @@ export default function ManagerApp({ profile, onLogout }) {
     return `
     <div class="label-page">
       <div class="label">
+        ${order.flash_sort_code ? `<div class="sort-code-bar"><span class="sort-num">${idx}</span>${order.flash_sort_code}</div>` : ''}
         <div class="barcode-section">
           <svg id="bc-${idx}"></svg>
         </div>
@@ -293,6 +294,8 @@ export default function ManagerApp({ profile, onLogout }) {
       .toolbar button { padding:10px 24px;border:none;border-radius:6px;font-size:15px;font-weight:700;cursor:pointer }
       .label-page { display:flex;justify-content:center;padding:10px;min-height:100vh }
       .label { width:380px;background:#fff;border:2px solid #333;border-radius:4px;overflow:hidden;font-size:13px }
+      .sort-code-bar { text-align:center;padding:6px 12px;font-size:28px;font-weight:900;font-family:monospace;position:relative;border-bottom:2px solid #333 }
+      .sort-num { position:absolute;left:8px;top:6px;background:#E67E22;color:#fff;width:26px;height:26px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900 }
       .barcode-section { text-align:center;padding:8px 10px 0;border-bottom:2px solid #333 }
       .barcode-section svg { width:100%;height:70px }
       .pno-bar { background:#F8F8F8;padding:8px 12px;text-align:center;font-size:22px;font-weight:900;letter-spacing:2px;font-family:monospace;border-bottom:2px solid #333 }
