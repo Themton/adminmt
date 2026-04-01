@@ -253,15 +253,21 @@ export default function ManagerApp({ profile, onLogout }) {
     return `
     <div class="label-page">
       <div class="label">
+        <div class="barcode-section">
+          <svg id="bc-${idx}"></svg>
+        </div>
         <div class="pno-bar">${pno}</div>
         <div class="dst-bar">DST &nbsp;&nbsp; ${dst}</div>
         <div class="src-line">${srcLine.trim()}</div>
-        <div class="rcv-section">
-          <div class="rcv-name">ผู้รับ ${order.customer_name || ''}</div>
-          <div class="rcv-phone">${maskedPhone}</div>
-          <div class="rcv-addr">${order.customer_address || ''}</div>
-          <div class="rcv-addr2">${order.sub_district || ''}, ${order.district || ''}</div>
-          <div class="rcv-addr3">${order.province || ''} ${order.zip_code || ''}</div>
+        <div class="rcv-qr-row">
+          <div class="rcv-section">
+            <div class="rcv-name">ผู้รับ ${order.customer_name || ''}</div>
+            <div class="rcv-phone">${maskedPhone}</div>
+            <div class="rcv-addr">${order.customer_address || ''}</div>
+            <div class="rcv-addr2">${order.sub_district || ''}, ${order.district || ''}</div>
+            <div class="rcv-addr3">${order.province || ''} ${order.zip_code || ''}</div>
+          </div>
+          <div class="qr-section" id="qr-${idx}"></div>
         </div>
         ${cod > 0 ? `<div class="cod-bar"><span class="cod-badge">COD</span> เก็บเงินค่าสินค้า COD ${cod.toLocaleString()}</div>` : '<div class="cod-bar" style="background:#eee;color:#999">ชำระแล้ว (โอน)</div>'}
         ${order.remark ? `<div class="note-bar">Note: ${order.remark}</div>` : ''}
@@ -274,28 +280,34 @@ export default function ManagerApp({ profile, onLogout }) {
     </div>`
   }
 
-  const openLabelWindow = (labelHTMLs, count) => {
+  const openLabelWindow = (labelHTMLs, count, labelOrders) => {
     const w = window.open('', '_blank')
     w.document.write(`<html><head><title>ใบปะหน้า ${count} รายการ — THE MT</title>
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
     <style>
       * { margin:0; padding:0; box-sizing:border-box; }
       body { font-family: 'Sarabun', 'Noto Sans Thai', sans-serif; background:#f0f0f0; }
-      @media print { .no-print{display:none!important} @page{margin:5mm;size:100mm 150mm} .label-page{page-break-after:always;break-after:page} body{background:#fff} }
+      @media print { .no-print{display:none!important} @page{margin:3mm;size:100mm 150mm} .label-page{page-break-after:always;break-after:page} body{background:#fff} }
       .toolbar { position:fixed;top:0;left:0;right:0;background:#333;color:#fff;padding:12px 20px;display:flex;gap:12px;align-items:center;z-index:999 }
       .toolbar button { padding:10px 24px;border:none;border-radius:6px;font-size:15px;font-weight:700;cursor:pointer }
       .label-page { display:flex;justify-content:center;padding:10px;min-height:100vh }
       .label { width:380px;background:#fff;border:2px solid #333;border-radius:4px;overflow:hidden;font-size:13px }
-      .pno-bar { background:#F5F5F5;padding:14px 12px;text-align:center;font-size:24px;font-weight:900;letter-spacing:2px;font-family:monospace;border-bottom:3px solid #333 }
+      .barcode-section { text-align:center;padding:8px 10px 0;border-bottom:2px solid #333 }
+      .barcode-section svg { width:100%;height:70px }
+      .pno-bar { background:#F8F8F8;padding:8px 12px;text-align:center;font-size:22px;font-weight:900;letter-spacing:2px;font-family:monospace;border-bottom:2px solid #333 }
       .dst-bar { background:#444;color:#fff;padding:6px 12px;font-weight:700;font-size:13px }
-      .src-line { padding:6px 12px;font-size:10px;color:#888;border-bottom:1px solid #ddd }
-      .rcv-section { padding:12px }
-      .rcv-name { font-weight:700;font-size:16px;margin-bottom:2px }
-      .rcv-phone { font-size:22px;font-weight:900;letter-spacing:1px;margin-bottom:6px }
-      .rcv-addr,.rcv-addr2,.rcv-addr3 { font-size:13px;color:#333;line-height:1.5 }
-      .cod-bar { background:#222;color:#fff;padding:10px 12px;font-size:20px;font-weight:900;display:flex;align-items:center;gap:8px }
-      .cod-badge { background:#E67E22;color:#fff;padding:2px 10px;border-radius:4px;font-size:14px;font-weight:900 }
-      .note-bar { padding:8px 12px;font-size:14px;font-weight:700;border-top:1px solid #ddd }
-      .footer-bar { padding:6px 12px;font-size:10px;color:#999;display:flex;justify-content:space-between;border-top:1px solid #eee }
+      .src-line { padding:5px 12px;font-size:10px;color:#888;border-bottom:1px solid #ddd }
+      .rcv-qr-row { display:flex;gap:8px;padding:0 }
+      .rcv-section { flex:1;padding:10px 12px }
+      .rcv-name { font-weight:700;font-size:15px;margin-bottom:2px }
+      .rcv-phone { font-size:20px;font-weight:900;letter-spacing:1px;margin-bottom:4px }
+      .rcv-addr,.rcv-addr2,.rcv-addr3 { font-size:12px;color:#333;line-height:1.4 }
+      .qr-section { width:100px;display:flex;align-items:center;justify-content:center;padding:8px }
+      .cod-bar { background:#222;color:#fff;padding:8px 12px;font-size:18px;font-weight:900;display:flex;align-items:center;gap:8px }
+      .cod-badge { background:#E67E22;color:#fff;padding:2px 10px;border-radius:4px;font-size:13px;font-weight:900 }
+      .note-bar { padding:6px 12px;font-size:13px;font-weight:700;border-top:1px solid #ddd }
+      .footer-bar { padding:5px 12px;font-size:9px;color:#999;display:flex;justify-content:space-between;border-top:1px solid #eee }
     </style></head><body>
     <div class="toolbar no-print">
       <span style="font-size:15px;font-weight:700">🖨 ใบปะหน้า ${count} รายการ</span>
@@ -303,18 +315,32 @@ export default function ManagerApp({ profile, onLogout }) {
       <button onclick="window.close()" style="background:#95a5a6;color:#fff">✕ ปิด</button>
     </div>
     <div style="margin-top:56px">${labelHTMLs}</div>
+    <script>
+      window.addEventListener('load', function() {
+        var pnos = ${JSON.stringify(labelOrders.map(o => o.flash_pno || ''))};
+        pnos.forEach(function(pno, i) {
+          // Barcode
+          try {
+            JsBarcode('#bc-' + (i+1), pno, { format: 'CODE128', width: 2, height: 55, displayValue: false, margin: 0 });
+          } catch(e) { console.log('Barcode error:', e); }
+          // QR Code
+          try {
+            new QRCode(document.getElementById('qr-' + (i+1)), { text: pno, width: 85, height: 85, correctLevel: QRCode.CorrectLevel.M });
+          } catch(e) { console.log('QR error:', e); }
+        });
+      });
+    <\/script>
     </body></html>`)
     w.document.close()
   }
 
   const printLabel = (pnoOrOrder) => {
-    // รับได้ทั้ง pno string หรือ order object
     let order = typeof pnoOrOrder === 'string'
       ? orders.find(o => o.flash_pno === pnoOrOrder)
       : pnoOrOrder
     if (!order) { flash('❌ ไม่พบข้อมูลออเดอร์'); return }
     const html = generateLabelHTML(order, 1, 1)
-    openLabelWindow(html, 1)
+    openLabelWindow(html, 1, [order])
     flash('✅ เปิดใบปะหน้าสำเร็จ')
   }
 
@@ -328,7 +354,7 @@ export default function ManagerApp({ profile, onLogout }) {
     }
     if (!labelOrders.length) { flash('❌ ไม่มีออเดอร์ที่มีเลขพัสดุ'); return }
     const htmls = labelOrders.map((o, i) => generateLabelHTML(o, i+1, labelOrders.length)).join('')
-    openLabelWindow(htmls, labelOrders.length)
+    openLabelWindow(htmls, labelOrders.length, labelOrders)
     flash(`✅ เปิดใบปะหน้า ${labelOrders.length} รายการสำเร็จ`)
   }
 
