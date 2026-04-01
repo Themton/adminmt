@@ -373,18 +373,33 @@ export default function PackerApp({ profile, onLogout }) {
     return true
   }).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))
   const searchFiltered = shipOrders.filter(o => { if(!searchQuery)return true; const q=searchQuery.toLowerCase(); return(o.customer_name||'').toLowerCase().includes(q)||(o.customer_phone||'').includes(q)||(o.flash_pno||'').includes(q)||(o.remark||'').toLowerCase().includes(q) })
+  // ═══ Confirm Modal ═══
+  const [confirmModal, setConfirmModal] = useState(null) // { title, message, color, icon, onConfirm }
+
   const markStatus = async (ids, st) => {
     const labels = { waiting: '🚚 เตรียมส่ง', printed: '🖨 ปริ้นแล้ว', upsell: '💰 รออัพเซล' }
-    setGProgress({ label: labels[st] || 'อัพเดท', done: 0, total: ids.length, color: '#3498DB' })
-    for (let i = 0; i < ids.length; i++) {
-      setGProgress(p => ({ ...p, done: i + 1 }))
-      await supabase.from('mt_orders').update({ shipping_status: st }).eq('id', ids[i])
-      setOrders(prev => prev.map(o => o.id === ids[i] ? { ...o, shipping_status: st } : o))
-      if (i < ids.length - 1) await new Promise(r => setTimeout(r, 50))
-    }
-    setGProgress(null); setSelectedIds(new Set())
-    flash(`✅ ${labels[st] || 'อัพเดท'} ${ids.length} รายการ`)
-    logActivity('status_change', `${labels[st]} ${ids.length} รายการ`, ids.length, { status: st })
+    const colors = { waiting: '#E67E22', printed: '#16A085', upsell: '#8E44AD' }
+    const icons = { waiting: '🚚', printed: '🖨', upsell: '💰' }
+    const names = orders.filter(o => ids.includes(o.id)).map(o => o.customer_name).slice(0, 5)
+    setConfirmModal({
+      title: `${icons[st]||'📦'} ${labels[st]||'เปลี่ยนสถานะ'}`,
+      message: `เปลี่ยนสถานะ ${ids.length} รายการ เป็น "${labels[st]||st}"?\n\n${names.join(', ')}${ids.length>5?' ...และอีก '+(ids.length-5)+' รายการ':''}`,
+      color: colors[st] || '#3498DB',
+      icon: icons[st] || '📦',
+      onConfirm: async () => {
+        setConfirmModal(null)
+        setGProgress({ label: labels[st] || 'อัพเดท', done: 0, total: ids.length, color: colors[st] || '#3498DB' })
+        for (let i = 0; i < ids.length; i++) {
+          setGProgress(p => ({ ...p, done: i + 1 }))
+          await supabase.from('mt_orders').update({ shipping_status: st }).eq('id', ids[i])
+          setOrders(prev => prev.map(o => o.id === ids[i] ? { ...o, shipping_status: st } : o))
+          if (i < ids.length - 1) await new Promise(r => setTimeout(r, 50))
+        }
+        setGProgress(null); setSelectedIds(new Set())
+        flash(`✅ ${labels[st] || 'อัพเดท'} ${ids.length} รายการ`)
+        logActivity('status_change', `${labels[st]} ${ids.length} รายการ`, ids.length, { status: st })
+      }
+    })
   }
   const lastRef=useRef(null)
   const toggleSelect=(id,e)=>{const list=searchFiltered.slice((page-1)*pageSize,page*pageSize);const idx=list.findIndex(o=>o.id===id);if(e?.shiftKey&&lastRef.current!==null){const s=Math.min(lastRef.current,idx),en=Math.max(lastRef.current,idx);setSelectedIds(prev=>{const n=new Set(prev);for(let i=s;i<=en;i++)n.add(list[i].id);return n})}else{setSelectedIds(prev=>{const n=new Set(prev);n.has(id)?n.delete(id):n.add(id);return n})};lastRef.current=idx}
@@ -411,6 +426,21 @@ export default function PackerApp({ profile, onLogout }) {
         </>}
       </Modal>
       <Modal show={!!pnoModal} onClose={()=>setPnoModal(null)} title="แก้ไขเลขพัสดุ">{pnoModal&&<div><div style={{marginBottom:8,fontSize:12,color:'#85929E'}}>{pnoModal.customerName}</div><input value={pnoInput} onChange={e=>setPnoInput(e.target.value)} placeholder="เลขพัสดุ..." style={{width:'100%',padding:'10px 12px',borderRadius:6,border:'1px solid #ddd',fontSize:14,fontFamily:'monospace',marginBottom:10}} /><div style={{display:'flex',gap:8}}><button onClick={savePno} style={{flex:1,padding:10,borderRadius:6,border:'none',background:'#3498DB',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer'}}>บันทึก</button><button onClick={()=>{setPnoInput('');savePno()}} style={{padding:'10px 14px',borderRadius:6,border:'1px solid #E74C3C',background:'#FDEDEC',color:'#E74C3C',fontSize:13,fontWeight:700,cursor:'pointer'}}>ลบ</button></div></div>}</Modal>
+
+      {/* ═══ Confirm Modal ═══ */}
+      {confirmModal && <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:9999}} onClick={()=>setConfirmModal(null)}>
+        <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:16,padding:'28px 24px',width:'100%',maxWidth:400,boxShadow:'0 20px 60px rgba(0,0,0,0.2)',animation:'fadeIn 0.15s ease-out'}}>
+          <div style={{textAlign:'center',marginBottom:20}}>
+            <div style={{fontSize:48,marginBottom:8}}>{confirmModal.icon}</div>
+            <div style={{fontSize:18,fontWeight:800,color:'#2C3E50',marginBottom:8}}>{confirmModal.title}</div>
+            <div style={{fontSize:13,color:'#85929E',whiteSpace:'pre-line',lineHeight:1.6}}>{confirmModal.message}</div>
+          </div>
+          <div style={{display:'flex',gap:10}}>
+            <button onClick={()=>setConfirmModal(null)} style={{flex:1,padding:'14px',borderRadius:10,border:'1px solid #DEE2E6',background:'#fff',color:'#85929E',fontSize:14,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>ยกเลิก</button>
+            <button onClick={confirmModal.onConfirm} style={{flex:1,padding:'14px',borderRadius:10,border:'none',background:confirmModal.color,color:'#fff',fontSize:14,fontWeight:700,cursor:'pointer',fontFamily:T.font,boxShadow:`0 4px 12px ${confirmModal.color}40`}}>✅ ยืนยัน</button>
+          </div>
+        </div>
+      </div>}
 
       {/* ═══ Upsell Modal ═══ */}
       <Modal show={!!upsellModal} onClose={()=>setUpsellModal(null)} title="💰 อัพเซล">
