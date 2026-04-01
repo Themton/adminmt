@@ -4,6 +4,38 @@ import { createFlashOrder, trackFlashOrder, pingFlash } from '../lib/flashApi'
 import { T, glass, fmt, LiveDot, Toast, Empty, Pagination, Modal } from './ui'
 import { exportProshipExcel } from '../lib/exportProship'
 
+let _addrCache = null
+async function getAddresses() { if (_addrCache) return _addrCache; const mod = await import('../data/addresses.json'); _addrCache = mod.default; return _addrCache }
+
+function parseSmartPaste(text, ad = []) {
+  const r = {}, lines = text.split('\n').map(s=>s.trim()).filter(Boolean)
+  const fl = lines.map(l=>l.replace(/อ\.เภอ/g,'อำเภอ').replace(/=/g,' '))
+  const all = fl.join(' ')
+  const cleaned = all.replace(/(\d)\s*[-–—]\s*(\d)/g,'$1$2')
+  const pm = cleaned.match(/(?<!\d)(0[689]\d{8})(?!\d)/); if(pm) r.customerPhone=pm[1]
+  const zc = all.match(/[1-9]\d{4}/g)||[]; for(const z of zc){ if(r.customerPhone&&r.customerPhone.includes(z))continue; if(parseInt(z)>=10000&&parseInt(z)<=96000){r.zipCode=z;break} }
+  const am = all.match(/(?:COD|ปลายทาง)\s*(\d+)/i); if(am) r.amount=am[1]
+  for(const l of fl){const m=l.match(/^(?:FB|Facebook)[:\s]+(.+)/i);if(m)r.customerSocial=m[1].trim();const m2=l.match(/^(?:Line|ไลน์)[:\s]+(.+)/i);if(m2)r.customerSocial=m2[1].trim()}
+  for(const l of fl){const m=l.match(/^@\s*(.+)/i);if(m){r.remark=m[1].trim();break}}
+  const td=all.match(/(?:^|\s)(?:ต\.|ตำบล|แขวง)\s*([ก-๙ะ-์]+?)(?=\s|อ\.|อำเภอ|เขต|จ\.|จังหวัด|\d|$)/u);if(td)r.subDistrict=td[1]
+  const dt=all.match(/(?:^|\s)(?:อ\.|อำเภอ|เขต)\s*([ก-๙ะ-์]+?)(?=\s|จ\.|จังหวัด|กรุงเทพ|\d|$)/u);if(dt)r.district=dt[1]
+  const pv=all.match(/(?:^|\s)(?:จ\.|จังหวัด)\s*([ก-๙ะ-์]+?)(?=\s|\d|$)/u);if(pv)r.province=pv[1]
+  if(!r.subDistrict){for(const l of fl){const m=l.match(/^แขวง\s*(.+)/);if(m){r.subDistrict=m[1].trim();break}}}
+  if(!r.district){for(const l of fl){const m=l.match(/^เขต\s*(.+)/);if(m){r.district=m[1].trim();break}}}
+  if(!r.province){const pn=['กรุงเทพ','กรุงเทพมหานคร','กทม','นนทบุรี','ปทุมธานี','สมุทรปราการ','สมุทรสาคร','นครปฐม','เชียงใหม่','เชียงราย','ภูเก็ต','ขอนแก่น','อุดรธานี','นครราชสีมา','สงขลา','สุราษฎร์ธานี','อุบลราชธานี','ชลบุรี','พิษณุโลก','ระยอง','นครศรีธรรมราช'];for(const l of fl){if(pn.some(p=>l.includes(p))){r.province=l.replace(/จ\.|จังหวัด/g,'').trim();break}}}
+  if(ad.length>0){
+    if(r.zipCode&&!r.subDistrict){const m=ad.filter(a=>a.z===r.zipCode);if(m.length>0){const b=m.find(a=>all.includes(a.s))||m[0];r.subDistrict=b.s;r.district=b.d;r.province=b.p}}
+    if(!r.zipCode&&r.subDistrict){const f=ad.find(a=>a.s===r.subDistrict&&(r.district?a.d.includes(r.district):true));if(f){r.zipCode=f.z;if(!r.district)r.district=f.d;if(!r.province)r.province=f.p}}
+    if(r.zipCode&&!r.province){const m=ad.find(a=>a.z===r.zipCode);if(m)r.province=m.p}
+    if(r.zipCode){const zm=ad.filter(a=>a.z===r.zipCode);if(zm.length>0){const ex=zm.find(a=>a.s===r.subDistrict);if(ex){r.district=ex.d;r.province=ex.p}else{const b=zm.find(a=>all.includes(a.s))||zm[0];r.subDistrict=b.s;r.district=b.d;r.province=b.p}}}
+  }
+  const skip=/\d{3,}|ม\.\d|ต\.|ตำบล|แขวง|อำเภอ|เขต|จ\.|จังหวัด|^COD|^FB|^P:|^R\d|^@|^Line|หมู่|ซอย|ถนน|บ้านเลขที่|^โทร|กรุงเทพ/i
+  for(const l of fl){const m=l.match(/^ชื่อ[.\s:]+(.+)/i);if(m){r.customerName=m[1].trim().replace(/-/g,' ');break}}
+  if(!r.customerName){for(const l of fl){if(/^@|^FB|^P:|^R\d|^Line|^COD|^โทร|^ชื่อ/i.test(l))continue;const c=l.replace(/-/g,' ').trim();if(c.length>=3&&c.length<=60&&!skip.test(c)&&!/\d{5}/.test(c)&&(/[ก-๙]/.test(c)||/^[A-Za-z\s'.]+$/.test(c))){r.customerName=c;break}}}
+  if(!r.customerAddress){const ap=[];let pn=false;for(const l of fl){if(/^@|^FB|^P:|^R\d|^Line|^COD|^โทร|^ชื่อ/i.test(l))continue;if(l.replace(/-/g,' ').trim()===r.customerName){pn=true;continue};if(/^(?:ต\.|ตำบล|แขวง|อ\.|อำเภอ|เขต|จ\.|จังหวัด|กรุงเทพ)/i.test(l))break;if(/^\d{5}/.test(l))break;if(pn&&l.length>=3){let a=l;if(r.subDistrict)a=a.replace(new RegExp('(?:ต\\.|ตำบล|แขวง)\\s*'+r.subDistrict,'g'),'');if(r.district)a=a.replace(new RegExp('(?:อ\\.|อำเภอ|เขต)\\s*'+r.district,'g'),'');a=a.replace(/(?:จ\.|จังหวัด)\s*[ก-๙ะ-์]+/gu,'').replace(/\d{5}/,'').trim();if(a.length>=2)ap.push(a)}else if(!pn&&/บ้านเลขที่|\d+\/\d|ซอย|ซ\.|หมู่|ม\.|ถนน|ร้าน|\d+/.test(l)){pn=true;let a=l;a=a.replace(/(?:จ\.|จังหวัด)\s*[ก-๙ะ-์]+/gu,'').replace(/\d{5}/,'').trim();if(a.length>=2)ap.push(a)}};if(ap.length>0)r.customerAddress=ap.join(' ')}
+  return r
+}
+
 export default function PackerApp({ profile, onLogout }) {
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
@@ -25,6 +57,9 @@ export default function PackerApp({ profile, onLogout }) {
   const [pnoModal, setPnoModal] = useState(null)
   const [showCreateOrder, setShowCreateOrder] = useState(false)
   const [newOrder, setNewOrder] = useState({ customer_name:'', customer_phone:'', customer_address:'', sub_district:'', district:'', province:'', zip_code:'', payment_type:'cod', sale_price:'', cod_amount:'', remark:'' })
+  const [pasteText, setPasteText] = useState('')
+  const [addresses, setAddresses] = useState([])
+  useEffect(() => { getAddresses().then(setAddresses) }, [])
   const [pnoInput, setPnoInput] = useState('')
   const flash = (m) => { setToast(m); setTimeout(() => setToast(null), 3500) }
 
@@ -72,6 +107,24 @@ export default function PackerApp({ profile, onLogout }) {
   const savePno = async () => { if(!pnoModal)return; const v=pnoInput.trim(); await supabase.from('mt_orders').update({flash_pno:v,flash_status:v?'manual':''}).eq('id',pnoModal.orderId); setOrders(prev=>prev.map(o=>o.id===pnoModal.orderId?{...o,flash_pno:v,flash_status:v?'manual':''}:o)); setPnoModal(null);flash('OK') }
 
   const cancelFlash = async (o) => { if(!confirm('ยกเลิก '+o.flash_pno+'?\nต้องยกเลิกใน Flash portal ด้วย'))return; await supabase.from('mt_orders').update({flash_pno:'',flash_status:'cancelled',flash_sort_code:'',shipping_status:'waiting'}).eq('id',o.id); setOrders(prev=>prev.map(x=>x.id===o.id?{...x,flash_pno:'',flash_status:'cancelled',flash_sort_code:'',shipping_status:'waiting'}:x)); flash('ลบแล้ว') }
+
+  // ═══ Smart Paste — วางข้อมูลแล้วจับอัตโนมัติ ═══
+  const applyPaste = (text) => {
+    const p = parseSmartPaste(text, addresses)
+    setNewOrder(prev => ({
+      ...prev,
+      customer_name: p.customerName || prev.customer_name,
+      customer_phone: p.customerPhone || prev.customer_phone,
+      customer_address: p.customerAddress || prev.customer_address,
+      sub_district: p.subDistrict || prev.sub_district,
+      district: p.district || prev.district,
+      province: p.province || prev.province,
+      zip_code: p.zipCode || prev.zip_code,
+      sale_price: p.amount || prev.sale_price,
+      cod_amount: p.amount || prev.cod_amount,
+      remark: p.remark || prev.remark,
+    }))
+  }
 
   // ═══ สร้างออเดอร์ใหม่ + สร้างเลขพัสดุ Flash ═══
   const createNewOrder = async (andFlash) => {
@@ -194,8 +247,20 @@ export default function PackerApp({ profile, onLogout }) {
       </Modal>
       <Modal show={!!pnoModal} onClose={()=>setPnoModal(null)} title="แก้ไขเลขพัสดุ">{pnoModal&&<div><div style={{marginBottom:8,fontSize:12,color:'#85929E'}}>{pnoModal.customerName}</div><input value={pnoInput} onChange={e=>setPnoInput(e.target.value)} placeholder="เลขพัสดุ..." style={{width:'100%',padding:'10px 12px',borderRadius:6,border:'1px solid #ddd',fontSize:14,fontFamily:'monospace',marginBottom:10}} /><div style={{display:'flex',gap:8}}><button onClick={savePno} style={{flex:1,padding:10,borderRadius:6,border:'none',background:'#3498DB',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer'}}>บันทึก</button><button onClick={()=>{setPnoInput('');savePno()}} style={{padding:'10px 14px',borderRadius:6,border:'1px solid #E74C3C',background:'#FDEDEC',color:'#E74C3C',fontSize:13,fontWeight:700,cursor:'pointer'}}>ลบ</button></div></div>}</Modal>
       {/* ═══ Create Order Modal ═══ */}
-      <Modal show={showCreateOrder} onClose={()=>setShowCreateOrder(false)} title="📦 สร้างออเดอร์ใหม่">
+      <Modal show={showCreateOrder} onClose={()=>{setShowCreateOrder(false);setPasteText('')}} title="📦 สร้างออเดอร์ใหม่">
         <div>
+          {/* Smart Paste */}
+          <div style={{marginBottom:12,padding:10,borderRadius:8,background:'rgba(230,126,34,0.04)',border:'1px solid rgba(230,126,34,0.15)'}}>
+            <div style={{fontSize:12,fontWeight:700,color:'#E67E22',marginBottom:6}}>📋 Smart Paste — วางข้อมูลจาก Line/Facebook</div>
+            <textarea value={pasteText} onChange={e=>setPasteText(e.target.value)}
+              onPaste={e=>{const t=e.clipboardData.getData('text');if(t&&t.length>=5){e.preventDefault();setPasteText(t);applyPaste(t);flash('✅ Smart Paste — แยกข้อมูลแล้ว!')}}}
+              placeholder={"วางข้อมูลตรงนี้...\n\nตัวอย่าง:\nสมชาย ใจดี\n123/4 หมู่ 5\nต.วังทอง อ.วังทอง\nจ.พิษณุโลก 65130\n0812345678\nCOD 399"}
+              rows={4} style={{width:'100%',padding:'8px 10px',borderRadius:6,border:'1px solid #DEE2E6',fontSize:12,fontFamily:T.font,resize:'vertical'}} />
+            {pasteText&&<div style={{display:'flex',gap:6,marginTop:6}}>
+              <button onClick={()=>{applyPaste(pasteText);flash('✅ แยกข้อมูลสำเร็จ!')}} style={{padding:'6px 12px',borderRadius:6,border:'none',background:'#E67E22',color:'#fff',fontSize:11,fontWeight:700,cursor:'pointer'}}>✨ แยกข้อมูล</button>
+              <button onClick={()=>{setPasteText('');setNewOrder({customer_name:'',customer_phone:'',customer_address:'',sub_district:'',district:'',province:'',zip_code:'',payment_type:'cod',sale_price:'',cod_amount:'',remark:''})}} style={{padding:'6px 12px',borderRadius:6,border:'1px solid #DEE2E6',background:'#fff',color:'#85929E',fontSize:11,cursor:'pointer'}}>🗑 ล้าง</button>
+            </div>}
+          </div>
           {[
             {l:'ชื่อลูกค้า *',k:'customer_name',ph:'ชื่อ-นามสกุล'},
             {l:'เบอร์โทร *',k:'customer_phone',ph:'0812345678'},
