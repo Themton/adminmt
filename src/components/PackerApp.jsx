@@ -66,6 +66,8 @@ export default function PackerApp({ profile, onLogout }) {
   const [trackSearchResult, setTrackSearchResult] = useState(null)
   const [trackSearching, setTrackSearching] = useState(false)
   const [activityLogs, setActivityLogs] = useState([])
+  const [upsellModal, setUpsellModal] = useState(null)
+  const [upsellSelected, setUpsellSelected] = useState(new Set())
   const flash = (m) => { setToast(m); setTimeout(() => setToast(null), 3500) }
 
   const [flashSrcInfo, setFlashSrcInfo] = useState(() => { try { return JSON.parse(localStorage.getItem('flash_src') || '{}') } catch { return {} } })
@@ -321,6 +323,21 @@ export default function PackerApp({ profile, onLogout }) {
   }
   useEffect(() => { if (sidebarPage === 'history') loadActivityLogs() }, [sidebarPage])
 
+  // ═══ Upsell — แก้ COD + หมายเหตุ ═══
+  const openUpsell = (o) => {
+    setUpsellModal({ id: o.id, customer_name: o.customer_name, customer_phone: o.customer_phone, flash_pno: o.flash_pno, cod_amount: String(o.cod_amount || o.sale_price || ''), remark: o.remark || '', sale_price: String(o.sale_price || '') })
+  }
+  const saveUpsell = async () => {
+    if (!upsellModal) return
+    const codVal = parseFloat(upsellModal.cod_amount) || 0
+    const saleVal = parseFloat(upsellModal.sale_price) || codVal
+    const { error } = await supabase.from('mt_orders').update({ cod_amount: codVal, sale_price: saleVal > codVal ? saleVal : codVal, remark: upsellModal.remark }).eq('id', upsellModal.id)
+    if (error) { flash('❌ ' + error.message); return }
+    setOrders(prev => prev.map(o => o.id === upsellModal.id ? { ...o, cod_amount: codVal, sale_price: saleVal > codVal ? saleVal : codVal, remark: upsellModal.remark } : o))
+    setUpsellModal(null)
+    flash('✅ อัพเซลสำเร็จ — COD ฿' + codVal.toLocaleString())
+  }
+
   const dateFiltered = orders.filter(o => { if(dateFilter){const od=(o.order_date||'').substring(0,10);if(od<dateFilter)return false}; if(dateFilterEnd){const od=(o.order_date||'').substring(0,10);if(od>dateFilterEnd)return false}; return true })
   const shipOrders = dateFiltered.filter(o => {
     if(shipFilter==='preparing')return(!o.shipping_status||o.shipping_status==='waiting')&&!o.flash_pno
@@ -350,6 +367,26 @@ export default function PackerApp({ profile, onLogout }) {
         </>}
       </Modal>
       <Modal show={!!pnoModal} onClose={()=>setPnoModal(null)} title="แก้ไขเลขพัสดุ">{pnoModal&&<div><div style={{marginBottom:8,fontSize:12,color:'#85929E'}}>{pnoModal.customerName}</div><input value={pnoInput} onChange={e=>setPnoInput(e.target.value)} placeholder="เลขพัสดุ..." style={{width:'100%',padding:'10px 12px',borderRadius:6,border:'1px solid #ddd',fontSize:14,fontFamily:'monospace',marginBottom:10}} /><div style={{display:'flex',gap:8}}><button onClick={savePno} style={{flex:1,padding:10,borderRadius:6,border:'none',background:'#3498DB',color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer'}}>บันทึก</button><button onClick={()=>{setPnoInput('');savePno()}} style={{padding:'10px 14px',borderRadius:6,border:'1px solid #E74C3C',background:'#FDEDEC',color:'#E74C3C',fontSize:13,fontWeight:700,cursor:'pointer'}}>ลบ</button></div></div>}</Modal>
+
+      {/* ═══ Upsell Modal ═══ */}
+      <Modal show={!!upsellModal} onClose={()=>setUpsellModal(null)} title="💰 อัพเซล">
+        {upsellModal&&<div>
+          <div style={{padding:12,background:'#F8F9FA',borderRadius:8,marginBottom:12}}>
+            <div style={{fontWeight:700,fontSize:14}}>{upsellModal.customer_name}</div>
+            <div style={{fontSize:12,color:'#85929E',marginTop:2}}>{upsellModal.customer_phone}</div>
+            {upsellModal.flash_pno&&<div style={{fontFamily:'monospace',fontSize:12,color:'#2980B9',fontWeight:700,marginTop:4}}>{upsellModal.flash_pno}</div>}
+          </div>
+          <div style={{marginBottom:10}}>
+            <div style={{fontSize:11,color:'#85929E',marginBottom:4}}>💰 ยอด COD ใหม่</div>
+            <input value={upsellModal.cod_amount} onChange={e=>setUpsellModal({...upsellModal,cod_amount:e.target.value})} type="number" placeholder="0" style={{width:'100%',padding:'12px 14px',borderRadius:8,border:'1px solid #DEE2E6',fontSize:18,fontWeight:900,fontFamily:T.font,color:'#E74C3C',textAlign:'center'}} />
+          </div>
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:11,color:'#85929E',marginBottom:4}}>📝 หมายเหตุ/สินค้า</div>
+            <textarea value={upsellModal.remark} onChange={e=>setUpsellModal({...upsellModal,remark:e.target.value})} rows={3} placeholder="Rong 1 (50g) เซรั่ม 1 สบู่ 2..." style={{width:'100%',padding:'10px 14px',borderRadius:8,border:'1px solid #DEE2E6',fontSize:13,fontFamily:T.font,resize:'vertical'}} />
+          </div>
+          <button onClick={saveUpsell} style={{width:'100%',padding:'14px',borderRadius:8,border:'none',background:'linear-gradient(135deg,#8E44AD,#9B59B6)',color:'#fff',fontSize:15,fontWeight:700,cursor:'pointer',fontFamily:T.font,boxShadow:'0 2px 10px rgba(142,68,173,0.3)'}}>💰 บันทึกอัพเซล</button>
+        </div>}
+      </Modal>
 
       {/* ═══ Edit Order Modal ═══ */}
       <Modal show={!!editModal} onClose={()=>setEditModal(null)} title="✏️ แก้ไขข้อมูลลูกค้า">
@@ -466,6 +503,7 @@ export default function PackerApp({ profile, onLogout }) {
           {[
             { id: 'shipping', icon: '🚚', label: 'การจัดส่ง' },
             { id: 'tracking', icon: '🔍', label: 'ค้นหาเลขพัสดุ' },
+            { id: 'upsell', icon: '💰', label: 'รายชื่อรออัพเซล' },
             { id: 'history', icon: '📋', label: 'ประวัติการอัพเดต' },
           ].map(m => (
             <button key={m.id} onClick={() => setSidebarPage(m.id)} style={{
@@ -642,6 +680,43 @@ export default function PackerApp({ profile, onLogout }) {
                 </>}
               </div>}
             </div>
+          </div>}
+
+          {/* ═══ PAGE: รายชื่อรออัพเซล ═══ */}
+          {sidebarPage === 'upsell' && <div>
+            <div style={{fontSize:20,fontWeight:800,marginBottom:16}}>💰 รายชื่อรออัพเซล</div>
+            <div style={{fontSize:12,color:'#85929E',marginBottom:16}}>ออเดอร์ที่สร้างเลขพัสดุแล้ว — เลือกเพื่อแก้ไข COD และหมายเหตุ</div>
+
+            {(() => {
+              const upsellOrders = orders.filter(o => o.flash_pno && ['created','manual'].includes(o.flash_status))
+              return <>
+                <div style={{fontSize:13,fontWeight:700,marginBottom:10,color:'#8E44AD'}}>⚡ สร้างเลขพัสดุแล้ว ({upsellOrders.length} รายการ)</div>
+
+                {upsellOrders.length === 0 ? <div style={{textAlign:'center',padding:40,color:'#85929E',background:'#fff',borderRadius:8,border:'1px solid #DEE2E6'}}>ไม่มีออเดอร์ที่รอดำเนินการ</div> : (
+                  <div style={{background:'#fff',borderRadius:8,border:'1px solid #DEE2E6',overflow:'hidden'}}>
+                    <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,fontFamily:T.font}}>
+                      <thead><tr style={{background:'#F8F9FA'}}>
+                        {['#','วันที่','ลูกค้า','เบอร์','เลขพัสดุ','COD','หมายเหตุ','อัพเซล'].map(h=><th key={h} style={{padding:'10px 8px',textAlign:'left',fontWeight:600,color:'#5D6D7E',borderBottom:'1px solid #DEE2E6',fontSize:11}}>{h}</th>)}
+                      </tr></thead>
+                      <tbody>
+                        {upsellOrders.map((o,i) => (
+                          <tr key={o.id} style={{borderBottom:'1px solid #EAECEE'}}>
+                            <td style={{padding:'10px 8px',textAlign:'center',color:'#ABB2B9',fontSize:10}}>{i+1}</td>
+                            <td style={{padding:'10px 8px',fontSize:11}}>{new Date(o.created_at).toLocaleDateString('th-TH',{timeZone:'Asia/Bangkok',day:'2-digit',month:'short'})}</td>
+                            <td style={{padding:'10px 8px',fontWeight:600}}>{o.customer_name}</td>
+                            <td style={{padding:'10px 8px',color:'#85929E',fontSize:11}}>{o.customer_phone}</td>
+                            <td style={{padding:'10px 8px'}}><span style={{fontFamily:'monospace',fontSize:11,color:'#2980B9',fontWeight:700}}>{o.flash_pno}</span></td>
+                            <td style={{padding:'10px 8px',fontWeight:700}}>{o.payment_type==='cod'?<span style={{color:'#E74C3C'}}>฿{fmt(parseFloat(o.cod_amount||o.sale_price)||0)}</span>:<span style={{color:'#27AE60',fontSize:10}}>โอน</span>}</td>
+                            <td style={{padding:'10px 8px',fontSize:10,color:'#85929E',maxWidth:200,overflow:'hidden',whiteSpace:'nowrap',textOverflow:'ellipsis'}}>{o.remark||'—'}</td>
+                            <td style={{padding:'10px 8px'}}><button onClick={()=>openUpsell(o)} style={{padding:'6px 14px',borderRadius:6,border:'none',background:'linear-gradient(135deg,#8E44AD,#9B59B6)',color:'#fff',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>💰 อัพเซล</button></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
+            })()}
           </div>}
 
           {/* ═══ PAGE: ประวัติการอัพเดต ═══ */}
