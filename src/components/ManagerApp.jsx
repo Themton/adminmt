@@ -288,29 +288,29 @@ export default function ManagerApp({ profile, onLogout }) {
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
     <style>
       * { margin:0; padding:0; box-sizing:border-box; }
-      body { font-family: 'Sarabun', 'Noto Sans Thai', sans-serif; background:#f0f0f0; }
-      @media print { .no-print{display:none!important} @page{margin:1mm;size:100mm 75mm} .label-page{page-break-after:always;break-after:page;min-height:auto;padding:0} body{background:#fff} .label{width:100%!important;border:none!important;border-radius:0!important} }
+      body { font-family: 'Sarabun', 'Noto Sans Thai', sans-serif; background:#f0f0f0; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+      @media print { .no-print{display:none!important} @page{margin:0;size:100mm 75mm} .label-page{page-break-after:always;break-after:page;min-height:auto;padding:0;margin:0} body{background:#fff} .label{width:100mm!important;height:75mm!important;border:none!important;border-radius:0!important} }
       .toolbar { position:fixed;top:0;left:0;right:0;background:#333;color:#fff;padding:10px 20px;display:flex;gap:12px;align-items:center;z-index:999 }
       .toolbar button { padding:8px 20px;border:none;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer }
-      .label-page { display:flex;justify-content:center;padding:8px;min-height:auto;margin-bottom:16px }
-      .label { width:378px;background:#fff;border:1.5px solid #333;border-radius:3px;overflow:hidden;font-size:11px }
-      .sort-code-bar { text-align:center;padding:3px 8px;font-size:20px;font-weight:900;font-family:monospace;position:relative;border-bottom:1.5px solid #333 }
-      .sort-num { position:absolute;left:4px;top:3px;background:#E67E22;color:#fff;width:20px;height:20px;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900 }
-      .barcode-section { text-align:center;padding:2px 8px 0;border-bottom:1.5px solid #333 }
-      .barcode-section svg { width:100%;height:40px }
-      .pno-bar { background:#F8F8F8;padding:2px 8px;text-align:center;font-size:14px;font-weight:900;letter-spacing:1px;font-family:monospace;border-bottom:1.5px solid #333 }
-      .dst-bar { background:#444;color:#fff;padding:2px 8px;font-weight:700;font-size:10px }
-      .src-line { padding:2px 8px;font-size:7px;color:#888;border-bottom:1px solid #ddd;white-space:nowrap;overflow:hidden;text-overflow:ellipsis }
-      .rcv-qr-row { display:flex;gap:4px;padding:0 }
-      .rcv-section { flex:1;padding:3px 8px }
-      .rcv-name { font-weight:700;font-size:11px;margin-bottom:0 }
-      .rcv-phone { font-size:15px;font-weight:900;letter-spacing:1px;margin-bottom:1px }
-      .rcv-addr,.rcv-addr2,.rcv-addr3 { font-size:9px;color:#333;line-height:1.3 }
-      .qr-section { width:68px;min-width:68px;display:flex;align-items:center;justify-content:center;padding:3px }
-      .cod-bar { background:#222;color:#fff;padding:3px 8px;font-size:13px;font-weight:900;display:flex;align-items:center;gap:6px }
-      .cod-badge { background:#E67E22;color:#fff;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:900 }
-      .note-bar { padding:2px 8px;font-size:10px;font-weight:700;border-top:1px solid #ddd;white-space:nowrap;overflow:hidden;text-overflow:ellipsis }
-      .footer-bar { padding:2px 8px;font-size:7px;color:#999;display:flex;justify-content:space-between;border-top:1px solid #eee }
+      .label-page { display:flex;justify-content:center;padding:8px;margin-bottom:12px }
+      .label { width:100mm;height:75mm;background:#fff;border:1px solid #333;overflow:hidden;font-size:11px;display:flex;flex-direction:column }
+      .sort-code-bar { text-align:center;padding:1px 6px;font-size:16px;font-weight:900;font-family:monospace;position:relative;border-bottom:1.5px solid #333;flex-shrink:0 }
+      .sort-num { position:absolute;left:3px;top:2px;background:#E67E22;color:#fff;width:16px;height:16px;border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:900 }
+      .barcode-section { text-align:center;padding:1px 6px 0;border-bottom:1.5px solid #333;flex-shrink:0 }
+      .barcode-section svg { width:100%;height:28px }
+      .pno-bar { background:#F5F5F5;padding:1px 6px;text-align:center;font-size:11px;font-weight:900;letter-spacing:1px;font-family:monospace;border-bottom:1.5px solid #333;flex-shrink:0 }
+      .dst-bar { background:#444;color:#fff;padding:1px 6px;font-weight:700;font-size:8px;flex-shrink:0 }
+      .src-line { padding:1px 6px;font-size:6px;color:#888;border-bottom:1px solid #ddd;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0 }
+      .rcv-qr-row { display:flex;gap:2px;padding:0;flex:1;min-height:0;overflow:hidden }
+      .rcv-section { flex:1;padding:2px 6px;overflow:hidden }
+      .rcv-name { font-weight:700;font-size:9px }
+      .rcv-phone { font-size:13px;font-weight:900;letter-spacing:1px }
+      .rcv-addr,.rcv-addr2,.rcv-addr3 { font-size:7.5px;color:#333;line-height:1.2 }
+      .qr-section { width:52px;min-width:52px;display:flex;align-items:center;justify-content:center;padding:1px }
+      .cod-bar { background:#222;color:#fff;padding:2px 6px;font-size:11px;font-weight:900;display:flex;align-items:center;gap:4px;flex-shrink:0 }
+      .cod-badge { background:#E67E22;color:#fff;padding:0 5px;border-radius:2px;font-size:8px;font-weight:900 }
+      .note-bar { padding:1px 6px;font-size:8px;font-weight:700;border-top:1px solid #ddd;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0 }
+      .footer-bar { padding:1px 6px;font-size:6px;color:#999;display:flex;justify-content:space-between;border-top:1px solid #eee;flex-shrink:0 }
     </style></head><body>
     <div class="toolbar no-print">
       <span style="font-size:15px;font-weight:700">🖨 ใบปะหน้า ${count} รายการ</span>
@@ -324,11 +324,11 @@ export default function ManagerApp({ profile, onLogout }) {
         pnos.forEach(function(pno, i) {
           // Barcode
           try {
-            JsBarcode('#bc-' + (i+1), pno, { format: 'CODE128', width: 1.8, height: 35, displayValue: false, margin: 0 });
+            JsBarcode('#bc-' + (i+1), pno, { format: 'CODE128', width: 1.5, height: 25, displayValue: false, margin: 0 });
           } catch(e) { console.log('Barcode error:', e); }
           // QR Code
           try {
-            new QRCode(document.getElementById('qr-' + (i+1)), { text: pno, width: 60, height: 60, correctLevel: QRCode.CorrectLevel.M });
+            new QRCode(document.getElementById('qr-' + (i+1)), { text: pno, width: 48, height: 48, correctLevel: QRCode.CorrectLevel.M });
           } catch(e) { console.log('QR error:', e); }
         });
       });
