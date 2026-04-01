@@ -6,6 +6,7 @@ import LoginPage from './components/LoginPage'
 const ManagerApp = lazy(() => import('./components/ManagerApp'))
 const EmployeeApp = lazy(() => import('./components/EmployeeApp'))
 const PackerApp = lazy(() => import('./components/PackerApp'))
+const ExportApp = lazy(() => import('./components/ExportApp'))
 
 class ErrorBoundary extends Component {
   state = { error: null }
@@ -73,6 +74,8 @@ export default function App() {
           ? <ManagerApp profile={profile} onLogout={handleLogout} />
           : (profile.role === 'packer' || profile.role === 'head')
           ? <PackerApp profile={profile} onLogout={handleLogout} />
+          : profile.role === 'export'
+          ? <ExportApp profile={profile} onLogout={handleLogout} />
           : <EmployeeApp profile={profile} onLogout={handleLogout} />}
       </Suspense>
     </ErrorBoundary>
