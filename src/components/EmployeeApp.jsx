@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { supabase } from '../lib/supabase'
 import { syncOrderToSheet } from '../lib/sheetSync'
+import { trackFlashOrder } from '../lib/flashApi'
 import { T, glass, fmt, fmtDate, fmtDateFull, fmtDateTime, sameDay, withinDays, thisMonth, Stat, Tabs, Btn, Toast, Empty, LiveDot } from './ui'
 
 // โหลด addresses แบบ lazy — ไม่บล็อคหน้าเว็บ
@@ -240,6 +241,22 @@ function FI({ label, error, success, ...props }) {
 
 export default function EmployeeApp({ profile, onLogout }) {
   const [tab, setTab] = useState('create')
+  const [trackSearchQuery, setTrackSearchQuery] = useState('')
+  const [trackSearchResult, setTrackSearchResult] = useState(null)
+  const [trackSearching, setTrackSearching] = useState(false)
+  const SM = { 1:{l:'สร้างออเดอร์',bg:'#EBEDEF',c:'#5D6D7E',i:'📥'},2:{l:'รับพัสดุแล้ว',bg:'#D4E6F1',c:'#2471A3',i:'📦'},3:{l:'ศูนย์คัดแยก',bg:'#D4E6F1',c:'#2471A3',i:'🏭'},4:{l:'กำลังจัดส่ง',bg:'#FDEBD0',c:'#CA6F1E',i:'🛵'},5:{l:'เซ็นรับแล้ว',bg:'#D5F5E3',c:'#1E8449',i:'✅'},6:{l:'ตีกลับ',bg:'#FADBD8',c:'#C0392B',i:'↩️'} }
+  const searchTracking = async (pnoOverride) => {
+    const q = (pnoOverride || trackSearchQuery).trim(); if (!q) return
+    setTrackSearchQuery(q)
+    setTrackSearching(true); setTrackSearchResult(null)
+    const result = await trackFlashOrder(q)
+    setTrackSearching(false)
+    if (result.code === 1 && result.data) {
+      setTrackSearchResult({ pno: q, state: result.data.state, stateText: result.data.stateText || '', routes: Array.isArray(result.data.routes) ? result.data.routes : [] })
+    } else {
+      setTrackSearchResult({ pno: q, error: result.message || 'ไม่พบข้อมูล' })
+    }
+  }
   const [form, setForm] = useState({ customerPhone: '', customerName: '', customerAddress: '', subDistrict: '', district: '', zipCode: '', province: '', customerSocial: '', salesChannel: '', amount: '', remark: '' })
   const [phoneError, setPhoneError] = useState('')
   const [addressWarning, setAddressWarning] = useState('')
@@ -461,7 +478,7 @@ export default function EmployeeApp({ profile, onLogout }) {
       </div>
 
       <div style={{ padding: '16px 16px 0' }}>
-        <Tabs items={[{ id: 'create', label: '➕ สร้างออเดอร์' }, { id: 'summary', label: '📊 สรุปยอด' }, { id: 'history', label: '📋 รายงาน' }]} active={tab} onChange={setTab} />
+        <Tabs items={[{ id: 'create', label: '➕ สร้างออเดอร์' }, { id: 'tracking', label: '🔍 ค้นหาเลขพัสดุ' }, { id: 'summary', label: '📊 สรุปยอด' }, { id: 'history', label: '📋 รายงาน' }]} active={tab} onChange={setTab} />
       </div>
 
       <div style={{ padding: 16 }}>
@@ -653,6 +670,78 @@ export default function EmployeeApp({ profile, onLogout }) {
             <div style={{ textAlign: 'center', marginTop: 14, fontSize: 11, color: T.textMuted }}>🔒 ไม่สามารถแก้ไขหรือลบได้หลังบันทึก</div>
           </div>
         </>}
+
+        {/* ═══ ค้นหาเลขพัสดุ ═══ */}
+        {tab === 'tracking' && <div style={{ ...glass, padding: 20, marginBottom: 20 }}>
+          <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 16, color: T.gold }}>🔍 ค้นหาเลขพัสดุ</div>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+            <input value={trackSearchQuery} onChange={e => setTrackSearchQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && searchTracking()}
+              placeholder="พิมพ์เลขพัสดุ เช่น TH37128J1XJ69A" style={{ flex: 1, padding: '12px 16px', borderRadius: 8, border: `1px solid ${T.border}`, background: T.surfaceAlt, fontSize: 15, fontFamily: 'monospace', color: T.text, outline: 'none' }} />
+            <button onClick={searchTracking} disabled={trackSearching} style={{ padding: '12px 24px', borderRadius: 8, border: 'none', background: T.grad1, color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: T.font }}>{trackSearching ? '⏳...' : '🔍 ค้นหา'}</button>
+          </div>
+
+          {trackSearchResult && <div style={{ ...glass, padding: 0, overflow: 'hidden' }}>
+            <div style={{ padding: '16px 20px', borderBottom: `1px solid ${T.border}` }}>
+              <div style={{ fontFamily: 'monospace', fontSize: 18, fontWeight: 900 }}>{trackSearchResult.pno}</div>
+            </div>
+
+            {trackSearchResult.error ? (
+              <div style={{ padding: 20, textAlign: 'center', color: T.danger, fontSize: 14 }}>{trackSearchResult.error}</div>
+            ) : (<>
+              <div style={{ padding: '16px 20px', textAlign: 'center', background: (SM[trackSearchResult.state] || {}).bg || '#f5f5f5' }}>
+                <div style={{ fontSize: 28, marginBottom: 4 }}>{(SM[trackSearchResult.state] || {}).i || '📦'}</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: (SM[trackSearchResult.state] || {}).c || '#333' }}>{trackSearchResult.stateText || (SM[trackSearchResult.state] || {}).l || 'ไม่ทราบ'}</div>
+              </div>
+
+              <div style={{ padding: '12px 20px', display: 'flex', gap: 4, alignItems: 'center' }}>
+                {[1, 2, 3, 4, 5].map(s => <div key={s} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                  <div style={{ width: 24, height: 24, borderRadius: 12, background: trackSearchResult.state >= s ? T.gold : T.border, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700 }}>{s}</div>
+                  <div style={{ fontSize: 8, color: trackSearchResult.state >= s ? T.gold : T.textMuted, textAlign: 'center' }}>{['สร้าง', 'รับ', 'คัดแยก', 'จัดส่ง', 'สำเร็จ'][s - 1]}</div>
+                </div>)}
+              </div>
+
+              {trackSearchResult.routes?.length > 0 && <div style={{ padding: '0 20px 16px' }}>
+                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>📍 Timeline</div>
+                {trackSearchResult.routes.map((r, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 12, paddingBottom: 12 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                      <div style={{ width: 10, height: 10, borderRadius: 5, background: i === 0 ? T.gold : T.border }} />
+                      {i < trackSearchResult.routes.length - 1 && <div style={{ width: 2, flex: 1, background: T.border }} />}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, color: T.textDim }}>{r.dateTime || r.datetime || ''}</div>
+                      <div style={{ fontSize: 12, fontWeight: i === 0 ? 600 : 400 }}>{r.message || r.routeDesc || ''}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>}
+            </>)}
+          </div>}
+
+          {/* ออเดอร์ของฉันที่มีเลขพัสดุ */}
+          {(() => {
+            const myPnoOrders = orders.filter(o => o.flash_pno)
+            return myPnoOrders.length > 0 && <div style={{ marginTop: 20 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: T.textDim }}>📦 ออเดอร์ของฉันที่มีเลขพัสดุ ({myPnoOrders.length})</div>
+              <div style={{ ...glass, padding: 0, overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, fontFamily: T.font }}>
+                  <thead><tr style={{ background: T.surfaceAlt }}>
+                    {['วันที่', 'ลูกค้า', 'เลขพัสดุ', 'COD', 'ค้นหา'].map(h => <th key={h} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: 600, color: T.textDim, borderBottom: `1px solid ${T.border}`, fontSize: 11 }}>{h}</th>)}
+                  </tr></thead>
+                  <tbody>{myPnoOrders.slice(0, 50).map(o => (
+                    <tr key={o.id} style={{ borderBottom: `1px solid ${T.border}` }}>
+                      <td style={{ padding: '8px 10px', fontSize: 11 }}>{new Date(o.created_at).toLocaleDateString('th-TH', { timeZone: 'Asia/Bangkok', day: '2-digit', month: 'short' })}</td>
+                      <td style={{ padding: '8px 10px', fontWeight: 600 }}>{o.customer_name}</td>
+                      <td style={{ padding: '8px 10px' }}><span style={{ fontFamily: 'monospace', fontSize: 11, color: '#2980B9', fontWeight: 700 }}>{o.flash_pno}</span></td>
+                      <td style={{ padding: '8px 10px', fontWeight: 700 }}>{o.payment_type === 'cod' ? <span style={{ color: '#E74C3C' }}>฿{fmt(parseFloat(o.cod_amount || o.sale_price) || 0)}</span> : <span style={{ color: '#27AE60', fontSize: 10 }}>โอน</span>}</td>
+                      <td style={{ padding: '8px 10px' }}><button onClick={() => searchTracking(o.flash_pno)} style={{ padding: '4px 10px', borderRadius: 4, border: 'none', background: T.grad1, color: '#fff', fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>🔍</button></td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            </div>
+          })()}
+        </div>}
 
         {tab === 'summary' && (() => {
           const todayCod = todayOrders.filter(o => o.payment_type !== 'transfer')
