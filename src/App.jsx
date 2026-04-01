@@ -71,7 +71,7 @@ export default function App() {
       <Suspense fallback={<Splash text="กำลังเปิด..." />}>
         {(profile.role === 'manager' || profile.role === 'admin')
           ? <ManagerApp profile={profile} onLogout={handleLogout} />
-          : profile.role === 'packer'
+          : (profile.role === 'packer' || profile.role === 'head')
           ? <PackerApp profile={profile} onLogout={handleLogout} />
           : <EmployeeApp profile={profile} onLogout={handleLogout} />}
       </Suspense>
