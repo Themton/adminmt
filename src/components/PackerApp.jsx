@@ -98,8 +98,9 @@ export default function PackerApp({ profile, onLogout }) {
 
   const SM = { 1:{l:'สร้างออเดอร์',bg:'#EBEDEF',c:'#5D6D7E',i:'📥'},2:{l:'รับพัสดุแล้ว',bg:'#D4E6F1',c:'#2471A3',i:'📦'},3:{l:'ศูนย์คัดแยก',bg:'#D4E6F1',c:'#2471A3',i:'🏭'},4:{l:'กำลังจัดส่ง',bg:'#FDEBD0',c:'#CA6F1E',i:'🛵'},5:{l:'เซ็นรับแล้ว',bg:'#D5F5E3',c:'#1E8449',i:'✅'},6:{l:'ตีกลับ',bg:'#FADBD8',c:'#C0392B',i:'↩️'} }
   const getBadge = (o) => {
-    if (!o.flash_pno) return o.shipping_status==='printed'?{l:'พร้อมส่ง',bg:'#D5F5E3',c:'#1E8449',i:'✅'}:{l:'เตรียมส่ง',bg:'#FDEBD0',c:'#CA6F1E',i:'🚚'}
+    if (!o.flash_pno) return o.shipping_status==='printed'?{l:'พร้อมส่ง',bg:'#D5F5E3',c:'#1E8449',i:'✅'}:o.shipping_status==='upsell'?{l:'รออัพเซล',bg:'#F4ECF7',c:'#8E44AD',i:'💰'}:{l:'เตรียมส่ง',bg:'#FDEBD0',c:'#CA6F1E',i:'🚚'}
     if (o.flash_status==='cancelled') return {l:'ยกเลิก',bg:'#FADBD8',c:'#C0392B',i:'❌'}
+    if (o.shipping_status==='upsell') return {l:'รออัพเซล',bg:'#F4ECF7',c:'#8E44AD',i:'💰'}
     const n=parseInt((o.flash_status||'').replace('flash_',''))||0
     return (n>0&&SM[n])?SM[n]:{l:'สร้างเลขพัสดุแล้ว',bg:'#F4ECF7',c:'#8E44AD',i:'⚡'}
   }
@@ -503,7 +504,7 @@ export default function PackerApp({ profile, onLogout }) {
           {[
             { id: 'shipping', icon: '🚚', label: 'การจัดส่ง' },
             { id: 'tracking', icon: '🔍', label: 'ค้นหาเลขพัสดุ' },
-            { id: 'upsell', icon: '💰', label: 'รายชื่อรออัพเซล' },
+            { id: 'upsell', icon: '💰', label: 'รายชื่อรออัพเซล', count: orders.filter(o=>o.shipping_status==='upsell'&&o.flash_pno).length },
             { id: 'history', icon: '📋', label: 'ประวัติการอัพเดต' },
           ].map(m => (
             <button key={m.id} onClick={() => setSidebarPage(m.id)} style={{
@@ -511,7 +512,7 @@ export default function PackerApp({ profile, onLogout }) {
               background:sidebarPage===m.id?'rgba(230,126,34,0.15)':'transparent',color:sidebarPage===m.id?'#E67E22':'rgba(255,255,255,0.7)',
               borderLeft:sidebarPage===m.id?'3px solid #E67E22':'3px solid transparent',transition:'all 0.15s'
             }}>
-              <span style={{fontSize:16}}>{m.icon}</span>{m.label}
+              <span style={{fontSize:16}}>{m.icon}</span>{m.label}{m.count>0&&<span style={{marginLeft:'auto',background:'#E67E22',color:'#fff',borderRadius:10,padding:'1px 7px',fontSize:10,fontWeight:700}}>{m.count}</span>}
             </button>
           ))}
         </div>
@@ -550,6 +551,7 @@ export default function PackerApp({ profile, onLogout }) {
               <button onClick={()=>bulkCreateFlash(orders.filter(o=>selectedIds.has(o.id)))} disabled={bulkCreating} style={{padding:'6px 14px',borderRadius:6,border:'none',background:bulkCreating?'#BDC3C7':'#E67E22',color:'#fff',fontSize:11,fontWeight:700,cursor:bulkCreating?'wait':'pointer',fontFamily:T.font}}>{bulkCreating?'⏳ '+bulkProgress.done+'/'+bulkProgress.total:'⚡ สร้างเลขพัสดุ ('+selectedIds.size+')'}</button>
               <button onClick={()=>printLabels(orders.filter(o=>selectedIds.has(o.id)))} style={{padding:'6px 12px',borderRadius:6,border:'1px solid #E67E22',background:'#FEF5E7',color:'#E67E22',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>🖨 ปริ้นใบปะหน้า</button>
               <button onClick={()=>{exportProshipExcel(orders.filter(o=>selectedIds.has(o.id)),'Selected.xlsx',profile,'shipping');flash('Export OK')}} style={{padding:'6px 12px',borderRadius:6,border:'1px solid #2980B9',background:'#EBF5FB',color:'#2980B9',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>📊 Export</button>
+              {(()=>{const wp=orders.filter(o=>selectedIds.has(o.id)&&o.flash_pno);return wp.length>0&&<button onClick={()=>markStatus([...selectedIds].filter(id=>orders.find(o=>o.id===id)?.flash_pno),'upsell')} style={{padding:'6px 12px',borderRadius:6,border:'1px solid #8E44AD',background:'#F4ECF7',color:'#8E44AD',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>💰 รออัพเซล ({wp.length})</button>})()}
               <button onClick={()=>bulkDeleteOrders([...selectedIds])} disabled={deleting} style={{padding:'6px 12px',borderRadius:6,border:'1px solid #E74C3C',background:'#FDEDEC',color:'#E74C3C',fontSize:11,fontWeight:700,cursor:deleting?'wait':'pointer',fontFamily:T.font}}>{deleting?`🗑 ${deleteProgress}%`:`🗑 ลบ (${selectedIds.size})`}</button>
               <button onClick={()=>setSelectedIds(new Set())} style={{padding:'6px 8px',borderRadius:6,border:'1px solid #DEE2E6',background:'#fff',color:'#85929E',fontSize:11,cursor:'pointer'}}>✕</button>
             </div>}
@@ -684,31 +686,54 @@ export default function PackerApp({ profile, onLogout }) {
 
           {/* ═══ PAGE: รายชื่อรออัพเซล ═══ */}
           {sidebarPage === 'upsell' && <div>
-            <div style={{fontSize:20,fontWeight:800,marginBottom:16}}>💰 รายชื่อรออัพเซล</div>
-            <div style={{fontSize:12,color:'#85929E',marginBottom:16}}>ออเดอร์ที่สร้างเลขพัสดุแล้ว — เลือกเพื่อแก้ไข COD และหมายเหตุ</div>
+            <div style={{fontSize:20,fontWeight:800,marginBottom:6}}>💰 รายชื่อรออัพเซล</div>
+            <div style={{fontSize:12,color:'#85929E',marginBottom:16}}>เลือกจากหน้าการจัดส่ง → กดปุ่ม "💰 รออัพเซล" → รายชื่อจะมาอยู่ที่นี่</div>
 
             {(() => {
-              const upsellOrders = orders.filter(o => o.flash_pno && ['created','manual'].includes(o.flash_status))
+              const upsellOrders = orders.filter(o => o.shipping_status === 'upsell' && o.flash_pno)
+              const doneUpsell = async (ids) => {
+                await supabase.from('mt_orders').update({ shipping_status: 'printed' }).in('id', ids)
+                setOrders(prev => prev.map(o => ids.includes(o.id) ? { ...o, shipping_status: 'printed' } : o))
+                setUpsellSelected(new Set())
+                flash('✅ เสร็จแล้ว ' + ids.length + ' รายการ')
+              }
               return <>
-                <div style={{fontSize:13,fontWeight:700,marginBottom:10,color:'#8E44AD'}}>⚡ สร้างเลขพัสดุแล้ว ({upsellOrders.length} รายการ)</div>
+                {upsellOrders.length > 0 && <div style={{display:'flex',gap:8,marginBottom:12,alignItems:'center'}}>
+                  <span style={{fontSize:13,fontWeight:700,color:'#8E44AD'}}>⚡ {upsellOrders.length} รายการรออัพเซล</span>
+                  {upsellSelected.size > 0 && <>
+                    <button onClick={()=>doneUpsell([...upsellSelected])} style={{padding:'6px 14px',borderRadius:6,border:'none',background:'#27AE60',color:'#fff',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>✅ อัพเซลเสร็จ ({upsellSelected.size})</button>
+                    <button onClick={()=>setUpsellSelected(new Set())} style={{padding:'6px 8px',borderRadius:6,border:'1px solid #DEE2E6',background:'#fff',color:'#85929E',fontSize:11,cursor:'pointer'}}>✕</button>
+                  </>}
+                </div>}
 
-                {upsellOrders.length === 0 ? <div style={{textAlign:'center',padding:40,color:'#85929E',background:'#fff',borderRadius:8,border:'1px solid #DEE2E6'}}>ไม่มีออเดอร์ที่รอดำเนินการ</div> : (
+                {upsellOrders.length === 0 ? <div style={{textAlign:'center',padding:40,color:'#85929E',background:'#fff',borderRadius:8,border:'1px solid #DEE2E6'}}>
+                  <div style={{fontSize:40,marginBottom:12}}>💰</div>
+                  <div style={{fontWeight:700,marginBottom:6}}>ยังไม่มีรายชื่อรออัพเซล</div>
+                  <div style={{fontSize:12}}>ไปหน้า 🚚 การจัดส่ง → เลือกรายชื่อ → กด "💰 รออัพเซล"</div>
+                </div> : (
                   <div style={{background:'#fff',borderRadius:8,border:'1px solid #DEE2E6',overflow:'hidden'}}>
                     <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,fontFamily:T.font}}>
                       <thead><tr style={{background:'#F8F9FA'}}>
-                        {['#','วันที่','ลูกค้า','เบอร์','เลขพัสดุ','COD','หมายเหตุ','อัพเซล'].map(h=><th key={h} style={{padding:'10px 8px',textAlign:'left',fontWeight:600,color:'#5D6D7E',borderBottom:'1px solid #DEE2E6',fontSize:11}}>{h}</th>)}
+                        <th style={{padding:'10px 8px',width:36,borderBottom:'1px solid #DEE2E6'}}>
+                          <input type="checkbox" checked={upsellOrders.length>0&&upsellOrders.every(o=>upsellSelected.has(o.id))} onChange={()=>{const ids=upsellOrders.map(o=>o.id);const allSel=ids.every(id=>upsellSelected.has(id));setUpsellSelected(prev=>{const n=new Set(prev);ids.forEach(id=>allSel?n.delete(id):n.add(id));return n})}} style={{cursor:'pointer'}} />
+                        </th>
+                        {['#','วันที่','ลูกค้า','เบอร์','เลขพัสดุ','COD เดิม','หมายเหตุ','อัพเซล','เสร็จ'].map(h=><th key={h} style={{padding:'10px 8px',textAlign:'left',fontWeight:600,color:'#5D6D7E',borderBottom:'1px solid #DEE2E6',fontSize:11}}>{h}</th>)}
                       </tr></thead>
                       <tbody>
                         {upsellOrders.map((o,i) => (
-                          <tr key={o.id} style={{borderBottom:'1px solid #EAECEE'}}>
+                          <tr key={o.id} style={{borderBottom:'1px solid #EAECEE',background:upsellSelected.has(o.id)?'#F4ECF7':'#fff'}}>
+                            <td style={{padding:'10px 8px',textAlign:'center'}}>
+                              <input type="checkbox" checked={upsellSelected.has(o.id)} onChange={()=>setUpsellSelected(prev=>{const n=new Set(prev);n.has(o.id)?n.delete(o.id):n.add(o.id);return n})} style={{cursor:'pointer'}} />
+                            </td>
                             <td style={{padding:'10px 8px',textAlign:'center',color:'#ABB2B9',fontSize:10}}>{i+1}</td>
                             <td style={{padding:'10px 8px',fontSize:11}}>{new Date(o.created_at).toLocaleDateString('th-TH',{timeZone:'Asia/Bangkok',day:'2-digit',month:'short'})}</td>
                             <td style={{padding:'10px 8px',fontWeight:600}}>{o.customer_name}</td>
                             <td style={{padding:'10px 8px',color:'#85929E',fontSize:11}}>{o.customer_phone}</td>
                             <td style={{padding:'10px 8px'}}><span style={{fontFamily:'monospace',fontSize:11,color:'#2980B9',fontWeight:700}}>{o.flash_pno}</span></td>
-                            <td style={{padding:'10px 8px',fontWeight:700}}>{o.payment_type==='cod'?<span style={{color:'#E74C3C'}}>฿{fmt(parseFloat(o.cod_amount||o.sale_price)||0)}</span>:<span style={{color:'#27AE60',fontSize:10}}>โอน</span>}</td>
+                            <td style={{padding:'10px 8px',fontWeight:700,color:'#E74C3C'}}>฿{fmt(parseFloat(o.cod_amount||o.sale_price)||0)}</td>
                             <td style={{padding:'10px 8px',fontSize:10,color:'#85929E',maxWidth:200,overflow:'hidden',whiteSpace:'nowrap',textOverflow:'ellipsis'}}>{o.remark||'—'}</td>
-                            <td style={{padding:'10px 8px'}}><button onClick={()=>openUpsell(o)} style={{padding:'6px 14px',borderRadius:6,border:'none',background:'linear-gradient(135deg,#8E44AD,#9B59B6)',color:'#fff',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>💰 อัพเซล</button></td>
+                            <td style={{padding:'10px 8px'}}><button onClick={()=>openUpsell(o)} style={{padding:'6px 14px',borderRadius:6,border:'none',background:'linear-gradient(135deg,#8E44AD,#9B59B6)',color:'#fff',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>💰</button></td>
+                            <td style={{padding:'10px 8px'}}><button onClick={()=>doneUpsell([o.id])} style={{padding:'6px 10px',borderRadius:6,border:'1px solid #27AE60',background:'#EAFAF1',color:'#27AE60',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>✅</button></td>
                           </tr>
                         ))}
                       </tbody>
