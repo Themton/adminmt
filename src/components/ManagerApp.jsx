@@ -263,6 +263,51 @@ export default function ManagerApp({ profile, onLogout }) {
     flash(`✅ ยกเลิกสำเร็จ ${ok} รายการ` + (fail ? ` | ❌ ไม่สำเร็จ ${fail}` : ''))
   }
 
+  // ═══ อัพเดทสถานะ Flash จริง ═══
+  const flashStateMap = {
+    1: { label: 'สร้างออเดอร์', bg: '#EBEDEF', color: '#5D6D7E' },
+    2: { label: 'รับพัสดุแล้ว', bg: '#D4E6F1', color: '#2471A3' },
+    3: { label: 'ศูนย์คัดแยก', bg: '#D4E6F1', color: '#2471A3' },
+    4: { label: 'กำลังจัดส่ง', bg: '#FDEBD0', color: '#CA6F1E' },
+    5: { label: 'เซ็นรับแล้ว', bg: '#D5F5E3', color: '#1E8449' },
+    6: { label: 'ตีกลับ', bg: '#FADBD8', color: '#C0392B' },
+  }
+
+  const refreshFlashStatus = async (targetOrders) => {
+    const withPno = (targetOrders || orders).filter(o => o.flash_pno && o.flash_status !== 'cancelled')
+    if (!withPno.length) { flash('❌ ไม่มีรายการที่มีเลขพัสดุ'); return }
+    flash(`⏳ อัพเดทสถานะ ${withPno.length} รายการ...`)
+    let updated = 0
+    for (let i = 0; i < withPno.length; i++) {
+      if (i % 5 === 0) flash(`⏳ อัพเดท ${i+1}/${withPno.length}...`)
+      const result = await trackFlashOrder(withPno[i].flash_pno)
+      if (result.code === 1 && result.data) {
+        const state = result.data.state || 0
+        const stateText = result.data.stateText || flashStateMap[state]?.label || ''
+        const newStatus = 'flash_' + state
+        await supabase.from('mt_orders').update({ flash_status: newStatus }).eq('id', withPno[i].id)
+        setOrders(prev => prev.map(o => o.id === withPno[i].id ? { ...o, flash_status: newStatus } : o))
+        updated++
+      }
+      if (i < withPno.length - 1) await new Promise(r => setTimeout(r, 150))
+    }
+    flash(`✅ อัพเดทสถานะสำเร็จ ${updated} รายการ`)
+  }
+
+  const getFlashStatusBadge = (order) => {
+    if (!order.flash_pno) {
+      const isPrinted = order.shipping_status === 'printed'
+      return isPrinted ? { label: 'พร้อมส่ง', bg: '#D5F5E3', color: '#1E8449' } : { label: 'เตรียมส่ง', bg: '#FDEBD0', color: '#CA6F1E' }
+    }
+    if (order.flash_status === 'cancelled') return { label: 'ยกเลิก', bg: '#FADBD8', color: '#C0392B' }
+    // flash_1 → flash_5
+    const stateNum = parseInt((order.flash_status || '').replace('flash_', '')) || 0
+    if (stateNum > 0 && flashStateMap[stateNum]) return flashStateMap[stateNum]
+    // fallback
+    if (order.flash_status === 'created' || order.flash_status === 'manual') return { label: 'รับเข้าระบบ', bg: '#D4E6F1', color: '#2471A3' }
+    return { label: 'รับเข้าระบบ', bg: '#D4E6F1', color: '#2471A3' }
+  }
+
   // ═══ Print Label — ปริ้นใบปะหน้า ═══
   // ═══ Notify Courier — เรียกพนักงานเข้ารับ ═══
   const notifyCourier = async (pnoList) => {
@@ -1280,10 +1325,11 @@ export default function ManagerApp({ profile, onLogout }) {
           })
           const shipOrders = allShipOrders.filter(o => {
             if (shipFilter === 'preparing') return (!o.shipping_status || o.shipping_status === 'waiting') && !o.flash_pno
-            if (shipFilter === 'ready') return o.shipping_status === 'printed' && !o.flash_pno
-            if (shipFilter === 'insystem') return !!o.flash_pno
-            if (shipFilter === 'printed') return o.shipping_status === 'printed'
-            if (shipFilter === 'waiting') return !o.shipping_status || o.shipping_status === 'waiting'
+            if (shipFilter === 'insystem') return o.flash_pno && ['created','manual','flash_1'].includes(o.flash_status)
+            if (shipFilter === 'pickedup') return ['flash_2','flash_3'].includes(o.flash_status)
+            if (shipFilter === 'delivering') return o.flash_status === 'flash_4'
+            if (shipFilter === 'delivered') return o.flash_status === 'flash_5'
+            if (shipFilter === 'returned') return o.flash_status === 'flash_6' || o.flash_status === 'cancelled'
             return true
           }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
           const waitingCount = allShipOrders.filter(o => !o.shipping_status || o.shipping_status === 'waiting').length
@@ -1343,33 +1389,39 @@ export default function ManagerApp({ profile, onLogout }) {
               <button onClick={() => exportShip('excel')} style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid #27AE60', background: '#EAFAF1', color: '#27AE60', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>📊 Excel</button>
               <button onClick={() => exportShip('csv')} style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid #D5D8DC', background: '#fff', color: '#5D6D7E', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>📥 CSV</button>
               {(() => { const p = shipOrders.filter(o => o.flash_pno); return p.length > 0 && <button onClick={() => notifyCourier(p.map(o => o.flash_pno))} style={{ padding: '8px 16px', borderRadius: 6, border: 'none', background: '#27AE60', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: T.font, whiteSpace: 'nowrap' }}>📞 เรียกรับพัสดุ</button> })()}
+              <button onClick={() => refreshFlashStatus(shipOrders)} style={{ padding: '8px 14px', borderRadius: 6, border: '1px solid #3498DB', background: '#EBF5FB', color: '#3498DB', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: T.font, whiteSpace: 'nowrap' }}>🔄 อัพเดทสถานะ</button>
             </div>
 
             {/* Status Filter Bar — Proship Style */}
             <div style={{ display: 'flex', gap: 0, borderBottom: '2px solid #EAECEE', marginBottom: 16, overflowX: 'auto' }}>
               {(() => {
                 const preparing = allShipOrders.filter(o => (!o.shipping_status || o.shipping_status === 'waiting') && !o.flash_pno)
-                const readyShip = allShipOrders.filter(o => (o.shipping_status === 'printed' || o.flash_pno) && o.flash_status !== 'created')
-                const inSystem = allShipOrders.filter(o => o.flash_pno && (o.flash_status === 'created' || o.flash_status === 'manual'))
-                const allPrinted = allShipOrders.filter(o => o.shipping_status === 'printed')
+                const inSystem = allShipOrders.filter(o => o.flash_pno && ['created','manual','flash_1'].includes(o.flash_status))
+                const pickedUp = allShipOrders.filter(o => ['flash_2','flash_3'].includes(o.flash_status))
+                const delivering = allShipOrders.filter(o => o.flash_status === 'flash_4')
+                const delivered = allShipOrders.filter(o => o.flash_status === 'flash_5')
+                const returned = allShipOrders.filter(o => o.flash_status === 'flash_6' || o.flash_status === 'cancelled')
                 const filters = [
                   { id: 'all', icon: '📦', label: 'ทั้งหมด', count: allShipOrders.length, color: '#2980B9' },
                   { id: 'preparing', icon: '🚚', label: 'เตรียมส่ง', count: preparing.length, color: '#E67E22' },
-                  { id: 'ready', icon: '✅', label: 'พร้อมส่ง', count: readyShip.length, color: '#27AE60' },
-                  { id: 'insystem', icon: '📥', label: 'รับเข้าระบบ', count: inSystem.length, color: '#2980B9' },
-                  { id: 'printed', icon: '🖨', label: 'ปริ้นแล้ว', count: allPrinted.length, color: '#16A085' },
+                  { id: 'insystem', icon: '📥', label: 'รับเข้าระบบ', count: inSystem.length, color: '#5D6D7E' },
+                  { id: 'pickedup', icon: '📦', label: 'รับพัสดุแล้ว', count: pickedUp.length, color: '#2471A3' },
+                  { id: 'delivering', icon: '🛵', label: 'กำลังจัดส่ง', count: delivering.length, color: '#CA6F1E' },
+                  { id: 'delivered', icon: '✅', label: 'เซ็นรับแล้ว', count: delivered.length, color: '#1E8449' },
+                  { id: 'returned', icon: '↩️', label: 'ตีกลับ/ยกเลิก', count: returned.length, color: '#C0392B' },
                 ]
                 return filters.map(f => (
                   <button key={f.id} onClick={() => setShipFilter(f.id)} style={{
-                    padding: '10px 18px', border: 'none', cursor: 'pointer', fontFamily: T.font, fontSize: 12, fontWeight: 500,
+                    padding: '8px 12px', border: 'none', cursor: 'pointer', fontFamily: T.font, fontSize: 11, fontWeight: 500,
                     background: 'transparent', color: shipFilter === f.id ? f.color : '#85929E',
                     borderBottom: shipFilter === f.id ? `3px solid ${f.color}` : '3px solid transparent',
                     marginBottom: -2, whiteSpace: 'nowrap', transition: 'all 0.15s'
                   }}>
-                    <span style={{ marginRight: 4 }}>{f.icon}</span>
-                    {f.label} <strong style={{ marginLeft: 4, color: shipFilter === f.id ? f.color : '#ABB2B9' }}>{f.count}</strong>
+                    <span style={{ marginRight: 3 }}>{f.icon}</span>
+                    {f.label} <strong style={{ marginLeft: 3, color: shipFilter === f.id ? f.color : '#ABB2B9' }}>{f.count}</strong>
                   </button>
                 ))
+              })()}
               })()}
             </div>
 
@@ -1460,11 +1512,7 @@ export default function ManagerApp({ profile, onLogout }) {
                         const dt = new Date(o.created_at)
                         const hasPno = !!o.flash_pno
                         const isPrinted = o.shipping_status === 'printed'
-                        const st = hasPno
-                          ? { label: 'รับเข้าระบบ', bg: '#D4E6F1', color: '#2471A3' }
-                          : isPrinted
-                            ? { label: 'พร้อมส่ง', bg: '#D5F5E3', color: '#1E8449' }
-                            : { label: 'เตรียมส่ง', bg: '#FDEBD0', color: '#CA6F1E' }
+                        const st = getFlashStatusBadge(o)
                         const dateStr = dt.toLocaleDateString('th-TH', { timeZone: 'Asia/Bangkok', day: '2-digit', month: 'short', year: 'numeric' })
                         const timeStr = dt.toLocaleTimeString('th-TH', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' น.'
                         return (
