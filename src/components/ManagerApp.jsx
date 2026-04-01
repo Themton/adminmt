@@ -435,18 +435,18 @@ export default function ManagerApp({ profile, onLogout }) {
   useEffect(() => {
     const loadAll = async () => {
       try {
-        // โหลดออเดอร์ทั้งหมด (ไม่จำกัด)
-        let allOrders = []
-        let from = 0
+        let query = supabase.from('mt_orders').select('*').order('created_at', { ascending: false })
+        if (dateFilter) query = query.gte('order_date', dateFilter)
+        if (dateFilterEnd) query = query.lte('order_date', dateFilterEnd)
+        let allOrders = [], from = 0
         while (true) {
-          const { data } = await supabase.from('mt_orders').select('*').order('created_at', { ascending: false }).range(from, from + 999)
+          const { data } = await query.range(from, from + 999)
           if (!data || data.length === 0) break
           allOrders = [...allOrders, ...data]
           if (data.length < 1000) break
           from += 1000
         }
         setOrders(allOrders)
-        console.log('โหลดออเดอร์ทั้งหมด:', allOrders.length, 'รายการ')
 
         const [teamsRes, profilesRes] = await Promise.all([
           supabase.from('mt_teams').select('*').order('name'),
@@ -457,9 +457,10 @@ export default function ManagerApp({ profile, onLogout }) {
       } catch (e) { console.error('Load error:', e) }
     }
     loadAll()
+  }, [dateFilter, dateFilterEnd])
 
-    // Realtime
-    // Realtime — อัพเดท UI เท่านั้น (sync ไป Sheet ทำจาก client ที่สร้าง/ลบ/แก้ไข)
+  // Realtime subscription (run once)
+  useEffect(() => {
     const ch = supabase.channel('mgr-orders')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'mt_orders' },
         (payload) => { setOrders(prev => prev.some(o => o.id === payload.new.id) ? prev : [payload.new, ...prev]) }

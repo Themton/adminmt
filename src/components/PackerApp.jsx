@@ -70,11 +70,24 @@ export default function PackerApp({ profile, onLogout }) {
   const testConn = async () => { flash('...'); const r = await pingFlash(); flash(r.code === 1 ? 'OK' : 'FAIL') }
 
   useEffect(() => {
-    const load = async () => { setLoading(true); let all=[],from=0; while(true){ const{data}=await supabase.from('mt_orders').select('*').order('created_at',{ascending:false}).range(from,from+999); if(!data||data.length===0)break; all=[...all,...data];from+=1000; if(data.length<1000)break }; setOrders(all);setLoading(false) }
+    const load = async () => {
+      setLoading(true)
+      let query = supabase.from('mt_orders').select('*').order('created_at', { ascending: false })
+      if (dateFilter) query = query.gte('order_date', dateFilter)
+      if (dateFilterEnd) query = query.lte('order_date', dateFilterEnd)
+      let all = [], from = 0
+      while (true) {
+        const { data } = await query.range(from, from + 999)
+        if (!data || data.length === 0) break
+        all = [...all, ...data]; from += 1000
+        if (data.length < 1000) break
+      }
+      setOrders(all); setLoading(false)
+    }
     load()
     const ch = supabase.channel('pk-o').on('postgres_changes',{event:'INSERT',schema:'public',table:'mt_orders'},p=>setOrders(prev=>prev.some(o=>o.id===p.new.id)?prev:[p.new,...prev])).on('postgres_changes',{event:'UPDATE',schema:'public',table:'mt_orders'},p=>setOrders(prev=>prev.map(o=>o.id===p.new.id?p.new:o))).on('postgres_changes',{event:'DELETE',schema:'public',table:'mt_orders'},p=>setOrders(prev=>prev.filter(o=>o.id!==p.old.id))).subscribe()
     return () => supabase.removeChannel(ch)
-  }, [])
+  }, [dateFilter, dateFilterEnd])
 
   const SM = { 1:{l:'สร้างออเดอร์',bg:'#EBEDEF',c:'#5D6D7E',i:'📥'},2:{l:'รับพัสดุแล้ว',bg:'#D4E6F1',c:'#2471A3',i:'📦'},3:{l:'ศูนย์คัดแยก',bg:'#D4E6F1',c:'#2471A3',i:'🏭'},4:{l:'กำลังจัดส่ง',bg:'#FDEBD0',c:'#CA6F1E',i:'🛵'},5:{l:'เซ็นรับแล้ว',bg:'#D5F5E3',c:'#1E8449',i:'✅'},6:{l:'ตีกลับ',bg:'#FADBD8',c:'#C0392B',i:'↩️'} }
   const getBadge = (o) => {
