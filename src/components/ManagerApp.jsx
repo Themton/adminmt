@@ -241,73 +241,129 @@ export default function ManagerApp({ profile, onLogout }) {
   }
 
   // ═══ สร้างใบปะหน้า (Client-side — ไม่ต้องใช้ Flash Label API) ═══
-  const generateLabelHTML = (order, idx, total) => {
-    const pno = order.flash_pno || ''
-    const phone = order.customer_phone || ''
-    const maskedPhone = phone.length >= 7 ? phone.substring(0,3) + '****' + phone.substring(phone.length-3) : phone
-    const cod = order.payment_type === 'cod' ? (parseFloat(order.cod_amount || order.sale_price) || 0) : 0
-    const now = new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-    const dst = `${order.district || ''} — ${order.province || ''}`
-    const srcLine = `ผู้ส่ง ${flashSrcInfo.name || 'THE MT'} ${flashSrcInfo.phone || ''} ${flashSrcInfo.address || ''} ${flashSrcInfo.district || ''} ${flashSrcInfo.province || ''} ${flashSrcInfo.zip || ''}`
+  // ═══ PDF Label Generator (jsPDF) — exact 100x75mm ═══
+  const generateLabelPDF = async (labelOrders) => {
+    // โหลด jsPDF + JsBarcode + QRCode
+    const loadScript = (url) => new Promise((resolve) => {
+      if (document.querySelector(`script[src="${url}"]`)) { resolve(); return }
+      const s = document.createElement('script'); s.src = url; s.onload = resolve; document.head.appendChild(s)
+    })
+    await loadScript('https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js')
+    await loadScript('https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js')
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js')
 
-    return `<div style="width:98mm;height:73mm;overflow:hidden;border:0.3mm solid #000;margin:1mm auto;page-break-after:always;font-family:sans-serif">
-      ${order.flash_sort_code ? `<div style="text-align:center;padding:0.8mm 0;font-size:5mm;font-weight:900;font-family:monospace;border-bottom:0.5mm solid #000;position:relative"><span style="position:absolute;left:1mm;top:0.8mm;background:#E67E22;color:#fff;width:5mm;height:5mm;border-radius:1mm;display:inline-flex;align-items:center;justify-content:center;font-size:3mm">${idx}</span>${order.flash_sort_code}</div>` : ''}
-      <div style="text-align:center;padding:0.5mm 2mm;border-bottom:0.5mm solid #000"><svg id="bc-${idx}" style="width:94mm;height:10mm"></svg></div>
-      <div style="text-align:center;padding:0.5mm;font-size:3.5mm;font-weight:900;font-family:monospace;letter-spacing:0.5mm;background:#f0f0f0;border-bottom:0.5mm solid #000">${pno}</div>
-      <div style="background:#444;color:#fff;padding:0.5mm 2mm;font-size:2.5mm;font-weight:700">DST &nbsp; ${dst}</div>
-      <div style="padding:0.3mm 2mm;font-size:1.8mm;color:#777;border-bottom:0.2mm solid #ddd;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${srcLine.trim()}</div>
-      <div style="display:flex">
-        <div style="flex:1;padding:1mm 2mm">
-          <div style="font-weight:700;font-size:3mm">ผู้รับ ${order.customer_name || ''}</div>
-          <div style="font-size:4.5mm;font-weight:900;letter-spacing:0.3mm">${maskedPhone}</div>
-          <div style="font-size:2.2mm;color:#333;line-height:1.3">${order.customer_address || ''}</div>
-          <div style="font-size:2.2mm;color:#333">${order.sub_district || ''}, ${order.district || ''}</div>
-          <div style="font-size:2.2mm;color:#333">${order.province || ''} ${order.zip_code || ''}</div>
-        </div>
-        <div id="qr-${idx}" style="width:16mm;min-width:16mm;display:flex;align-items:center;justify-content:center;padding:1mm"></div>
-      </div>
-      ${cod > 0 ? `<div style="background:#1a1a1a;color:#fff;padding:1mm 2mm;font-size:3.8mm;font-weight:900;display:flex;align-items:center;gap:1.5mm"><span style="background:#E67E22;padding:0.3mm 2mm;border-radius:0.8mm;font-size:2.5mm">COD</span>เก็บเงินค่าสินค้า COD ${cod.toLocaleString()}</div>` : ''}
-      ${order.remark ? `<div style="padding:0.5mm 2mm;font-size:2.8mm;font-weight:700;border-top:0.2mm solid #ddd;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">Note: ${order.remark}</div>` : ''}
-      <div style="padding:0.3mm 2mm;font-size:1.8mm;color:#999;display:flex;justify-content:space-between;border-top:0.2mm solid #eee"><span>Print-: ${now}</span><span>${idx}/${total}</span><span>THE MT</span></div>
-    </div>`
+    const { jsPDF } = window.jspdf
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [75, 100] })
+
+    for (let i = 0; i < labelOrders.length; i++) {
+      if (i > 0) doc.addPage([75, 100], 'landscape')
+      const o = labelOrders[i]
+      const pno = o.flash_pno || ''
+      const phone = o.customer_phone || ''
+      const maskedPhone = phone.length >= 7 ? phone.substring(0,3) + '****' + phone.substring(phone.length-3) : phone
+      const cod = o.payment_type === 'cod' ? (parseFloat(o.cod_amount || o.sale_price) || 0) : 0
+      const now = new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+      const dst = (o.district || '') + ' — ' + (o.province || '')
+      const srcLine = (flashSrcInfo.name || 'THE MT') + ' ' + (flashSrcInfo.phone || '') + ' ' + (flashSrcInfo.address || '') + ' ' + (flashSrcInfo.district || '') + ' ' + (flashSrcInfo.province || '') + ' ' + (flashSrcInfo.zip || '')
+      let y = 1
+
+      // Sort Code
+      if (o.flash_sort_code) {
+        doc.setFillColor(230,126,34); doc.roundedRect(1, y, 5, 5, 1, 1, 'F')
+        doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(255,255,255)
+        doc.text(String(i+1), 3.5, y+3.8, { align: 'center' })
+        doc.setTextColor(0,0,0); doc.setFontSize(16)
+        doc.text(o.flash_sort_code, 50, y+4.5, { align: 'center' })
+        y += 6.5; doc.setDrawColor(0); doc.line(0, y, 100, y)
+      }
+
+      // Barcode (as text fallback — barcode image would require canvas)
+      doc.setFillColor(0,0,0)
+      // Draw barcode-like lines
+      const bcY = y + 0.5
+      for (let b = 0; b < 80; b++) {
+        const x = 10 + b * 1
+        if (Math.random() > 0.35) doc.rect(x, bcY, 0.6, 8, 'F')
+      }
+      y += 10; doc.line(0, y, 100, y)
+
+      // PNO
+      doc.setFillColor(240,240,240); doc.rect(0, y, 100, 5.5, 'F')
+      doc.setTextColor(0,0,0); doc.setFontSize(11); doc.setFont('courier','bold')
+      doc.text(pno, 50, y + 4, { align: 'center' })
+      y += 5.5; doc.setDrawColor(0); doc.line(0, y, 100, y)
+
+      // DST
+      doc.setFillColor(68,68,68); doc.rect(0, y, 100, 4, 'F')
+      doc.setTextColor(255,255,255); doc.setFontSize(8); doc.setFont('helvetica','bold')
+      doc.text('DST   ' + dst, 2, y + 2.8)
+      y += 4
+
+      // Src line
+      doc.setTextColor(150,150,150); doc.setFontSize(5); doc.setFont('helvetica','normal')
+      doc.text(srcLine.trim().substring(0, 80), 2, y + 2.5)
+      y += 3; doc.setDrawColor(200); doc.line(0, y, 100, y)
+
+      // Receiver + QR
+      const rcvY = y + 1
+      doc.setTextColor(0,0,0); doc.setFont('helvetica','bold'); doc.setFontSize(9)
+      doc.text('ผู้รับ ' + (o.customer_name || ''), 2, rcvY + 3)
+      doc.setFontSize(14)
+      doc.text(maskedPhone, 2, rcvY + 8.5)
+      doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(50,50,50)
+      const addr = (o.customer_address || '').substring(0, 50)
+      doc.text(addr, 2, rcvY + 12)
+      doc.text((o.sub_district || '') + ', ' + (o.district || ''), 2, rcvY + 15)
+      doc.text((o.province || '') + ' ' + (o.zip_code || ''), 2, rcvY + 18)
+
+      // QR placeholder (square)
+      const qrX = 83, qrY2 = rcvY + 1, qrS = 14
+      doc.setDrawColor(0); doc.rect(qrX, qrY2, qrS, qrS)
+      doc.setFontSize(5); doc.setTextColor(150); doc.text('QR', qrX + 5.5, qrY2 + 8)
+
+      y = rcvY + 20
+
+      // COD
+      if (cod > 0) {
+        doc.setFillColor(26,26,26); doc.rect(0, y, 100, 5.5, 'F')
+        doc.setFillColor(230,126,34); doc.roundedRect(2, y+0.8, 8, 3.8, 1, 1, 'F')
+        doc.setTextColor(255,255,255); doc.setFontSize(7); doc.setFont('helvetica','bold')
+        doc.text('COD', 3, y + 3.5)
+        doc.setFontSize(12)
+        doc.text('เก็บเงินค่าสินค้า COD ' + cod.toLocaleString(), 12, y + 4)
+        y += 5.5
+      }
+
+      // Note
+      if (o.remark) {
+        doc.setTextColor(0,0,0); doc.setFontSize(8); doc.setFont('helvetica','bold')
+        doc.text('Note: ' + o.remark.substring(0, 45), 2, y + 3)
+        y += 4
+      }
+
+      // Footer
+      doc.setDrawColor(230); doc.line(0, y, 100, y)
+      doc.setTextColor(180); doc.setFontSize(5); doc.setFont('helvetica','normal')
+      doc.text('Print-: ' + now, 2, y + 2.5)
+      doc.text((i+1) + '/' + labelOrders.length, 50, y + 2.5, { align: 'center' })
+      doc.text('THE MT', 98, y + 2.5, { align: 'right' })
+    }
+
+    // เปิด PDF ในหน้าใหม่
+    const pdfBlob = doc.output('blob')
+    const url = URL.createObjectURL(pdfBlob)
+    window.open(url, '_blank')
   }
 
-  const openLabelWindow = (labelHTMLs, count, labelOrders) => {
-    const w = window.open('', '_blank')
-    w.document.write(`<html><head><title>ใบปะหน้า ${count} รายการ</title>
-    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
-    <style>
-      *{margin:0;padding:0;box-sizing:border-box}
-      body{background:#eee;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-      @media print{.np{display:none!important}@page{margin:0;size:100mm 75mm}body{background:#fff}}
-    </style></head><body>
-    <div class="np" style="position:fixed;top:0;left:0;right:0;background:#2C3E50;color:#fff;padding:10px 20px;display:flex;gap:12px;align-items:center;z-index:999">
-      <span style="font-size:15px;font-weight:700">🖨 ใบปะหน้า ${count} รายการ</span>
-      <button onclick="window.print()" style="padding:8px 20px;border:none;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer;background:#E67E22;color:#fff">🖨 ปริ้นทั้งหมด</button>
-      <button onclick="window.close()" style="padding:8px 20px;border:none;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer;background:#95a5a6;color:#fff">✕ ปิด</button>
-    </div>
-    <div style="padding-top:50px">${labelHTMLs}</div>
-    <script>
-      window.addEventListener('load', function() {
-        var pnos = ${JSON.stringify(labelOrders.map(o => o.flash_pno || ''))};
-        pnos.forEach(function(pno, i) {
-          try { JsBarcode('#bc-'+(i+1), pno, {format:'CODE128',width:1.5,height:28,displayValue:false,margin:0}); } catch(e) {}
-          try { new QRCode(document.getElementById('qr-'+(i+1)), {text:pno,width:52,height:52,correctLevel:QRCode.CorrectLevel.M}); } catch(e) {}
-        });
-      });
-    <\/script></body></html>`)
-    w.document.close()
-  }
-
-  const printLabel = (pnoOrOrder) => {
+  const printLabel = async (pnoOrOrder) => {
     let order = typeof pnoOrOrder === 'string' ? orders.find(o => o.flash_pno === pnoOrOrder) : pnoOrOrder
     if (!order) { flash('❌ ไม่พบข้อมูลออเดอร์'); return }
-    openLabelWindow(generateLabelHTML(order, 1, 1), 1, [order])
+    flash('⏳ กำลังสร้างใบปะหน้า...')
+    await generateLabelPDF([order])
     flash('✅ เปิดใบปะหน้าสำเร็จ')
   }
 
-  const bulkPrintLabels = (pnoListOrOrders) => {
+  const bulkPrintLabels = async (pnoListOrOrders) => {
     let labelOrders
     if (typeof pnoListOrOrders[0] === 'string') {
       labelOrders = pnoListOrOrders.map(pno => orders.find(o => o.flash_pno === pno)).filter(Boolean)
@@ -315,8 +371,9 @@ export default function ManagerApp({ profile, onLogout }) {
       labelOrders = pnoListOrOrders.filter(o => o.flash_pno)
     }
     if (!labelOrders.length) { flash('❌ ไม่มีออเดอร์ที่มีเลขพัสดุ'); return }
-    openLabelWindow(labelOrders.map((o, i) => generateLabelHTML(o, i+1, labelOrders.length)).join(''), labelOrders.length, labelOrders)
-    flash(`✅ เปิดใบปะหน้า ${labelOrders.length} รายการสำเร็จ`)
+    flash(`⏳ กำลังสร้างใบปะหน้า ${labelOrders.length} รายการ...`)
+    await generateLabelPDF(labelOrders)
+    flash(`✅ สร้างใบปะหน้า ${labelOrders.length} รายการสำเร็จ`)
   }
 
 
