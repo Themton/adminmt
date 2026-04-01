@@ -549,19 +549,38 @@ export default function ManagerApp({ profile, onLogout }) {
   const createUser = async () => {
     const f = userForm; if (!f.email || !f.password || !f.fullName) { flash('❌ กรอกให้ครบ'); return }
     if (f.password.length < 6) { flash('❌ รหัสผ่าน 6 ตัวขึ้นไป'); return }
-    const { data: { session: cur } } = await supabase.auth.getSession()
-    const { data, error } = await supabase.auth.signUp({ email: f.email, password: f.password })
-    if (error) { flash('❌ ' + error.message); return }
-    const newUserId = data.user?.id
-    if (!newUserId) { flash('❌ สร้าง user ไม่สำเร็จ'); return }
-    if (cur) await supabase.auth.setSession({ access_token: cur.access_token, refresh_token: cur.refresh_token })
-    await new Promise(r => setTimeout(r, 500))
-    const { error: profErr } = await supabase.from('mt_profiles').insert({ id: newUserId, full_name: f.fullName, role: f.role, team_id: f.teamId || null, email: f.email, password_text: f.password })
-    if (profErr) { flash('❌ สร้าง profile ไม่สำเร็จ: ' + profErr.message); return }
-    const { data: profs } = await supabase.from('mt_profiles').select('*, mt_teams(id, name)').order('created_at', { ascending: false })
-    setProfiles(profs || [])
-    setShowUserModal(false); setUserForm({ email: '', password: '', fullName: '', role: 'employee', teamId: '' })
-    flash('✅ สร้างบัญชีสำเร็จ')
+    flash('⏳ กำลังสร้างบัญชี...')
+    try {
+      // บันทึก session ปัจจุบัน
+      const { data: { session: cur } } = await supabase.auth.getSession()
+      if (!cur) { flash('❌ ไม่มี session — กรุณา login ใหม่'); return }
+
+      // สร้าง auth user
+      const { data, error } = await supabase.auth.signUp({ email: f.email, password: f.password, options: { data: { full_name: f.fullName } } })
+      if (error) { flash('❌ สร้าง auth ไม่สำเร็จ: ' + error.message); return }
+      const newUserId = data.user?.id
+      if (!newUserId) { flash('❌ ไม่ได้ user ID'); return }
+
+      // กู้ session admin กลับ
+      await supabase.auth.setSession({ access_token: cur.access_token, refresh_token: cur.refresh_token })
+      await new Promise(r => setTimeout(r, 800))
+
+      // สร้าง profile
+      const { error: profErr } = await supabase.from('mt_profiles').insert({ id: newUserId, full_name: f.fullName, role: f.role, team_id: f.teamId || null, email: f.email, password_text: f.password })
+      if (profErr) {
+        // ลองอีกครั้ง
+        await new Promise(r => setTimeout(r, 500))
+        const { error: retry } = await supabase.from('mt_profiles').insert({ id: newUserId, full_name: f.fullName, role: f.role, team_id: f.teamId || null, email: f.email, password_text: f.password })
+        if (retry) { flash('❌ สร้าง profile ไม่สำเร็จ: ' + retry.message); return }
+      }
+
+      const { data: profs } = await supabase.from('mt_profiles').select('*, mt_teams(id, name)').order('created_at', { ascending: false })
+      setProfiles(profs || [])
+      setShowUserModal(false); setUserForm({ email: '', password: '', fullName: '', role: 'employee', teamId: '' })
+      flash('✅ สร้างบัญชีสำเร็จ — ' + f.fullName + ' (' + f.role + ')')
+    } catch (e) {
+      flash('❌ เกิดข้อผิดพลาด: ' + e.message)
+    }
   }
 
   // แก้ไข user
