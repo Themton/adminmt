@@ -227,40 +227,6 @@ export default function ManagerApp({ profile, onLogout }) {
   }
 
   // ═══ Print Label — ปริ้นใบปะหน้า ═══
-  const printLabel = async (pno) => {
-    flash('⏳ กำลังดาวน์โหลดใบปะหน้า...')
-    const result = await printFlashLabel(pno)
-    console.log('Flash Label Response:', JSON.stringify(result, null, 2))
-
-    if (result.code === 1 && result.data) {
-      const d = result.data
-      // หลายรูปแบบที่ Flash อาจ return
-      const url = d.labelUrl || d.label_url || d.url || d.pdfUrl || d.pdf_url || (typeof d === 'string' ? d : null)
-      const base64 = d.label || d.labelContent || d.content || d.image || d.base64
-
-      if (url) {
-        window.open(url, '_blank')
-        flash('✅ เปิดใบปะหน้าสำเร็จ')
-      } else if (base64) {
-        const isPdf = base64.startsWith('JVBER') || base64.startsWith('JVBERi0')
-        const w = window.open()
-        if (isPdf) {
-          w.document.write('<html><head><title>ใบปะหน้า ' + pno + '</title></head><body style="margin:0"><embed src="data:application/pdf;base64,' + base64 + '" type="application/pdf" width="100%" height="100%" style="position:fixed;top:0;left:0;right:0;bottom:0"/></body></html>')
-        } else {
-          w.document.write('<html><head><title>ใบปะหน้า ' + pno + '</title></head><body style="margin:0;display:flex;justify-content:center"><img src="data:image/png;base64,' + base64 + '" style="max-width:100%;height:auto"/></body></html>')
-        }
-        flash('✅ โหลดใบปะหน้าสำเร็จ')
-      } else {
-        // แสดง debug ให้ดูว่า Flash ส่งอะไรมา
-        flash('❌ ไม่พบข้อมูลใบปะหน้า — ดู Console (F12)')
-        setFlashModal({ error: 'Flash ไม่ return label ในรูปแบบที่รู้จัก', debugInfo: result._debug, fullResponse: result })
-      }
-    } else {
-      flash('❌ ' + (result.message || 'ไม่สามารถดาวน์โหลดใบปะหน้า'))
-      setFlashModal({ error: result.message || 'Label API Error', debugInfo: result._debug, fullResponse: result })
-    }
-  }
-
   // ═══ Notify Courier — เรียกพนักงานเข้ารับ ═══
   const notifyCourier = async (pnoList) => {
     const list = Array.isArray(pnoList) ? pnoList : [pnoList]
@@ -274,67 +240,96 @@ export default function ManagerApp({ profile, onLogout }) {
     }
   }
 
-  // ═══ Bulk Print Labels — ปริ้นใบปะหน้าหลายรายการ ═══
-  const bulkPrintLabels = async (pnoList) => {
-    if (!pnoList.length) { flash('❌ ไม่มีเลขพัสดุ'); return }
-    flash(`⏳ กำลังโหลดใบปะหน้า ${pnoList.length} รายการ...`)
+  // ═══ สร้างใบปะหน้า (Client-side — ไม่ต้องใช้ Flash Label API) ═══
+  const generateLabelHTML = (order, idx, total) => {
+    const pno = order.flash_pno || ''
+    const phone = order.customer_phone || ''
+    const maskedPhone = phone.length >= 7 ? phone.substring(0,3) + '****' + phone.substring(phone.length-3) : phone
+    const cod = order.payment_type === 'cod' ? (parseFloat(order.cod_amount || order.sale_price) || 0) : 0
+    const now = new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    const dst = `${order.district || ''} — ${order.province || ''}`
+    const srcLine = `ผู้ส่ง ${flashSrcInfo.name || 'THE MT'} ${flashSrcInfo.phone || ''} ${flashSrcInfo.address || ''} ${flashSrcInfo.district || ''} ${flashSrcInfo.province || ''} ${flashSrcInfo.zip || ''}`
 
-    const labels = []
-    for (let i = 0; i < pnoList.length; i++) {
-      flash(`⏳ โหลดใบปะหน้า ${i+1}/${pnoList.length}...`)
-      const result = await printFlashLabel(pnoList[i])
-      console.log(`Label ${pnoList[i]}:`, result)
-      if (result.code === 1 && result.data) {
-        const d = result.data
-        const url = d.labelUrl || d.label_url || d.url || d.pdfUrl || d.pdf_url || (typeof d === 'string' ? d : null)
-        const base64 = d.label || d.labelContent || d.content || d.image || d.base64
-        if (url) labels.push({ type: 'url', url, pno: pnoList[i] })
-        else if (base64) {
-          const isPdf = base64.startsWith('JVBER')
-          labels.push({ type: isPdf ? 'pdf64' : 'img64', data: base64, pno: pnoList[i] })
-        }
-      }
-      if (i < pnoList.length - 1) await new Promise(r => setTimeout(r, 200))
-    }
-
-    if (labels.length === 0) {
-      flash('❌ ไม่สามารถโหลดใบปะหน้าได้')
-      // แสดง Flash response ใน modal เพื่อ debug
-      const lastResult = await printFlashLabel(pnoList[0])
-      setFlashModal({ error: 'Label API ไม่ return ข้อมูลใบปะหน้า', debugInfo: { pno: pnoList[0], flashResponse: lastResult } })
-      return
-    }
-
-    // เปิดหน้าปริ้นใหม่
-    const w = window.open('', '_blank')
-    w.document.write(`<html><head><title>ใบปะหน้า ${labels.length} รายการ — THE MT</title>
-      <style>
-        @media print { .no-print { display: none !important; } @page { margin: 0; size: A4; } .label-page { page-break-after: always; } }
-        body { margin: 0; font-family: sans-serif; background: #f5f5f5; }
-        .label-page { display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 10px; box-sizing: border-box; }
-        .label-page img { max-width: 100%; max-height: 95vh; }
-        .toolbar { position: fixed; top: 0; left: 0; right: 0; background: #333; color: #fff; padding: 12px 20px; display: flex; gap: 12px; align-items: center; z-index: 999; }
-        .toolbar button { padding: 8px 20px; border: none; border-radius: 6px; font-size: 14px; font-weight: 700; cursor: pointer; }
-      </style>
-    </head><body>
-      <div class="toolbar no-print">
-        <span>🖨 ใบปะหน้า ${labels.length} รายการ</span>
-        <button onclick="window.print()" style="background:#E67E22;color:#fff">🖨 ปริ้นทั้งหมด</button>
-        <button onclick="window.close()" style="background:#95a5a6;color:#fff">✕ ปิด</button>
+    return `
+    <div class="label-page">
+      <div class="label">
+        <div class="pno-bar">${pno}</div>
+        <div class="dst-bar">DST &nbsp;&nbsp; ${dst}</div>
+        <div class="src-line">${srcLine.trim()}</div>
+        <div class="rcv-section">
+          <div class="rcv-name">ผู้รับ ${order.customer_name || ''}</div>
+          <div class="rcv-phone">${maskedPhone}</div>
+          <div class="rcv-addr">${order.customer_address || ''}</div>
+          <div class="rcv-addr2">${order.sub_district || ''}, ${order.district || ''}</div>
+          <div class="rcv-addr3">${order.province || ''} ${order.zip_code || ''}</div>
+        </div>
+        ${cod > 0 ? `<div class="cod-bar"><span class="cod-badge">COD</span> เก็บเงินค่าสินค้า COD ${cod.toLocaleString()}</div>` : '<div class="cod-bar" style="background:#eee;color:#999">ชำระแล้ว (โอน)</div>'}
+        ${order.remark ? `<div class="note-bar">Note: ${order.remark}</div>` : ''}
+        <div class="footer-bar">
+          <span>Print-: ${now}</span>
+          <span>${idx}/${total}</span>
+          <span>THE MT</span>
+        </div>
       </div>
-      <div style="margin-top:50px">`)
+    </div>`
+  }
 
-    labels.forEach((l, i) => {
-      if (l.type === 'url') {
-        w.document.write(`<div class="label-page"><img src="${l.url}" alt="${l.pno}"/></div>`)
-      } else {
-        w.document.write(`<div class="label-page"><img src="data:image/png;base64,${l.data}" alt="${l.pno}"/></div>`)
-      }
-    })
-
-    w.document.write('</div></body></html>')
+  const openLabelWindow = (labelHTMLs, count) => {
+    const w = window.open('', '_blank')
+    w.document.write(`<html><head><title>ใบปะหน้า ${count} รายการ — THE MT</title>
+    <style>
+      * { margin:0; padding:0; box-sizing:border-box; }
+      body { font-family: 'Sarabun', 'Noto Sans Thai', sans-serif; background:#f0f0f0; }
+      @media print { .no-print{display:none!important} @page{margin:5mm;size:100mm 150mm} .label-page{page-break-after:always;break-after:page} body{background:#fff} }
+      .toolbar { position:fixed;top:0;left:0;right:0;background:#333;color:#fff;padding:12px 20px;display:flex;gap:12px;align-items:center;z-index:999 }
+      .toolbar button { padding:10px 24px;border:none;border-radius:6px;font-size:15px;font-weight:700;cursor:pointer }
+      .label-page { display:flex;justify-content:center;padding:10px;min-height:100vh }
+      .label { width:380px;background:#fff;border:2px solid #333;border-radius:4px;overflow:hidden;font-size:13px }
+      .pno-bar { background:#F5F5F5;padding:14px 12px;text-align:center;font-size:24px;font-weight:900;letter-spacing:2px;font-family:monospace;border-bottom:3px solid #333 }
+      .dst-bar { background:#444;color:#fff;padding:6px 12px;font-weight:700;font-size:13px }
+      .src-line { padding:6px 12px;font-size:10px;color:#888;border-bottom:1px solid #ddd }
+      .rcv-section { padding:12px }
+      .rcv-name { font-weight:700;font-size:16px;margin-bottom:2px }
+      .rcv-phone { font-size:22px;font-weight:900;letter-spacing:1px;margin-bottom:6px }
+      .rcv-addr,.rcv-addr2,.rcv-addr3 { font-size:13px;color:#333;line-height:1.5 }
+      .cod-bar { background:#222;color:#fff;padding:10px 12px;font-size:20px;font-weight:900;display:flex;align-items:center;gap:8px }
+      .cod-badge { background:#E67E22;color:#fff;padding:2px 10px;border-radius:4px;font-size:14px;font-weight:900 }
+      .note-bar { padding:8px 12px;font-size:14px;font-weight:700;border-top:1px solid #ddd }
+      .footer-bar { padding:6px 12px;font-size:10px;color:#999;display:flex;justify-content:space-between;border-top:1px solid #eee }
+    </style></head><body>
+    <div class="toolbar no-print">
+      <span style="font-size:15px;font-weight:700">🖨 ใบปะหน้า ${count} รายการ</span>
+      <button onclick="window.print()" style="background:#E67E22;color:#fff">🖨 ปริ้นทั้งหมด</button>
+      <button onclick="window.close()" style="background:#95a5a6;color:#fff">✕ ปิด</button>
+    </div>
+    <div style="margin-top:56px">${labelHTMLs}</div>
+    </body></html>`)
     w.document.close()
-    flash(`✅ โหลดใบปะหน้า ${labels.length} รายการสำเร็จ`)
+  }
+
+  const printLabel = (pnoOrOrder) => {
+    // รับได้ทั้ง pno string หรือ order object
+    let order = typeof pnoOrOrder === 'string'
+      ? orders.find(o => o.flash_pno === pnoOrOrder)
+      : pnoOrOrder
+    if (!order) { flash('❌ ไม่พบข้อมูลออเดอร์'); return }
+    const html = generateLabelHTML(order, 1, 1)
+    openLabelWindow(html, 1)
+    flash('✅ เปิดใบปะหน้าสำเร็จ')
+  }
+
+  const bulkPrintLabels = (pnoListOrOrders) => {
+    // รับได้ทั้ง array ของ pno หรือ array ของ orders
+    let labelOrders
+    if (typeof pnoListOrOrders[0] === 'string') {
+      labelOrders = pnoListOrOrders.map(pno => orders.find(o => o.flash_pno === pno)).filter(Boolean)
+    } else {
+      labelOrders = pnoListOrOrders.filter(o => o.flash_pno)
+    }
+    if (!labelOrders.length) { flash('❌ ไม่มีออเดอร์ที่มีเลขพัสดุ'); return }
+    const htmls = labelOrders.map((o, i) => generateLabelHTML(o, i+1, labelOrders.length)).join('')
+    openLabelWindow(htmls, labelOrders.length)
+    flash(`✅ เปิดใบปะหน้า ${labelOrders.length} รายการสำเร็จ`)
   }
 
   // ═══ Flash Proxy URL ═══
