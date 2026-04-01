@@ -298,7 +298,10 @@ export default function ManagerApp({ profile, onLogout }) {
     }
 
     if (labels.length === 0) {
-      flash('❌ ไม่สามารถโหลดใบปะหน้าได้ — ดู Console (F12)')
+      flash('❌ ไม่สามารถโหลดใบปะหน้าได้')
+      // แสดง Flash response ใน modal เพื่อ debug
+      const lastResult = await printFlashLabel(pnoList[0])
+      setFlashModal({ error: 'Label API ไม่ return ข้อมูลใบปะหน้า', debugInfo: { pno: pnoList[0], flashResponse: lastResult } })
       return
     }
 

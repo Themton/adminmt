@@ -129,7 +129,11 @@ async function createOrder(data) {
 
 // ═══ Print Label ═══
 async function printLabel(data) {
-  return await callFlashAPI('/open/v1/orders/label', { pno: data.pno });
+  const params = { pno: data.pno };
+  if (data.outTradeNo) params.outTradeNo = data.outTradeNo;
+  // Flash อาจต้องการ type: 1=รูป, 2=PDF, 3=HTML
+  params.type = String(data.type || 1);
+  return await callFlashAPI('/open/v1/orders/label', params);
 }
 
 // ═══ Notify Courier ═══
