@@ -69,7 +69,21 @@ export default function PackerApp({ profile, onLogout }) {
   const [activityLogs, setActivityLogs] = useState([])
   const [upsellModal, setUpsellModal] = useState(null)
   const [upsellSelected, setUpsellSelected] = useState(new Set())
+  const [logFilter, setLogFilter] = useState('all')
   const flash = (m) => { setToast(m); setTimeout(() => setToast(null), 3500) }
+
+  // ═══ Activity Logging ═══
+  const logActivity = async (actionType, description, orderCount = 0, details = {}) => {
+    try {
+      await supabase.from('mt_activity_logs').insert({
+        user_name: profile.full_name || '',
+        action_type: actionType,
+        description,
+        order_count: orderCount,
+        details: JSON.stringify(details)
+      })
+    } catch (e) { console.log('Log error:', e) }
+  }
 
   const [flashSrcInfo, setFlashSrcInfo] = useState(() => { try { return JSON.parse(localStorage.getItem('flash_src') || '{}') } catch { return {} } })
   const [flashProxyUrl, setFlashProxyUrl] = useState(() => { try { return localStorage.getItem('flash_proxy_url') || '' } catch { return '' } })
@@ -121,6 +135,7 @@ export default function PackerApp({ profile, onLogout }) {
     }
     setBulkCreating(false);setSelectedIds(new Set())
     flash('สำเร็จ '+results.filter(r=>r.ok).length+'/'+results.length)
+    logActivity('create_pno', `สร้างเลขพัสดุ ${results.filter(r=>r.ok).length}/${results.length}`, results.filter(r=>r.ok).length, { pnos: results.filter(r=>r.ok).map(r=>r.pno) })
     setFlashModal({bulkResults:results})
   }
 
@@ -169,9 +184,10 @@ export default function PackerApp({ profile, onLogout }) {
     }
     setGProgress(null); setSelectedIds(new Set())
     flash(`✅ ลบสำเร็จ ${done} รายการ` + (fail ? ` | ❌ ไม่สำเร็จ ${fail}` : ''))
+    logActivity('delete', `ลบ ${done} รายการ`, done)
   }
 
-  const cancelFlash = async (o) => { if(!confirm('ยกเลิก '+o.flash_pno+'?\nต้องยกเลิกใน Flash portal ด้วย'))return; await supabase.from('mt_orders').update({flash_pno:'',flash_status:'cancelled',flash_sort_code:'',shipping_status:'waiting'}).eq('id',o.id); setOrders(prev=>prev.map(x=>x.id===o.id?{...x,flash_pno:'',flash_status:'cancelled',flash_sort_code:'',shipping_status:'waiting'}:x)); flash('ลบแล้ว') }
+  const cancelFlash = async (o) => { if(!confirm('ยกเลิก '+o.flash_pno+'?\nต้องยกเลิกใน Flash portal ด้วย'))return; await supabase.from('mt_orders').update({flash_pno:'',flash_status:'cancelled',flash_sort_code:'',shipping_status:'waiting'}).eq('id',o.id); setOrders(prev=>prev.map(x=>x.id===o.id?{...x,flash_pno:'',flash_status:'cancelled',flash_sort_code:'',shipping_status:'waiting'}:x)); flash('ลบแล้ว'); logActivity('cancel', `ยกเลิก ${o.flash_pno} - ${o.customer_name}`, 1, { pno: o.flash_pno }) }
 
   // ═══ Smart Paste — วางข้อมูลแล้วจับอัตโนมัติ ═══
   const applyPaste = (text) => {
@@ -245,6 +261,7 @@ export default function PackerApp({ profile, onLogout }) {
       if(i<wp.length-1)await new Promise(r=>setTimeout(r,150))
     }
     setGProgress(null);flash('✅ อัพเดท '+u+' รายการ')
+    logActivity('refresh_status', `อัพเดทสถานะ Flash ${u} รายการ`, u)
   }
 
   const labelHTML = (order, idx, total) => {
@@ -287,7 +304,7 @@ export default function PackerApp({ profile, onLogout }) {
     document.body.removeChild(ct);window.open(URL.createObjectURL(doc.output('blob')),'_blank')
     flash('สร้างใบปะหน้า '+lo.length+' รายการ')
   }
-  const printLabels = async (t) => { const w=t.filter(o=>o.flash_pno); if(!w.length){flash('ไม่มีเลขพัสดุ');return}; await buildLabelPDF(w) }
+  const printLabels = async (t) => { const w=t.filter(o=>o.flash_pno); if(!w.length){flash('ไม่มีเลขพัสดุ');return}; await buildLabelPDF(w); logActivity('print', `ปริ้นใบปะหน้า ${w.length} รายการ`, w.length, { pnos: w.map(o=>o.flash_pno) }) }
 
   // ═══ ค้นหาเลขพัสดุ ═══
   const searchTracking = async (pnoOverride) => {
@@ -319,11 +336,10 @@ export default function PackerApp({ profile, onLogout }) {
 
   // ═══ ประวัติการอัพเดต ═══
   const loadActivityLogs = async () => {
-    // ดึงออเดอร์ที่มีการอัพเดตล่าสุด (เรียงตาม updated_at)
-    const { data } = await supabase.from('mt_orders')
-      .select('id, customer_name, customer_phone, flash_pno, flash_status, shipping_status, updated_at, created_at, employee_name, remark')
-      .order('updated_at', { ascending: false })
-      .limit(200)
+    const { data } = await supabase.from('mt_activity_logs')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(300)
     setActivityLogs(data || [])
   }
   useEffect(() => { if (sidebarPage === 'history') loadActivityLogs() }, [sidebarPage])
@@ -341,6 +357,7 @@ export default function PackerApp({ profile, onLogout }) {
     setOrders(prev => prev.map(o => o.id === upsellModal.id ? { ...o, cod_amount: codVal, sale_price: saleVal > codVal ? saleVal : codVal, remark: upsellModal.remark } : o))
     setUpsellModal(null)
     flash('✅ อัพเซลสำเร็จ — COD ฿' + codVal.toLocaleString())
+    logActivity('upsell', `อัพเซล ${upsellModal.customer_name} → COD ฿${codVal}`, 1, { pno: upsellModal.flash_pno, cod: codVal, remark: upsellModal.remark })
   }
 
   const dateFiltered = orders.filter(o => { if(dateFilter){const od=(o.order_date||'').substring(0,10);if(od<dateFilter)return false}; if(dateFilterEnd){const od=(o.order_date||'').substring(0,10);if(od>dateFilterEnd)return false}; return true })
@@ -367,6 +384,7 @@ export default function PackerApp({ profile, onLogout }) {
     }
     setGProgress(null); setSelectedIds(new Set())
     flash(`✅ ${labels[st] || 'อัพเดท'} ${ids.length} รายการ`)
+    logActivity('status_change', `${labels[st]} ${ids.length} รายการ`, ids.length, { status: st })
   }
   const lastRef=useRef(null)
   const toggleSelect=(id,e)=>{const list=searchFiltered.slice((page-1)*pageSize,page*pageSize);const idx=list.findIndex(o=>o.id===id);if(e?.shiftKey&&lastRef.current!==null){const s=Math.min(lastRef.current,idx),en=Math.max(lastRef.current,idx);setSelectedIds(prev=>{const n=new Set(prev);for(let i=s;i<=en;i++)n.add(list[i].id);return n})}else{setSelectedIds(prev=>{const n=new Set(prev);n.has(id)?n.delete(id):n.add(id);return n})};lastRef.current=idx}
@@ -575,7 +593,7 @@ export default function PackerApp({ profile, onLogout }) {
               <button onClick={()=>markStatus([...selectedIds],'printed')} style={{padding:'6px 12px',borderRadius:6,border:'1px solid #27AE60',background:'#EAFAF1',color:'#27AE60',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>🖨 ปริ้นแล้ว</button>
               <button onClick={()=>bulkCreateFlash(orders.filter(o=>selectedIds.has(o.id)))} disabled={bulkCreating} style={{padding:'6px 14px',borderRadius:6,border:'none',background:bulkCreating?'#BDC3C7':'#E67E22',color:'#fff',fontSize:11,fontWeight:700,cursor:bulkCreating?'wait':'pointer',fontFamily:T.font}}>{bulkCreating?'⏳ '+bulkProgress.done+'/'+bulkProgress.total:'⚡ สร้างเลขพัสดุ ('+selectedIds.size+')'}</button>
               <button onClick={()=>printLabels(orders.filter(o=>selectedIds.has(o.id)))} style={{padding:'6px 12px',borderRadius:6,border:'1px solid #E67E22',background:'#FEF5E7',color:'#E67E22',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>🖨 ปริ้นใบปะหน้า</button>
-              <button onClick={()=>{exportProshipExcel(orders.filter(o=>selectedIds.has(o.id)),'Selected.xlsx',profile,'shipping');flash('Export OK')}} style={{padding:'6px 12px',borderRadius:6,border:'1px solid #2980B9',background:'#EBF5FB',color:'#2980B9',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>📊 Export</button>
+              <button onClick={()=>{exportProshipExcel(orders.filter(o=>selectedIds.has(o.id)),'Selected.xlsx',profile,'shipping');flash('Export OK'); logActivity('export', `Export ${orders.filter(o=>selectedIds.has(o.id)).length} รายการ`, selectedIds.size)}} style={{padding:'6px 12px',borderRadius:6,border:'1px solid #2980B9',background:'#EBF5FB',color:'#2980B9',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>📊 Export</button>
               {(()=>{const wp=orders.filter(o=>selectedIds.has(o.id)&&o.flash_pno);return wp.length>0&&<button onClick={()=>markStatus([...selectedIds].filter(id=>orders.find(o=>o.id===id)?.flash_pno),'upsell')} style={{padding:'6px 12px',borderRadius:6,border:'1px solid #8E44AD',background:'#F4ECF7',color:'#8E44AD',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>💰 รออัพเซล ({wp.length})</button>})()}
               <button onClick={()=>bulkDeleteOrders([...selectedIds])} disabled={!!gProgress} style={{padding:'6px 12px',borderRadius:6,border:'1px solid #E74C3C',background:'#FDEDEC',color:'#E74C3C',fontSize:11,fontWeight:700,cursor:gProgress?'wait':'pointer',fontFamily:T.font}}>🗑 ลบ ({selectedIds.size})</button>
               <button onClick={()=>setSelectedIds(new Set())} style={{padding:'6px 8px',borderRadius:6,border:'1px solid #DEE2E6',background:'#fff',color:'#85929E',fontSize:11,cursor:'pointer'}}>✕</button>
@@ -731,6 +749,7 @@ export default function PackerApp({ profile, onLogout }) {
                 }
                 setGProgress(null); setUpsellSelected(new Set())
                 flash('✅ เสร็จแล้ว ' + ids.length + ' รายการ')
+                logActivity('upsell_done', `อัพเซลเสร็จ ${ids.length} รายการ`, ids.length)
               }
               return <>
                 {upsellOrders.length > 0 && <div style={{display:'flex',gap:8,marginBottom:12,alignItems:'center'}}>
@@ -779,42 +798,67 @@ export default function PackerApp({ profile, onLogout }) {
             })()}
           </div>}
 
-          {/* ═══ PAGE: ประวัติการอัพเดต ═══ */}
+          {/* ═══ PAGE: ประวัติ ═══ */}
           {sidebarPage === 'history' && <div>
-            <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:20}}>
-              <div style={{fontSize:20,fontWeight:800}}>📋 ประวัติการอัพเดตข้อมูล</div>
+            <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:16}}>
+              <div style={{fontSize:20,fontWeight:800}}>📋 ประวัติการดำเนินการ</div>
               <button onClick={loadActivityLogs} style={{padding:'7px 14px',borderRadius:6,border:'1px solid #3498DB',background:'#EBF5FB',color:'#3498DB',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>🔄 รีเฟรช</button>
             </div>
 
-            <div style={{background:'#fff',borderRadius:8,border:'1px solid #DEE2E6',overflow:'hidden'}}>
-              <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,fontFamily:T.font}}>
-                <thead><tr style={{background:'#F8F9FA'}}>
-                  {['#','อัพเดตล่าสุด','ลูกค้า','เบอร์','เลขพัสดุ','สถานะ Flash','สถานะจัดส่ง','พนักงาน','หมายเหตุ'].map(h=>(
-                    <th key={h} style={{padding:'10px 8px',textAlign:'left',fontWeight:600,color:'#5D6D7E',borderBottom:'1px solid #DEE2E6',fontSize:11}}>{h}</th>
-                  ))}
-                </tr></thead>
-                <tbody>
-                  {activityLogs.map((o,i)=>{
-                    const badge = getBadge(o)
-                    const updatedAt = o.updated_at ? new Date(o.updated_at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '—'
-                    return (
-                      <tr key={o.id} style={{borderBottom:'1px solid #EAECEE'}}>
-                        <td style={{padding:'8px',textAlign:'center',color:'#ABB2B9',fontSize:10}}>{i+1}</td>
-                        <td style={{padding:'8px',fontSize:11,color:'#2C3E50',fontWeight:600}}>{updatedAt}</td>
-                        <td style={{padding:'8px',fontWeight:600}}>{o.customer_name}</td>
-                        <td style={{padding:'8px',color:'#85929E'}}>{o.customer_phone}</td>
-                        <td style={{padding:'8px'}}>{o.flash_pno?<span style={{fontFamily:'monospace',fontSize:11,color:'#2980B9',fontWeight:700}}>{o.flash_pno}</span>:'—'}</td>
-                        <td style={{padding:'8px'}}><span style={{padding:'3px 8px',borderRadius:6,fontSize:10,fontWeight:700,background:badge.bg,color:badge.c}}>{badge.i} {badge.l}</span></td>
-                        <td style={{padding:'8px',fontSize:11}}>{o.shipping_status||'waiting'}</td>
-                        <td style={{padding:'8px',fontSize:11,color:'#85929E'}}>{o.employee_name||'—'}</td>
-                        <td style={{padding:'8px',fontSize:10,color:'#85929E',maxWidth:150,overflow:'hidden',whiteSpace:'nowrap',textOverflow:'ellipsis'}}>{o.remark||''}</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-              {activityLogs.length===0&&<div style={{textAlign:'center',padding:40,color:'#85929E'}}>ไม่มีข้อมูล</div>}
+            {/* Filter tabs */}
+            <div style={{display:'flex',gap:0,borderBottom:'2px solid #EAECEE',marginBottom:16,overflowX:'auto'}}>
+              {[
+                {id:'all',i:'📋',l:'ทั้งหมด',c:'#2980B9'},
+                {id:'print',i:'🖨',l:'ปริ้น',c:'#16A085'},
+                {id:'export',i:'📊',l:'Export',c:'#27AE60'},
+                {id:'status_change',i:'🔄',l:'เปลี่ยนสถานะ',c:'#3498DB'},
+                {id:'create_pno',i:'⚡',l:'สร้างเลขพัสดุ',c:'#8E44AD'},
+                {id:'upsell',i:'💰',l:'อัพเซล',c:'#E67E22'},
+                {id:'delete',i:'🗑',l:'ลบ',c:'#E74C3C'},
+                {id:'cancel',i:'❌',l:'ยกเลิก',c:'#C0392B'},
+              ].map(f=>{
+                const count = logFilter==='all'? activityLogs.length : activityLogs.filter(l=>f.id==='all'||l.action_type===f.id||(f.id==='upsell'&&(l.action_type==='upsell'||l.action_type==='upsell_done'))).length
+                return <button key={f.id} onClick={()=>setLogFilter(f.id)} style={{
+                  padding:'8px 14px',border:'none',cursor:'pointer',fontFamily:T.font,fontSize:11,fontWeight:500,
+                  background:'transparent',color:logFilter===f.id?f.c:'#85929E',
+                  borderBottom:logFilter===f.id?`3px solid ${f.c}`:'3px solid transparent',marginBottom:-2,whiteSpace:'nowrap'
+                }}>{f.i} {f.l}</button>
+              })}
             </div>
+
+            {(() => {
+              const filtered = logFilter === 'all' ? activityLogs :
+                logFilter === 'upsell' ? activityLogs.filter(l=>l.action_type==='upsell'||l.action_type==='upsell_done') :
+                activityLogs.filter(l => l.action_type === logFilter)
+              const typeIcon = { print:'🖨', export:'📊', status_change:'🔄', create_pno:'⚡', upsell:'💰', upsell_done:'✅', delete:'🗑', cancel:'❌', refresh_status:'🔄' }
+              const typeColor = { print:'#16A085', export:'#27AE60', status_change:'#3498DB', create_pno:'#8E44AD', upsell:'#E67E22', upsell_done:'#27AE60', delete:'#E74C3C', cancel:'#C0392B', refresh_status:'#3498DB' }
+              const typeName = { print:'ปริ้น', export:'Export', status_change:'เปลี่ยนสถานะ', create_pno:'สร้างเลขพัสดุ', upsell:'อัพเซล', upsell_done:'อัพเซลเสร็จ', delete:'ลบ', cancel:'ยกเลิก', refresh_status:'อัพเดทสถานะ' }
+              return <>
+                <div style={{fontSize:12,color:'#85929E',marginBottom:10}}>แสดง {filtered.length} รายการ</div>
+                <div style={{background:'#fff',borderRadius:8,border:'1px solid #DEE2E6',overflow:'hidden'}}>
+                  <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,fontFamily:T.font}}>
+                    <thead><tr style={{background:'#F8F9FA'}}>
+                      {['#','วันเวลา','ประเภท','รายละเอียด','จำนวน','ผู้ดำเนินการ'].map(h=>(
+                        <th key={h} style={{padding:'10px 10px',textAlign:'left',fontWeight:600,color:'#5D6D7E',borderBottom:'1px solid #DEE2E6',fontSize:11}}>{h}</th>
+                      ))}
+                    </tr></thead>
+                    <tbody>
+                      {filtered.map((log,i)=>(
+                        <tr key={log.id} style={{borderBottom:'1px solid #EAECEE'}}>
+                          <td style={{padding:'10px',textAlign:'center',color:'#ABB2B9',fontSize:10}}>{i+1}</td>
+                          <td style={{padding:'10px',fontSize:11,color:'#2C3E50',fontWeight:600}}>{new Date(log.created_at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',second:'2-digit'})}</td>
+                          <td style={{padding:'10px'}}><span style={{padding:'3px 10px',borderRadius:6,fontSize:10,fontWeight:700,background:(typeColor[log.action_type]||'#85929E')+'18',color:typeColor[log.action_type]||'#85929E'}}>{typeIcon[log.action_type]||'📋'} {typeName[log.action_type]||log.action_type}</span></td>
+                          <td style={{padding:'10px',fontSize:12}}>{log.description}</td>
+                          <td style={{padding:'10px',textAlign:'center',fontWeight:700,color:'#2C3E50'}}>{log.order_count||'—'}</td>
+                          <td style={{padding:'10px',fontSize:11,color:'#85929E'}}>{log.user_name||'—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {filtered.length===0&&<div style={{textAlign:'center',padding:40,color:'#85929E'}}>ไม่มีประวัติ</div>}
+                </div>
+              </>
+            })()}
           </div>}
 
         </div>
