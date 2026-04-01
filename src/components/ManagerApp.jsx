@@ -288,29 +288,35 @@ export default function ManagerApp({ profile, onLogout }) {
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
     <style>
       * { margin:0; padding:0; box-sizing:border-box; }
-      body { font-family: 'Sarabun', 'Noto Sans Thai', sans-serif; background:#f0f0f0; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-      @media print { .no-print{display:none!important} @page{margin:0;size:100mm 75mm} .label-page{page-break-after:always;break-after:page;min-height:auto;padding:0;margin:0;display:block} body{background:#fff} .label{width:100mm!important;height:75mm!important;max-height:75mm!important;border:none!important;border-radius:0!important;overflow:hidden!important;page-break-inside:avoid} }
-      .toolbar { position:fixed;top:0;left:0;right:0;background:#333;color:#fff;padding:10px 20px;display:flex;gap:12px;align-items:center;z-index:999 }
+      body { font-family: 'Sarabun', 'Noto Sans Thai', sans-serif; background:#eee; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+      @media print {
+        .no-print { display:none!important }
+        @page { margin:0; size:100mm 75mm }
+        body { background:#fff }
+        .label-page { page-break-after:always; padding:0; margin:0 }
+        .label { zoom:0.94; width:106mm; border:none!important; border-radius:0!important }
+      }
+      .toolbar { position:fixed;top:0;left:0;right:0;background:#2C3E50;color:#fff;padding:10px 20px;display:flex;gap:12px;align-items:center;z-index:999 }
       .toolbar button { padding:8px 20px;border:none;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer }
-      .label-page { display:flex;justify-content:center;padding:8px;margin-bottom:12px }
-      .label { width:100mm;height:75mm;background:#fff;border:1px solid #333;overflow:hidden;font-size:11px;display:flex;flex-direction:column }
-      .sort-code-bar { text-align:center;padding:0.5mm 2mm;font-size:4mm;font-weight:900;font-family:monospace;position:relative;border-bottom:0.4mm solid #333;flex-shrink:0 }
-      .sort-num { position:absolute;left:1mm;top:0.5mm;background:#E67E22;color:#fff;width:4mm;height:4mm;border-radius:0.5mm;display:flex;align-items:center;justify-content:center;font-size:2.2mm;font-weight:900 }
-      .barcode-section { text-align:center;padding:0.5mm 2mm 0;border-bottom:0.4mm solid #333;flex-shrink:0 }
-      .barcode-section svg { width:96mm;height:8mm }
-      .pno-bar { background:#F5F5F5;padding:0.3mm 2mm;text-align:center;font-size:3mm;font-weight:900;letter-spacing:0.3mm;font-family:monospace;border-bottom:0.4mm solid #333;flex-shrink:0 }
-      .dst-bar { background:#444;color:#fff;padding:0.3mm 2mm;font-weight:700;font-size:2.2mm;flex-shrink:0 }
-      .src-line { padding:0.3mm 2mm;font-size:1.6mm;color:#888;border-bottom:0.2mm solid #ddd;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0 }
-      .rcv-qr-row { display:flex;gap:1mm;padding:0;flex:1;min-height:0;overflow:hidden }
-      .rcv-section { flex:1;padding:0.5mm 2mm;overflow:hidden }
-      .rcv-name { font-weight:700;font-size:2.5mm }
-      .rcv-phone { font-size:3.5mm;font-weight:900;letter-spacing:0.3mm }
-      .rcv-addr,.rcv-addr2,.rcv-addr3 { font-size:2mm;color:#333;line-height:1.3 }
-      .qr-section { width:14mm;min-width:14mm;display:flex;align-items:center;justify-content:center;padding:0.5mm }
-      .cod-bar { background:#222;color:#fff;padding:0.5mm 2mm;font-size:3mm;font-weight:900;display:flex;align-items:center;gap:1.5mm;flex-shrink:0 }
-      .cod-badge { background:#E67E22;color:#fff;padding:0 1.5mm;border-radius:0.5mm;font-size:2mm;font-weight:900 }
-      .note-bar { padding:0.3mm 2mm;font-size:2.2mm;font-weight:700;border-top:0.2mm solid #ddd;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0 }
-      .footer-bar { padding:0.3mm 2mm;font-size:1.5mm;color:#999;display:flex;justify-content:space-between;border-top:0.2mm solid #eee;flex-shrink:0 }
+      .label-page { display:flex;justify-content:center;padding:12px }
+      .label { width:400px;background:#fff;border:2px solid #222;overflow:hidden }
+      .sort-code-bar { text-align:center;padding:4px 8px;font-size:22px;font-weight:900;font-family:'Courier New',monospace;position:relative;border-bottom:2px solid #222 }
+      .sort-num { position:absolute;left:6px;top:4px;background:#E67E22;color:#fff;width:22px;height:22px;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900 }
+      .barcode-section { text-align:center;padding:3px 10px 1px;border-bottom:2px solid #222 }
+      .barcode-section svg { width:100%;height:48px }
+      .pno-bar { background:#F0F0F0;padding:3px 8px;text-align:center;font-size:15px;font-weight:900;letter-spacing:1.5px;font-family:'Courier New',monospace;border-bottom:2px solid #222 }
+      .dst-bar { background:#444;color:#fff;padding:3px 10px;font-weight:700;font-size:12px }
+      .src-line { padding:2px 10px;font-size:8px;color:#777;border-bottom:1px solid #ddd;white-space:nowrap;overflow:hidden;text-overflow:ellipsis }
+      .rcv-qr-row { display:flex;gap:4px }
+      .rcv-section { flex:1;padding:5px 10px }
+      .rcv-name { font-weight:700;font-size:13px }
+      .rcv-phone { font-size:20px;font-weight:900;letter-spacing:1px;margin:1px 0 }
+      .rcv-addr,.rcv-addr2,.rcv-addr3 { font-size:11px;color:#333;line-height:1.35 }
+      .qr-section { width:76px;min-width:76px;display:flex;align-items:center;justify-content:center;padding:4px }
+      .cod-bar { background:#1a1a1a;color:#fff;padding:4px 10px;font-size:16px;font-weight:900;display:flex;align-items:center;gap:6px }
+      .cod-badge { background:#E67E22;color:#fff;padding:1px 8px;border-radius:3px;font-size:11px;font-weight:900 }
+      .note-bar { padding:3px 10px;font-size:12px;font-weight:700;border-top:1px solid #ddd }
+      .footer-bar { padding:2px 10px;font-size:8px;color:#999;display:flex;justify-content:space-between;border-top:1px solid #eee }
     </style></head><body>
     <div class="toolbar no-print">
       <span style="font-size:15px;font-weight:700">🖨 ใบปะหน้า ${count} รายการ</span>
@@ -324,11 +330,11 @@ export default function ManagerApp({ profile, onLogout }) {
         pnos.forEach(function(pno, i) {
           // Barcode
           try {
-            JsBarcode('#bc-' + (i+1), pno, { format: 'CODE128', width: 1.2, height: 22, displayValue: false, margin: 0 });
+            JsBarcode('#bc-' + (i+1), pno, { format: 'CODE128', width: 2, height: 42, displayValue: false, margin: 0 });
           } catch(e) { console.log('Barcode error:', e); }
           // QR Code
           try {
-            new QRCode(document.getElementById('qr-' + (i+1)), { text: pno, width: 44, height: 44, correctLevel: QRCode.CorrectLevel.M });
+            new QRCode(document.getElementById('qr-' + (i+1)), { text: pno, width: 66, height: 66, correctLevel: QRCode.CorrectLevel.M });
           } catch(e) { console.log('QR error:', e); }
         });
       });
