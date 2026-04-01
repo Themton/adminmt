@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { supabase } from '../lib/supabase'
 import { syncOrderToSheet, updateOrderInSheet, deleteOrderFromSheet, syncAllToSheet, resetSheet } from '../lib/sheetSync'
-import { createFlashOrder, trackFlashOrder, printFlashLabel, notifyFlashCourier, pingFlash } from '../lib/flashApi'
+import { createFlashOrder, trackFlashOrder, printFlashLabel, notifyFlashCourier, cancelFlashOrder, pingFlash } from '../lib/flashApi'
 import { exportProshipExcel, exportProshipCSV, fetchExportLogs } from '../lib/exportProship'
 import OrderForm from './OrderForm'
 import { T, glass, fmt, fmtDate, fmtDateFull, fmtDateTime, sameDay, withinDays, thisMonth, Stat, Tabs, Btn, Toast, Modal, Empty, LiveDot, Pagination } from './ui'
@@ -219,11 +219,48 @@ export default function ManagerApp({ profile, onLogout }) {
   }
 
   const deletePno = async (orderId) => {
-    if (!confirm('🗑 ลบเลขพัสดุนี้?')) return
-    const { error } = await supabase.from('mt_orders').update({ flash_pno: '', flash_status: '' }).eq('id', orderId)
+    if (!confirm('🗑 ลบเลขพัสดุออกจากระบบ?\n(ไม่ยกเลิกกับ Flash — ใช้ปุ่มยกเลิก Flash แยก)')) return
+    const { error } = await supabase.from('mt_orders').update({ flash_pno: '', flash_status: '', flash_sort_code: '' }).eq('id', orderId)
     if (error) { flash('❌ ' + error.message); return }
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, flash_pno: '', flash_status: '' } : o))
-    flash('✅ ลบเลขพัสดุแล้ว')
+    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, flash_pno: '', flash_status: '', flash_sort_code: '' } : o))
+    flash('✅ ลบเลขพัสดุออกจากระบบแล้ว (Flash ยังมี order อยู่)')
+  }
+
+  // ═══ ยกเลิก Order กับ Flash Express ═══
+  const cancelFlash = async (order) => {
+    const pno = order.flash_pno
+    if (!pno) { flash('❌ ไม่มีเลขพัสดุ'); return }
+    if (!confirm(`⚠️ ยกเลิก order กับ Flash Express?\n\nTracking: ${pno}\nลูกค้า: ${order.customer_name}\n\nFlash จะยกเลิก order นี้จริง — ไม่เข้ารับ/ไม่ส่ง`)) return
+    flash('⏳ กำลังยกเลิก...')
+    const result = await cancelFlashOrder(pno)
+    if (result.code === 1) {
+      // ลบเลขพัสดุออกจาก Supabase ด้วย
+      await supabase.from('mt_orders').update({ flash_pno: '', flash_status: 'cancelled', flash_sort_code: '', shipping_status: 'waiting' }).eq('id', order.id)
+      setOrders(prev => prev.map(o => o.id === order.id ? { ...o, flash_pno: '', flash_status: 'cancelled', flash_sort_code: '', shipping_status: 'waiting' } : o))
+      flash('✅ ยกเลิก Flash order สำเร็จ — ' + pno)
+    } else {
+      flash('❌ ยกเลิกไม่สำเร็จ: ' + (result.message || 'Unknown error'))
+    }
+  }
+
+  // ═══ Bulk ยกเลิก Flash ═══
+  const bulkCancelFlash = async (selectedOrders) => {
+    const withPno = selectedOrders.filter(o => o.flash_pno)
+    if (!withPno.length) { flash('❌ ไม่มีรายการที่มีเลขพัสดุ'); return }
+    if (!confirm(`⚠️ ยกเลิก ${withPno.length} order กับ Flash Express?\n\nFlash จะยกเลิกทั้งหมด — ไม่เข้ารับ/ไม่ส่ง`)) return
+    let ok = 0, fail = 0
+    for (const o of withPno) {
+      flash(`⏳ ยกเลิก ${ok+fail+1}/${withPno.length}...`)
+      const result = await cancelFlashOrder(o.flash_pno)
+      if (result.code === 1) {
+        await supabase.from('mt_orders').update({ flash_pno: '', flash_status: 'cancelled', flash_sort_code: '', shipping_status: 'waiting' }).eq('id', o.id)
+        setOrders(prev => prev.map(x => x.id === o.id ? { ...x, flash_pno: '', flash_status: 'cancelled', flash_sort_code: '', shipping_status: 'waiting' } : x))
+        ok++
+      } else { fail++ }
+      await new Promise(r => setTimeout(r, 300))
+    }
+    setShipSelected(new Set())
+    flash(`✅ ยกเลิกสำเร็จ ${ok} รายการ` + (fail ? ` | ❌ ไม่สำเร็จ ${fail}` : ''))
   }
 
   // ═══ Print Label — ปริ้นใบปะหน้า ═══
@@ -1382,6 +1419,10 @@ export default function ManagerApp({ profile, onLogout }) {
                 {(() => { const pnos = orders.filter(o => shipSelected.has(o.id) && o.flash_pno).map(o => o.flash_pno); return pnos.length > 0 && (
                   <button onClick={() => bulkPrintLabels(pnos)} style={{ padding: '7px 14px', borderRadius: 6, border: '1px solid #E67E22', background: '#FEF5E7', color: '#E67E22', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: T.font }}>🖨 ปริ้นใบปะหน้า ({pnos.length})</button>
                 ) })()}
+                {/* ยกเลิก Flash */}
+                {(() => { const withPno = orders.filter(o => shipSelected.has(o.id) && o.flash_pno); return withPno.length > 0 && (
+                  <button onClick={() => bulkCancelFlash(withPno)} style={{ padding: '7px 14px', borderRadius: 6, border: '1px solid #E74C3C', background: '#FDEDEC', color: '#E74C3C', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: T.font }}>❌ ยกเลิก Flash ({withPno.length})</button>
+                ) })()}
                 <button onClick={() => setShipSelected(new Set())} style={{ padding: '7px 10px', borderRadius: 6, border: '1px solid #D5D8DC', background: '#fff', color: '#85929E', fontSize: 11, cursor: 'pointer', fontFamily: T.font }}>✕</button>
               </div>
             )}
@@ -1455,7 +1496,8 @@ export default function ManagerApp({ profile, onLogout }) {
                               <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
                                 <button onClick={() => openPnoModal(o)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 15, padding: 0, opacity: 0.6 }} title="แก้ไข">✏️</button>
                                 {hasPno && <button onClick={() => trackFlash(o.flash_pno)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 15, padding: 0, opacity: 0.6 }} title="ดูสถานะ">👁</button>}
-                                {hasPno && <button onClick={() => deletePno(o.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 15, padding: 0, opacity: 0.5 }} title="ลบ">⊘</button>}
+                                {hasPno && <button onClick={() => cancelFlash(o)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 15, padding: 0, opacity: 0.5 }} title="ยกเลิก Flash">❌</button>}
+                                {hasPno && <button onClick={() => deletePno(o.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 15, padding: 0, opacity: 0.5 }} title="ลบเลขพัสดุ (ไม่ยกเลิก Flash)">⊘</button>}
                               </div>
                             </td>
                           </tr>
