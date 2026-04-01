@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { supabase } from '../lib/supabase'
 import { syncOrderToSheet, updateOrderInSheet, deleteOrderFromSheet, syncAllToSheet, resetSheet } from '../lib/sheetSync'
-import { createFlashOrder, trackFlashOrder, printFlashLabel, notifyFlashCourier, cancelFlashOrder, pingFlash } from '../lib/flashApi'
+import { createFlashOrder, trackFlashOrder, notifyFlashCourier, pingFlash } from '../lib/flashApi'
 import { exportProshipExcel, exportProshipCSV, fetchExportLogs } from '../lib/exportProship'
 import OrderForm from './OrderForm'
 import { T, glass, fmt, fmtDate, fmtDateFull, fmtDateTime, sameDay, withinDays, thisMonth, Stat, Tabs, Btn, Toast, Modal, Empty, LiveDot, Pagination } from './ui'
@@ -1407,7 +1407,6 @@ export default function ManagerApp({ profile, onLogout }) {
                     {f.label} <strong style={{ marginLeft: 3, color: shipFilter === f.id ? f.color : '#ABB2B9' }}>{f.count}</strong>
                   </button>
                 ))
-              })()}
               })()}
             </div>
 

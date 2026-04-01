@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { createFlashOrder, trackFlashOrder, pingFlash } from '../lib/flashApi'
-import { T, glass, fmt, LiveDot, Toast, Empty, Pagination, Modal } from './ui'
+import { T, fmt, LiveDot, Toast, Empty, Pagination, Modal } from './ui'
 import { exportProshipExcel } from '../lib/exportProship'
 
 let _addrCache = null
