@@ -551,32 +551,59 @@ export default function ManagerApp({ profile, onLogout }) {
     if (f.password.length < 6) { flash('❌ รหัสผ่าน 6 ตัวขึ้นไป'); return }
     flash('⏳ กำลังสร้างบัญชี...')
     try {
-      // ใช้ fetch ตรง → ไม่กระทบ session admin
       const sbUrl = import.meta.env.VITE_SUPABASE_URL
       const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+      let newUserId = null
+
+      // 1. ลอง signUp
       const res = await fetch(`${sbUrl}/auth/v1/signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'apikey': sbKey },
         body: JSON.stringify({ email: f.email, password: f.password })
       })
       const result = await res.json()
-      if (!res.ok || result.error) { flash('❌ ' + (result.error?.message || result.msg || 'สร้าง auth ไม่สำเร็จ')); return }
-      const newUserId = result.id || result.user?.id
+
+      if (res.ok && (result.id || result.user?.id)) {
+        newUserId = result.id || result.user?.id
+      } else if (result.msg?.includes('already registered') || result.error?.message?.includes('already registered') || result.error_description?.includes('already registered')) {
+        // 2. User มีอยู่แล้ว → login เพื่อดึง ID
+        flash('⏳ อีเมลนี้มีอยู่แล้ว — กำลังเชื่อมต่อ...')
+        const loginRes = await fetch(`${sbUrl}/auth/v1/token?grant_type=password`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'apikey': sbKey },
+          body: JSON.stringify({ email: f.email, password: f.password })
+        })
+        const loginResult = await loginRes.json()
+        if (loginRes.ok && loginResult.user?.id) {
+          newUserId = loginResult.user.id
+        } else {
+          flash('❌ อีเมลนี้มีอยู่แล้ว แต่รหัสผ่านไม่ตรง — ลองเปลี่ยนรหัสผ่าน')
+          return
+        }
+      } else {
+        flash('❌ ' + (result.error?.message || result.msg || JSON.stringify(result)))
+        return
+      }
+
       if (!newUserId) { flash('❌ ไม่ได้ user ID'); return }
 
-      // insert profile (admin session ยังอยู่)
-      await new Promise(r => setTimeout(r, 300))
-      const { error: profErr } = await supabase.from('mt_profiles').insert({ id: newUserId, full_name: f.fullName, role: f.role, team_id: f.teamId || null, email: f.email, password_text: f.password })
-      if (profErr) {
-        await new Promise(r => setTimeout(r, 500))
-        const { error: retry } = await supabase.from('mt_profiles').insert({ id: newUserId, full_name: f.fullName, role: f.role, team_id: f.teamId || null, email: f.email, password_text: f.password })
-        if (retry) { flash('❌ สร้าง profile ไม่สำเร็จ: ' + retry.message); return }
+      // 3. เช็คว่ามี profile อยู่แล้วหรือยัง
+      const { data: existing } = await supabase.from('mt_profiles').select('id').eq('id', newUserId).single()
+      if (existing) {
+        // มี profile อยู่แล้ว → อัพเดท role
+        await supabase.from('mt_profiles').update({ full_name: f.fullName, role: f.role, team_id: f.teamId || null, email: f.email, password_text: f.password }).eq('id', newUserId)
+        flash('✅ อัพเดทบัญชีสำเร็จ — ' + f.fullName + ' (' + f.role + ')')
+      } else {
+        // ไม่มี → สร้างใหม่
+        await new Promise(r => setTimeout(r, 300))
+        const { error: profErr } = await supabase.from('mt_profiles').insert({ id: newUserId, full_name: f.fullName, role: f.role, team_id: f.teamId || null, email: f.email, password_text: f.password })
+        if (profErr) { flash('❌ สร้าง profile ไม่สำเร็จ: ' + profErr.message); return }
+        flash('✅ สร้างบัญชีสำเร็จ — ' + f.fullName + ' (' + f.role + ')')
       }
 
       const { data: profs } = await supabase.from('mt_profiles').select('*, mt_teams(id, name)').order('created_at', { ascending: false })
       setProfiles(profs || [])
       setShowUserModal(false); setUserForm({ email: '', password: '', fullName: '', role: 'employee', teamId: '' })
-      flash('✅ สร้างบัญชีสำเร็จ — ' + f.fullName + ' (' + f.role + ')')
     } catch (e) {
       flash('❌ เกิดข้อผิดพลาด: ' + e.message)
     }
