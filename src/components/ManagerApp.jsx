@@ -288,35 +288,35 @@ export default function ManagerApp({ profile, onLogout }) {
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
     <style>
       * { margin:0; padding:0; box-sizing:border-box; }
-      body { font-family: 'Sarabun', 'Noto Sans Thai', sans-serif; background:#eee; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+      body { font-family: 'Sarabun','Noto Sans Thai',sans-serif; background:#eee; -webkit-print-color-adjust:exact; print-color-adjust:exact }
       @media print {
-        .no-print { display:none!important }
-        @page { margin:0; size:100mm 75mm }
-        body { background:#fff }
-        .label-page { page-break-after:always; padding:0; margin:0 }
-        .label { zoom:0.8; border:none!important }
+        .no-print{display:none!important}
+        @page{margin:0;size:100mm 75mm}
+        body{background:#fff}
+        .label-page{page-break-after:always;padding:0;margin:0}
+        .label{border:none!important}
       }
-      .toolbar { position:fixed;top:0;left:0;right:0;background:#2C3E50;color:#fff;padding:10px 20px;display:flex;gap:12px;align-items:center;z-index:999 }
-      .toolbar button { padding:8px 20px;border:none;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer }
-      .label-page { display:flex;justify-content:center;padding:12px }
-      .label { width:472px;background:#fff;border:2px solid #222;overflow:hidden }
-      .sort-code-bar { text-align:center;padding:5px 10px;font-size:24px;font-weight:900;font-family:'Courier New',monospace;position:relative;border-bottom:2.5px solid #222 }
-      .sort-num { position:absolute;left:6px;top:5px;background:#E67E22;color:#fff;width:24px;height:24px;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900 }
-      .barcode-section { text-align:center;padding:3px 12px 1px;border-bottom:2.5px solid #222 }
-      .barcode-section svg { width:100%;height:50px }
-      .pno-bar { background:#F0F0F0;padding:3px 10px;text-align:center;font-size:16px;font-weight:900;letter-spacing:1.5px;font-family:'Courier New',monospace;border-bottom:2.5px solid #222 }
-      .dst-bar { background:#444;color:#fff;padding:3px 10px;font-weight:700;font-size:13px }
-      .src-line { padding:2px 10px;font-size:9px;color:#777;border-bottom:1px solid #ddd;white-space:nowrap;overflow:hidden;text-overflow:ellipsis }
-      .rcv-qr-row { display:flex }
-      .rcv-section { flex:1;padding:5px 10px }
-      .rcv-name { font-weight:700;font-size:14px }
-      .rcv-phone { font-size:22px;font-weight:900;letter-spacing:1px;margin:1px 0 }
-      .rcv-addr,.rcv-addr2,.rcv-addr3 { font-size:12px;color:#333;line-height:1.35 }
-      .qr-section { width:80px;min-width:80px;display:flex;align-items:center;justify-content:center;padding:4px }
-      .cod-bar { background:#1a1a1a;color:#fff;padding:5px 10px;font-size:18px;font-weight:900;display:flex;align-items:center;gap:8px }
-      .cod-badge { background:#E67E22;color:#fff;padding:1px 8px;border-radius:3px;font-size:12px;font-weight:900 }
-      .note-bar { padding:3px 10px;font-size:13px;font-weight:700;border-top:1px solid #ddd }
-      .footer-bar { padding:2px 10px;font-size:9px;color:#999;display:flex;justify-content:space-between;border-top:1px solid #eee }
+      .toolbar{position:fixed;top:0;left:0;right:0;background:#2C3E50;color:#fff;padding:10px 20px;display:flex;gap:12px;align-items:center;z-index:999}
+      .toolbar button{padding:8px 20px;border:none;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer}
+      .label-page{display:flex;justify-content:center;padding:12px}
+      .label{width:378px;background:#fff;border:2px solid #222;overflow:hidden}
+      .sort-code-bar{text-align:center;padding:2px 8px;font-size:19px;font-weight:900;font-family:'Courier New',monospace;position:relative;border-bottom:2px solid #222}
+      .sort-num{position:absolute;left:5px;top:3px;background:#E67E22;color:#fff;width:20px;height:20px;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900}
+      .barcode-section{text-align:center;padding:1px 8px 0;border-bottom:2px solid #222}
+      .barcode-section svg{width:100%;height:36px}
+      .pno-bar{background:#F0F0F0;padding:1px 8px;text-align:center;font-size:12px;font-weight:900;letter-spacing:1px;font-family:'Courier New',monospace;border-bottom:2px solid #222}
+      .dst-bar{background:#444;color:#fff;padding:1px 8px;font-weight:700;font-size:10px}
+      .src-line{padding:1px 8px;font-size:7px;color:#777;border-bottom:1px solid #ddd;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .rcv-qr-row{display:flex}
+      .rcv-section{flex:1;padding:3px 8px}
+      .rcv-name{font-weight:700;font-size:11px}
+      .rcv-phone{font-size:16px;font-weight:900;letter-spacing:1px}
+      .rcv-addr,.rcv-addr2,.rcv-addr3{font-size:9px;color:#333;line-height:1.25}
+      .qr-section{width:66px;min-width:66px;display:flex;align-items:center;justify-content:center;padding:2px}
+      .cod-bar{background:#1a1a1a;color:#fff;padding:2px 8px;font-size:14px;font-weight:900;display:flex;align-items:center;gap:6px}
+      .cod-badge{background:#E67E22;color:#fff;padding:0 6px;border-radius:3px;font-size:10px;font-weight:900}
+      .note-bar{padding:1px 8px;font-size:10px;font-weight:700;border-top:1px solid #ddd;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .footer-bar{padding:1px 8px;font-size:7px;color:#999;display:flex;justify-content:space-between;border-top:1px solid #eee}
     </style></head><body>
     <div class="toolbar no-print">
       <span style="font-size:15px;font-weight:700">🖨 ใบปะหน้า ${count} รายการ</span>
@@ -330,10 +330,10 @@ export default function ManagerApp({ profile, onLogout }) {
         pnos.forEach(function(pno, i) {
           // Barcode
           try {
-            JsBarcode('#bc-' + (i+1), pno, { format: 'CODE128', width: 2, height: 44, displayValue: false, margin: 0 });
+            JsBarcode('#bc-' + (i+1), pno, { format: 'CODE128', width: 1.8, height: 32, displayValue: false, margin: 0 });
           } catch(e) { console.log('Barcode error:', e); }
           try {
-            new QRCode(document.getElementById('qr-' + (i+1)), { text: pno, width: 70, height: 70, correctLevel: QRCode.CorrectLevel.M });
+            new QRCode(document.getElementById('qr-' + (i+1)), { text: pno, width: 58, height: 58, correctLevel: QRCode.CorrectLevel.M });
           } catch(e) { console.log('QR error:', e); }
         });
       });
