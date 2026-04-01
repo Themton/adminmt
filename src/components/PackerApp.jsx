@@ -123,12 +123,33 @@ export default function PackerApp({ profile, onLogout }) {
   }
 
   // ═══ ลบออเดอร์ ═══
+  const [deleting, setDeleting] = useState(false)
+  const [deleteProgress, setDeleteProgress] = useState(0)
+
   const deleteOrder = async (o) => {
     if (!confirm(`🗑 ลบออเดอร์?\n\n${o.customer_name}\n${o.customer_phone}\n\n⚠️ ลบถาวร — ไม่สามารถกู้คืนได้`)) return
+    flash('⏳ กำลังลบ...')
     const { error } = await supabase.from('mt_orders').delete().eq('id', o.id)
     if (error) { flash('❌ ' + error.message); return }
     setOrders(prev => prev.filter(x => x.id !== o.id))
     flash('✅ ลบออเดอร์แล้ว')
+  }
+
+  const bulkDeleteOrders = async (ids) => {
+    if (!ids.length) return
+    if (!confirm(`🗑 ลบ ${ids.length} ออเดอร์?\n\n⚠️ ลบถาวร — ไม่สามารถกู้คืนได้`)) return
+    setDeleting(true); setDeleteProgress(0)
+    let done = 0, fail = 0
+    for (let i = 0; i < ids.length; i++) {
+      const pct = Math.round(((i + 1) / ids.length) * 100)
+      setDeleteProgress(pct)
+      flash(`🗑 กำลังลบ ${i + 1}/${ids.length} (${pct}%)`)
+      const { error } = await supabase.from('mt_orders').delete().eq('id', ids[i])
+      if (!error) { setOrders(prev => prev.filter(x => x.id !== ids[i])); done++ } else { fail++ }
+      if (i < ids.length - 1) await new Promise(r => setTimeout(r, 100))
+    }
+    setDeleting(false); setDeleteProgress(0); setSelectedIds(new Set())
+    flash(`✅ ลบสำเร็จ ${done} รายการ` + (fail ? ` | ❌ ไม่สำเร็จ ${fail}` : ''))
   }
 
   const cancelFlash = async (o) => { if(!confirm('ยกเลิก '+o.flash_pno+'?\nต้องยกเลิกใน Flash portal ด้วย'))return; await supabase.from('mt_orders').update({flash_pno:'',flash_status:'cancelled',flash_sort_code:'',shipping_status:'waiting'}).eq('id',o.id); setOrders(prev=>prev.map(x=>x.id===o.id?{...x,flash_pno:'',flash_status:'cancelled',flash_sort_code:'',shipping_status:'waiting'}:x)); flash('ลบแล้ว') }
@@ -398,7 +419,13 @@ export default function PackerApp({ profile, onLogout }) {
           <button onClick={()=>bulkCreateFlash(orders.filter(o=>selectedIds.has(o.id)))} disabled={bulkCreating} style={{padding:'6px 14px',borderRadius:6,border:'none',background:bulkCreating?'#BDC3C7':'#E67E22',color:'#fff',fontSize:11,fontWeight:700,cursor:bulkCreating?'wait':'pointer',fontFamily:T.font}}>{bulkCreating?'⏳ '+bulkProgress.done+'/'+bulkProgress.total:'⚡ สร้างเลขพัสดุ ('+selectedIds.size+')'}</button>
           <button onClick={()=>printLabels(orders.filter(o=>selectedIds.has(o.id)))} style={{padding:'6px 12px',borderRadius:6,border:'1px solid #E67E22',background:'#FEF5E7',color:'#E67E22',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>🖨 ปริ้นใบปะหน้า</button>
           <button onClick={()=>{exportProshipExcel(orders.filter(o=>selectedIds.has(o.id)),'Selected.xlsx',profile,'shipping');flash('Export OK')}} style={{padding:'6px 12px',borderRadius:6,border:'1px solid #2980B9',background:'#EBF5FB',color:'#2980B9',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>📊 Export</button>
+            <button onClick={()=>bulkDeleteOrders([...selectedIds])} disabled={deleting} style={{padding:'6px 12px',borderRadius:6,border:'1px solid #E74C3C',background:'#FDEDEC',color:'#E74C3C',fontSize:11,fontWeight:700,cursor:deleting?'wait':'pointer',fontFamily:T.font}}>{deleting?`🗑 ${deleteProgress}%`:`🗑 ลบ (${selectedIds.size})`}</button>
           <button onClick={()=>setSelectedIds(new Set())} style={{padding:'6px 8px',borderRadius:6,border:'1px solid #DEE2E6',background:'#fff',color:'#85929E',fontSize:11,cursor:'pointer'}}>✕</button>
+        </div>}
+
+        {deleting&&<div style={{marginBottom:10,padding:'10px 14px',background:'#FDEDEC',borderRadius:8}}>
+          <div style={{display:'flex',justifyContent:'space-between',marginBottom:6}}><span style={{fontSize:12,fontWeight:700,color:'#E74C3C'}}>🗑 กำลังลบ...</span><span style={{fontSize:12,fontWeight:700,color:'#E74C3C'}}>{deleteProgress}%</span></div>
+          <div style={{width:'100%',height:8,background:'#F5B7B1',borderRadius:4,overflow:'hidden'}}><div style={{width:deleteProgress+'%',height:'100%',background:'#E74C3C',borderRadius:4,transition:'width 0.2s'}} /></div>
         </div>}
 
         <div style={{background:'#fff',borderRadius:8,border:'1px solid #DEE2E6',overflow:'hidden'}}><div style={{overflowX:'auto'}}>
