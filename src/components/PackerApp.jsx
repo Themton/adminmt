@@ -69,6 +69,9 @@ export default function PackerApp({ profile, onLogout }) {
   const [activityLogs, setActivityLogs] = useState([])
   const [upsellModal, setUpsellModal] = useState(null)
   const [upsellSelected, setUpsellSelected] = useState(new Set())
+  const [importData, setImportData] = useState([])
+  const [importSelected, setImportSelected] = useState(new Set())
+  const [importing, setImporting] = useState(false)
   const [logFilter, setLogFilter] = useState('all')
   const flash = (m) => { setToast(m); setTimeout(() => setToast(null), 3500) }
 
@@ -581,6 +584,7 @@ export default function PackerApp({ profile, onLogout }) {
           {[
             { id: 'shipping', icon: '🚚', label: 'การจัดส่ง' },
             { id: 'tracking', icon: '🔍', label: 'ค้นหาเลขพัสดุ' },
+            { id: 'import', icon: '📥', label: 'Import ไฟล์' },
             { id: 'upsell', icon: '💰', label: 'รายชื่อรออัพเซล', count: orders.filter(o=>o.shipping_status==='upsell'&&o.flash_pno).length },
             { id: 'history', icon: '📋', label: 'ประวัติการอัพเดต' },
           ].map(m => (
@@ -764,6 +768,157 @@ export default function PackerApp({ profile, onLogout }) {
                 </>}
               </div>}
             </div>
+          </div>}
+
+          {/* ═══ PAGE: Import ไฟล์ ═══ */}
+          {sidebarPage === 'import' && <div>
+            <div style={{fontSize:20,fontWeight:800,marginBottom:6}}>📥 Import ไฟล์สร้างเลขพัสดุ</div>
+            <div style={{fontSize:12,color:'#85929E',marginBottom:16}}>อัพโหลดไฟล์ CSV / Excel → ตรวจสอบข้อมูล → สร้างออเดอร์ + เลขพัสดุ Flash</div>
+
+            {/* Upload */}
+            <div style={{background:'#fff',borderRadius:12,border:'2px dashed #DEE2E6',padding:30,textAlign:'center',marginBottom:16,cursor:'pointer'}} onClick={()=>document.getElementById('import-file').click()}>
+              <input id="import-file" type="file" accept=".csv,.xlsx,.xls" style={{display:'none'}} onChange={async(e)=>{
+                const file = e.target.files[0]; if(!file) return
+                flash('⏳ กำลังอ่านไฟล์...')
+                try {
+                  if (file.name.endsWith('.csv')) {
+                    const text = await file.text()
+                    const lines = text.split('\n').map(l=>l.split(',').map(c=>c.replace(/^"|"$/g,'').trim()))
+                    const headers = lines[0].map(h=>h.toLowerCase())
+                    const rows = lines.slice(1).filter(l=>l.length>=3&&l.some(c=>c))
+                    const parsed = rows.map((row,i) => {
+                      const get = (keys) => { for(const k of keys){ const idx=headers.findIndex(h=>h.includes(k)); if(idx>=0&&row[idx]) return row[idx].trim() } return '' }
+                      return { _idx:i, customer_name:get(['ชื่อ','name','ผู้รับ','receiver']), customer_phone:get(['เบอร์','phone','โทร','tel']), customer_address:get(['ที่อยู่','address','addr']), sub_district:get(['ตำบล','แขวง','subdistrict','tambon']), district:get(['อำเภอ','เขต','district','amphoe']), province:get(['จังหวัด','province']), zip_code:get(['รหัส','zip','zipcode','postal']), cod_amount:get(['cod','ยอด','amount','เก็บเงิน','ปลายทาง']), remark:get(['หมายเหตุ','remark','note','สินค้า','product']), payment_type:get(['ประเภท','type','payment']).toLowerCase().includes('โอน')?'transfer':'cod', _valid:true }
+                    })
+                    parsed.forEach(r=>{ if(!r.customer_name||!r.customer_phone) r._valid=false; if(!r.district||!r.province||!r.zip_code) r._valid=false })
+                    setImportData(parsed)
+                    setImportSelected(new Set(parsed.filter(r=>r._valid).map(r=>r._idx)))
+                    flash(`✅ อ่านไฟล์สำเร็จ — ${parsed.length} รายการ (พร้อม ${parsed.filter(r=>r._valid).length})`)
+                  } else {
+                    // Excel — ใช้ SheetJS
+                    const loadScript = (url)=>new Promise(r=>{if(document.querySelector(`script[src="${url}"]`)){r();return};const s=document.createElement('script');s.src=url;s.onload=r;document.head.appendChild(s)})
+                    await loadScript('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js')
+                    const data = await file.arrayBuffer()
+                    const wb = XLSX.read(data, {type:'array'})
+                    const ws = wb.Sheets[wb.SheetNames[0]]
+                    const json = XLSX.utils.sheet_to_json(ws, {defval:''})
+                    const parsed = json.map((row,i) => {
+                      const get = (keys) => { for(const k of keys){ for(const col of Object.keys(row)){ if(col.toLowerCase().includes(k)&&row[col]) return String(row[col]).trim() } } return '' }
+                      return { _idx:i, customer_name:get(['ชื่อ','name','ผู้รับ','receiver']), customer_phone:get(['เบอร์','phone','โทร','tel']), customer_address:get(['ที่อยู่','address','addr']), sub_district:get(['ตำบล','แขวง','subdistrict','tambon']), district:get(['อำเภอ','เขต','district','amphoe']), province:get(['จังหวัด','province']), zip_code:get(['รหัส','zip','zipcode','postal']), cod_amount:get(['cod','ยอด','amount','เก็บเงิน','ปลายทาง']), remark:get(['หมายเหตุ','remark','note','สินค้า','product']), payment_type:get(['ประเภท','type','payment']).toLowerCase().includes('โอน')?'transfer':'cod', _valid:true }
+                    })
+                    parsed.forEach(r=>{ if(!r.customer_name||!r.customer_phone) r._valid=false; if(!r.district||!r.province||!r.zip_code) r._valid=false })
+                    setImportData(parsed)
+                    setImportSelected(new Set(parsed.filter(r=>r._valid).map(r=>r._idx)))
+                    flash(`✅ อ่านไฟล์สำเร็จ — ${parsed.length} รายการ (พร้อม ${parsed.filter(r=>r._valid).length})`)
+                  }
+                } catch(err) { flash('❌ อ่านไฟล์ไม่สำเร็จ: '+err.message) }
+                e.target.value = ''
+              }} />
+              <div style={{fontSize:40,marginBottom:8}}>📁</div>
+              <div style={{fontWeight:700,color:'#2C3E50',marginBottom:4}}>คลิกเลือกไฟล์ หรือ ลากวาง</div>
+              <div style={{fontSize:12,color:'#85929E'}}>รองรับ .csv .xlsx .xls</div>
+            </div>
+
+            {/* Template */}
+            <div style={{background:'#FEF9E7',borderRadius:8,padding:'12px 16px',marginBottom:16,border:'1px solid #F9E79F'}}>
+              <div style={{fontSize:12,fontWeight:700,color:'#B7950B',marginBottom:6}}>📝 คอลัมน์ที่ต้องมี</div>
+              <div style={{fontSize:11,color:'#7D6608'}}>ชื่อ, เบอร์โทร, ที่อยู่, ตำบล, อำเภอ, จังหวัด, รหัสไปรษณีย์, COD, หมายเหตุ</div>
+              <div style={{fontSize:10,color:'#B7950B',marginTop:4}}>* ชื่อคอลัมน์ภาษาไทยหรืออังกฤษก็ได้ ระบบจับอัตโนมัติ</div>
+            </div>
+
+            {/* Preview Table */}
+            {importData.length > 0 && <>
+              <div style={{display:'flex',gap:8,marginBottom:12,alignItems:'center',flexWrap:'wrap'}}>
+                <span style={{fontSize:14,fontWeight:700,color:'#2C3E50'}}>📋 ตรวจสอบข้อมูล ({importData.length} รายการ)</span>
+                <span style={{fontSize:12,color:'#27AE60',fontWeight:700}}>✅ พร้อม {importData.filter(r=>r._valid).length}</span>
+                {importData.filter(r=>!r._valid).length>0&&<span style={{fontSize:12,color:'#E74C3C',fontWeight:700}}>❌ ข้อมูลไม่ครบ {importData.filter(r=>!r._valid).length}</span>}
+                <div style={{flex:1}} />
+                <button onClick={()=>{setImportData([]);setImportSelected(new Set())}} style={{padding:'6px 12px',borderRadius:6,border:'1px solid #DEE2E6',background:'#fff',color:'#85929E',fontSize:11,cursor:'pointer',fontFamily:T.font}}>🗑 ล้าง</button>
+              </div>
+
+              <div style={{background:'#fff',borderRadius:8,border:'1px solid #DEE2E6',overflow:'hidden',marginBottom:12}}>
+                <div style={{overflowX:'auto'}}>
+                  <table style={{width:'100%',borderCollapse:'collapse',fontSize:11,fontFamily:T.font,minWidth:900}}>
+                    <thead><tr style={{background:'#F8F9FA'}}>
+                      <th style={{padding:'8px 6px',width:36,borderBottom:'1px solid #DEE2E6'}}>
+                        <input type="checkbox" checked={importData.filter(r=>r._valid).length>0&&importData.filter(r=>r._valid).every(r=>importSelected.has(r._idx))} onChange={()=>{const valid=importData.filter(r=>r._valid).map(r=>r._idx);const all=valid.every(i=>importSelected.has(i));setImportSelected(prev=>{const n=new Set(prev);valid.forEach(i=>all?n.delete(i):n.add(i));return n})}} style={{cursor:'pointer'}} />
+                      </th>
+                      {['#','สถานะ','ชื่อ','เบอร์','ที่อยู่','ตำบล','อำเภอ','จังหวัด','ZIP','COD','หมายเหตุ'].map(h=><th key={h} style={{padding:'8px 6px',textAlign:'left',fontWeight:600,color:'#5D6D7E',borderBottom:'1px solid #DEE2E6',fontSize:10}}>{h}</th>)}
+                    </tr></thead>
+                    <tbody>
+                      {importData.map((r,i)=>(
+                        <tr key={i} style={{borderBottom:'1px solid #EAECEE',background:!r._valid?'#FEF5F5':importSelected.has(r._idx)?'#EAFAF1':'#fff',opacity:r._valid?1:0.6}}>
+                          <td style={{padding:'6px',textAlign:'center'}}><input type="checkbox" checked={importSelected.has(r._idx)} disabled={!r._valid} onChange={()=>setImportSelected(prev=>{const n=new Set(prev);n.has(r._idx)?n.delete(r._idx):n.add(r._idx);return n})} style={{cursor:r._valid?'pointer':'not-allowed'}} /></td>
+                          <td style={{padding:'6px',textAlign:'center',fontSize:10}}>{i+1}</td>
+                          <td style={{padding:'6px'}}>{r._valid?<span style={{color:'#27AE60'}}>✅</span>:<span style={{color:'#E74C3C'}}>❌</span>}</td>
+                          <td style={{padding:'6px',fontWeight:600}}>{r.customer_name||<span style={{color:'#E74C3C'}}>ขาด</span>}</td>
+                          <td style={{padding:'6px',color:'#85929E'}}>{r.customer_phone||<span style={{color:'#E74C3C'}}>ขาด</span>}</td>
+                          <td style={{padding:'6px',fontSize:10,maxWidth:120,overflow:'hidden',whiteSpace:'nowrap',textOverflow:'ellipsis'}}>{r.customer_address}</td>
+                          <td style={{padding:'6px',fontSize:10}}>{r.sub_district}</td>
+                          <td style={{padding:'6px',fontSize:10}}>{r.district||<span style={{color:'#E74C3C'}}>ขาด</span>}</td>
+                          <td style={{padding:'6px',fontSize:10}}>{r.province||<span style={{color:'#E74C3C'}}>ขาด</span>}</td>
+                          <td style={{padding:'6px',fontSize:10}}>{r.zip_code||<span style={{color:'#E74C3C'}}>ขาด</span>}</td>
+                          <td style={{padding:'6px',fontWeight:700,color:'#E74C3C'}}>{r.cod_amount?'฿'+r.cod_amount:''}</td>
+                          <td style={{padding:'6px',fontSize:10,color:'#85929E',maxWidth:100,overflow:'hidden',whiteSpace:'nowrap',textOverflow:'ellipsis'}}>{r.remark}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Action buttons */}
+              <div style={{display:'flex',gap:10}}>
+                <button disabled={importSelected.size===0||importing} onClick={async()=>{
+                  const sel = importData.filter(r=>importSelected.has(r._idx))
+                  if(!sel.length) return
+                  if(!confirm(`📦 สร้างออเดอร์ ${sel.length} รายการ?\n(ยังไม่สร้างเลขพัสดุ)`)) return
+                  setImporting(true)
+                  setGProgress({label:'📦 สร้างออเดอร์',done:0,total:sel.length,color:'#3498DB'})
+                  let ok=0
+                  for(let i=0;i<sel.length;i++){
+                    setGProgress(p=>({...p,done:i+1}))
+                    const r=sel[i]
+                    const {data:newO}=await supabase.from('mt_orders').insert({order_date:new Date().toISOString().split('T')[0],customer_name:r.customer_name,customer_phone:r.customer_phone,customer_address:r.customer_address,sub_district:r.sub_district,district:r.district,province:r.province,zip_code:r.zip_code,payment_type:r.payment_type||'cod',sale_price:parseFloat(r.cod_amount)||0,cod_amount:parseFloat(r.cod_amount)||0,remark:r.remark,employee_name:profile.full_name||'',shipping_status:'waiting'}).select().single()
+                    if(newO){setOrders(prev=>[newO,...prev]);ok++}
+                    if(i<sel.length-1) await new Promise(r=>setTimeout(r,50))
+                  }
+                  setGProgress(null);setImporting(false)
+                  logActivity('import','Import สร้างออเดอร์ '+ok+' รายการ',ok)
+                  flash(`✅ สร้างออเดอร์ ${ok}/${sel.length} รายการ`)
+                }} style={{flex:1,padding:'14px',borderRadius:10,border:'none',background:'#3498DB',color:'#fff',fontSize:14,fontWeight:700,cursor:importSelected.size===0?'not-allowed':'pointer',fontFamily:T.font,opacity:importSelected.size===0?0.5:1}}>
+                  📦 สร้างออเดอร์ ({importSelected.size})
+                </button>
+                <button disabled={importSelected.size===0||importing} onClick={async()=>{
+                  const sel = importData.filter(r=>importSelected.has(r._idx))
+                  if(!sel.length) return
+                  if(!confirm(`⚡ สร้างออเดอร์ + เลขพัสดุ Flash ${sel.length} รายการ?`)) return
+                  setImporting(true)
+                  setGProgress({label:'⚡ Import + สร้างเลขพัสดุ',done:0,total:sel.length,color:'#E67E22'})
+                  let ok=0,pnoOk=0
+                  for(let i=0;i<sel.length;i++){
+                    setGProgress(p=>({...p,done:i+1}))
+                    const r=sel[i]
+                    const {data:newO}=await supabase.from('mt_orders').insert({order_date:new Date().toISOString().split('T')[0],customer_name:r.customer_name,customer_phone:r.customer_phone,customer_address:r.customer_address,sub_district:r.sub_district,district:r.district,province:r.province,zip_code:r.zip_code,payment_type:r.payment_type||'cod',sale_price:parseFloat(r.cod_amount)||0,cod_amount:parseFloat(r.cod_amount)||0,remark:r.remark,employee_name:profile.full_name||'',shipping_status:'waiting'}).select().single()
+                    if(newO){
+                      setOrders(prev=>[newO,...prev]);ok++
+                      const fr=await createFlashOrder(newO,flashSrcInfo)
+                      if(fr.code===1&&fr.data?.pno){
+                        await supabase.from('mt_orders').update({flash_pno:fr.data.pno,flash_status:'created',shipping_status:'printed',flash_sort_code:fr.data.sortCode||''}).eq('id',newO.id)
+                        setOrders(prev=>prev.map(o=>o.id===newO.id?{...o,flash_pno:fr.data.pno,flash_status:'created',shipping_status:'printed',flash_sort_code:fr.data.sortCode||''}:o))
+                        pnoOk++
+                      }
+                    }
+                    if(i<sel.length-1) await new Promise(r=>setTimeout(r,300))
+                  }
+                  setGProgress(null);setImporting(false)
+                  logActivity('import','Import + สร้างเลขพัสดุ '+pnoOk+'/'+ok+' รายการ',ok)
+                  flash(`✅ สร้างออเดอร์ ${ok} | เลขพัสดุ ${pnoOk} รายการ`)
+                }} style={{flex:1,padding:'14px',borderRadius:10,border:'none',background:'#E67E22',color:'#fff',fontSize:14,fontWeight:700,cursor:importSelected.size===0?'not-allowed':'pointer',fontFamily:T.font,opacity:importSelected.size===0?0.5:1}}>
+                  ⚡ สร้างออเดอร์ + เลขพัสดุ ({importSelected.size})
+                </button>
+              </div>
+            </>}
           </div>}
 
           {/* ═══ PAGE: รายชื่อรออัพเซล ═══ */}
