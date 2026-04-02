@@ -801,12 +801,53 @@ export default function PackerApp({ profile, onLogout }) {
                     const data = await file.arrayBuffer()
                     const wb = XLSX.read(data, {type:'array'})
                     const ws = wb.Sheets[wb.SheetNames[0]]
-                    const json = XLSX.utils.sheet_to_json(ws, {defval:''})
-                    const parsed = json.map((row,i) => {
-                      const get = (keys) => { for(const k of keys){ for(const col of Object.keys(row)){ if(col.toLowerCase().includes(k)&&row[col]) return String(row[col]).trim() } } return '' }
-                      return { _idx:i, customer_name:get(['ชื่อ','name','ผู้รับ','receiver']), customer_phone:get(['เบอร์','phone','โทร','tel']), customer_address:get(['ที่อยู่','address','addr']), sub_district:get(['ตำบล','แขวง','subdistrict','tambon']), district:get(['อำเภอ','เขต','district','amphoe']), province:get(['จังหวัด','province']), zip_code:get(['รหัส','zip','zipcode','postal']), cod_amount:get(['cod','ยอด','amount','เก็บเงิน','ปลายทาง']), remark:get(['หมายเหตุ','remark','note','สินค้า','product']), payment_type:get(['ประเภท','type','payment']).toLowerCase().includes('โอน')?'transfer':'cod', _valid:true }
+                    // หา header row — แถวที่มี MobileNo หรือ เบอร์
+                    const allRows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''})
+                    let headerIdx = 0
+                    for (let i=0; i<Math.min(5,allRows.length); i++) {
+                      const rowStr = allRows[i].join(' ').toLowerCase()
+                      if (rowStr.includes('mobile') || rowStr.includes('เบอร์') || rowStr.includes('name') || rowStr.includes('ชื่อ')) { headerIdx = i; break }
+                    }
+                    const headers = allRows[headerIdx].map(h => String(h||'').toLowerCase().replace(/\n/g,' '))
+                    const dataRows = allRows.slice(headerIdx+1).filter(r => r.some(c => c !== '' && c != null))
+                    const addrData = await getAddresses()
+                    const parsed = dataRows.map((row, i) => {
+                      const get = (keys) => { for(const k of keys){ const idx = headers.findIndex(h => h.includes(k)); if(idx>=0 && row[idx] != null && String(row[idx]).trim()) return String(row[idx]).trim() } return '' }
+                      const r = {
+                        _idx: i,
+                        customer_phone: get(['mobile','เบอร์','phone','โทร']).replace(/\D/g,''),
+                        customer_name: get(['name','ชื่อ','ผู้รับ']),
+                        customer_address: get(['address','ที่อยู่']),
+                        sub_district: get(['subdistrict','ตำบล','แขวง']),
+                        district: get(['district','อำเภอ','เขต']),
+                        province: get(['province','จังหวัด']),
+                        zip_code: get(['zip','รหัส','postal','ปณ']),
+                        customer_social: get(['fb','line','เฟส','ไลน์']),
+                        sales_channel: get(['saleschannel','ช่องทาง','เพจ']),
+                        employee_name: get(['salesperson','แอดมิน','admin','พนักงาน']) || profile.full_name || '',
+                        sale_price: get(['saleprice','ราคาขาย','ราคา','price']),
+                        cod_amount: get(['cod','เก็บเงิน','ปลายทาง','ยอด']),
+                        remark: get(['remark','หมายเหตุ','note','สินค้า']),
+                        payment_type: 'cod',
+                        _valid: true
+                      }
+                      // ถ้าไม่มี sale_price ใช้ cod_amount
+                      if (!r.sale_price && r.cod_amount) r.sale_price = r.cod_amount
+                      if (!r.cod_amount && r.sale_price) r.cod_amount = r.sale_price
+                      // ถ้า cod = 0 หรือไม่มี → โอน
+                      if (!r.cod_amount || r.cod_amount === '0') r.payment_type = 'transfer'
+                      // หาจังหวัดจาก ZIP
+                      if (r.zip_code && !r.province && addrData.length > 0) {
+                        const m = addrData.find(a => a.z === r.zip_code)
+                        if (m) { r.province = m.p; if (!r.sub_district) r.sub_district = m.s; if (!r.district) r.district = m.d }
+                      }
+                      // เติมเบอร์ 0 นำหน้า
+                      if (r.customer_phone && r.customer_phone.length === 9) r.customer_phone = '0' + r.customer_phone
+                      // validate
+                      if (!r.customer_name || !r.customer_phone) r._valid = false
+                      if (!r.district || !r.province || !r.zip_code) r._valid = false
+                      return r
                     })
-                    parsed.forEach(r=>{ if(!r.customer_name||!r.customer_phone) r._valid=false; if(!r.district||!r.province||!r.zip_code) r._valid=false })
                     setImportData(parsed)
                     setImportSelected(new Set(parsed.filter(r=>r._valid).map(r=>r._idx)))
                     flash(`✅ อ่านไฟล์สำเร็จ — ${parsed.length} รายการ (พร้อม ${parsed.filter(r=>r._valid).length})`)
@@ -879,7 +920,7 @@ export default function PackerApp({ profile, onLogout }) {
                   for(let i=0;i<sel.length;i++){
                     setGProgress(p=>({...p,done:i+1}))
                     const r=sel[i]
-                    const {data:newO}=await supabase.from('mt_orders').insert({order_date:new Date().toISOString().split('T')[0],customer_name:r.customer_name,customer_phone:r.customer_phone,customer_address:r.customer_address,sub_district:r.sub_district,district:r.district,province:r.province,zip_code:r.zip_code,payment_type:r.payment_type||'cod',sale_price:parseFloat(r.cod_amount)||0,cod_amount:parseFloat(r.cod_amount)||0,remark:r.remark,employee_name:profile.full_name||'',shipping_status:'waiting'}).select().single()
+                    const {data:newO}=await supabase.from('mt_orders').insert({order_date:new Date().toISOString().split('T')[0],customer_name:r.customer_name,customer_phone:r.customer_phone,customer_address:r.customer_address,sub_district:r.sub_district,district:r.district,province:r.province,zip_code:r.zip_code,payment_type:r.payment_type||'cod',sale_price:parseFloat(r.sale_price||r.cod_amount)||0,cod_amount:parseFloat(r.cod_amount||r.sale_price)||0,remark:r.remark,employee_name:r.employee_name||profile.full_name||'',customer_social:r.customer_social||'',sales_channel:r.sales_channel||'',shipping_status:'waiting'}).select().single()
                     if(newO){setOrders(prev=>[newO,...prev]);ok++}
                     if(i<sel.length-1) await new Promise(r=>setTimeout(r,50))
                   }
@@ -899,7 +940,7 @@ export default function PackerApp({ profile, onLogout }) {
                   for(let i=0;i<sel.length;i++){
                     setGProgress(p=>({...p,done:i+1}))
                     const r=sel[i]
-                    const {data:newO}=await supabase.from('mt_orders').insert({order_date:new Date().toISOString().split('T')[0],customer_name:r.customer_name,customer_phone:r.customer_phone,customer_address:r.customer_address,sub_district:r.sub_district,district:r.district,province:r.province,zip_code:r.zip_code,payment_type:r.payment_type||'cod',sale_price:parseFloat(r.cod_amount)||0,cod_amount:parseFloat(r.cod_amount)||0,remark:r.remark,employee_name:profile.full_name||'',shipping_status:'waiting'}).select().single()
+                    const {data:newO}=await supabase.from('mt_orders').insert({order_date:new Date().toISOString().split('T')[0],customer_name:r.customer_name,customer_phone:r.customer_phone,customer_address:r.customer_address,sub_district:r.sub_district,district:r.district,province:r.province,zip_code:r.zip_code,payment_type:r.payment_type||'cod',sale_price:parseFloat(r.sale_price||r.cod_amount)||0,cod_amount:parseFloat(r.cod_amount||r.sale_price)||0,remark:r.remark,employee_name:r.employee_name||profile.full_name||'',customer_social:r.customer_social||'',sales_channel:r.sales_channel||'',shipping_status:'waiting'}).select().single()
                     if(newO){
                       setOrders(prev=>[newO,...prev]);ok++
                       const fr=await createFlashOrder(newO,flashSrcInfo)
