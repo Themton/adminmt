@@ -304,7 +304,11 @@ export default function PackerApp({ profile, onLogout }) {
     document.body.removeChild(ct);window.open(URL.createObjectURL(doc.output('blob')),'_blank')
     flash('สร้างใบปะหน้า '+lo.length+' รายการ')
   }
-  const printLabels = async (t) => { const w=t.filter(o=>o.flash_pno); if(!w.length){flash('ไม่มีเลขพัสดุ');return}; await buildLabelPDF(w); logActivity('print', `ปริ้นใบปะหน้า ${w.length} รายการ`, w.length, { pnos: w.map(o=>o.flash_pno) }) }
+  const printLabels = async (t) => {
+    const w=t.filter(o=>o.flash_pno); if(!w.length){flash('ไม่มีเลขพัสดุ');return}
+    await buildLabelPDF(w)
+    logActivity('print', `ปริ้นใบปะหน้า ${w.length} รายการ`, w.length, { pnos: w.map(o=>o.flash_pno) })
+  }
 
   // ═══ ค้นหาเลขพัสดุ ═══
   const searchTracking = async (pnoOverride) => {
