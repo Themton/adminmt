@@ -801,12 +801,14 @@ export default function PackerApp({ profile, onLogout }) {
                     const data = await file.arrayBuffer()
                     const wb = XLSX.read(data, {type:'array'})
                     const ws = wb.Sheets[wb.SheetNames[0]]
-                    // หา header row — แถวที่มี MobileNo หรือ เบอร์
+                    // หา header row — แถวที่มีหลายคอลัมน์ข้อมูล (ไม่ใช่ description ยาวๆ)
                     const allRows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''})
                     let headerIdx = 0
                     for (let i=0; i<Math.min(5,allRows.length); i++) {
-                      const rowStr = allRows[i].join(' ').toLowerCase()
-                      if (rowStr.includes('mobile') || rowStr.includes('เบอร์') || rowStr.includes('name') || rowStr.includes('ชื่อ')) { headerIdx = i; break }
+                      const row = allRows[i]
+                      const filledCols = row.filter(c => c != null && String(c).trim() !== '').length
+                      // header row = มีข้อมูลอย่างน้อย 4 คอลัมน์ + cell แรกไม่ยาวเกิน 60 ตัว
+                      if (filledCols >= 4 && String(row[0]||'').length < 60) { headerIdx = i; break }
                     }
                     const headers = allRows[headerIdx].map(h => String(h||'').toLowerCase().replace(/\n/g,' '))
                     const dataRows = allRows.slice(headerIdx+1).filter(r => r.some(c => c !== '' && c != null))
