@@ -253,19 +253,6 @@ export default function PackerApp({ profile, onLogout }) {
     setNewOrder({ customer_name:'', customer_phone:'', customer_address:'', sub_district:'', district:'', province:'', zip_code:'', payment_type:'cod', sale_price:'', cod_amount:'', remark:'' })
   }
 
-  const refreshStatus = async () => {
-    const wp=dateFiltered.filter(o=>o.flash_pno&&o.flash_status!=='cancelled'); if(!wp.length){flash('ไม่มี');return}
-    setGProgress({ label: '🔄 อัพเดทสถานะ', done: 0, total: wp.length, color: '#3498DB' })
-    let u=0
-    for(let i=0;i<wp.length;i++){
-      setGProgress(p=>({...p,done:i+1}))
-      const r=await trackFlashOrder(wp[i].flash_pno)
-      if(r.code===1&&r.data){const ns='flash_'+(r.data.state||0);await supabase.from('mt_orders').update({flash_status:ns}).eq('id',wp[i].id);setOrders(prev=>prev.map(o=>o.id===wp[i].id?{...o,flash_status:ns}:o));u++}
-      if(i<wp.length-1)await new Promise(r=>setTimeout(r,150))
-    }
-    setGProgress(null);flash('✅ อัพเดท '+u+' รายการ')
-    logActivity('refresh_status', `อัพเดทสถานะ Flash ${u} รายการ`, u)
-  }
 
   const labelHTML = (order, idx, total) => {
     const pno=order.flash_pno||'',phone=order.customer_phone||'',mp=phone.length>=7?phone.substring(0,3)+'****'+phone.substring(phone.length-3):phone
@@ -616,7 +603,6 @@ export default function PackerApp({ profile, onLogout }) {
               {[{id:'today',label:'วันนี้',fn:()=>{setDateFilter(todayStr);setDateFilterEnd(todayStr)}},{id:'7days',label:'7 วัน',fn:()=>{const d=new Date();d.setDate(d.getDate()-6);setDateFilter(d.toISOString().split('T')[0]);setDateFilterEnd(todayStr)}},{id:'month',label:'เดือนนี้',fn:()=>{setDateFilter(new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0')+'-01');setDateFilterEnd(todayStr)}}].map(b=><button key={b.id} onClick={()=>{b.fn();setQuickFilter(b.id);setPage(1)}} style={{padding:'7px 14px',borderRadius:6,border:quickFilter===b.id?'none':'1px solid #DEE2E6',background:quickFilter===b.id?'#E67E22':'#fff',color:quickFilter===b.id?'#fff':'#85929E',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>{b.label}</button>)}
               <div style={{flex:1}} />
               <input placeholder="ค้นหา ชื่อ เบอร์ เลขพัสดุ..." value={searchQuery} onChange={e=>{setSearchQuery(e.target.value);setPage(1)}} style={{padding:'7px 12px',borderRadius:6,border:'1px solid #DEE2E6',fontSize:12,fontFamily:T.font,width:220}} />
-              <button onClick={refreshStatus} disabled={!!gProgress} style={{padding:'7px 14px',borderRadius:6,border:'1px solid #3498DB',background:'#EBF5FB',color:'#3498DB',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>{gProgress?'⏳...':'🔄 อัพเดทสถานะ'}</button>
             </div>
 
             {/* Status tabs */}

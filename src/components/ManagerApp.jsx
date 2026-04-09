@@ -248,7 +248,7 @@ export default function ManagerApp({ profile, onLogout }) {
     flash(`✅ ยกเลิก ${withPno.length} รายการแล้ว — อย่าลืมยกเลิกใน Flash portal`)
   }
 
-  // ═══ อัพเดทสถานะ Flash จริง ═══
+  // ═══ Flash Status Map ═══
   const flashStateMap = {
     1: { label: 'สร้างออเดอร์', bg: '#EBEDEF', color: '#5D6D7E' },
     2: { label: 'รับพัสดุแล้ว', bg: '#D4E6F1', color: '#2471A3' },
@@ -256,27 +256,6 @@ export default function ManagerApp({ profile, onLogout }) {
     4: { label: 'กำลังจัดส่ง', bg: '#FDEBD0', color: '#CA6F1E' },
     5: { label: 'เซ็นรับแล้ว', bg: '#D5F5E3', color: '#1E8449' },
     6: { label: 'ตีกลับ', bg: '#FADBD8', color: '#C0392B' },
-  }
-
-  const refreshFlashStatus = async (targetOrders) => {
-    const withPno = (targetOrders || orders).filter(o => o.flash_pno && o.flash_status !== 'cancelled')
-    if (!withPno.length) { flash('❌ ไม่มีรายการที่มีเลขพัสดุ'); return }
-    flash(`⏳ อัพเดทสถานะ ${withPno.length} รายการ...`)
-    let updated = 0
-    for (let i = 0; i < withPno.length; i++) {
-      if (i % 5 === 0) flash(`⏳ อัพเดท ${i+1}/${withPno.length}...`)
-      const result = await trackFlashOrder(withPno[i].flash_pno)
-      if (result.code === 1 && result.data) {
-        const state = result.data.state || 0
-        const stateText = result.data.stateText || flashStateMap[state]?.label || ''
-        const newStatus = 'flash_' + state
-        await supabase.from('mt_orders').update({ flash_status: newStatus }).eq('id', withPno[i].id)
-        setOrders(prev => prev.map(o => o.id === withPno[i].id ? { ...o, flash_status: newStatus } : o))
-        updated++
-      }
-      if (i < withPno.length - 1) await new Promise(r => setTimeout(r, 150))
-    }
-    flash(`✅ อัพเดทสถานะสำเร็จ ${updated} รายการ`)
   }
 
   const getFlashStatusBadge = (order) => {
@@ -1421,7 +1400,6 @@ export default function ManagerApp({ profile, onLogout }) {
               <button onClick={() => exportShip('excel')} style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid #27AE60', background: '#EAFAF1', color: '#27AE60', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>📊 Excel</button>
               <button onClick={() => exportShip('csv')} style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid #D5D8DC', background: '#fff', color: '#5D6D7E', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>📥 CSV</button>
               {(() => { const p = shipOrders.filter(o => o.flash_pno); return p.length > 0 && <button onClick={() => notifyCourier(p.map(o => o.flash_pno))} style={{ padding: '8px 16px', borderRadius: 6, border: 'none', background: '#27AE60', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: T.font, whiteSpace: 'nowrap' }}>📞 เรียกรับพัสดุ</button> })()}
-              <button onClick={() => refreshFlashStatus(shipOrders)} style={{ padding: '8px 14px', borderRadius: 6, border: '1px solid #3498DB', background: '#EBF5FB', color: '#3498DB', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: T.font, whiteSpace: 'nowrap' }}>🔄 อัพเดทสถานะ</button>
             </div>
 
             {/* Status Filter Bar — Proship Style */}
