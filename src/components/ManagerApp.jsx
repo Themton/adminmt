@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { supabase } from '../lib/supabase'
 import { syncOrderToSheet, updateOrderInSheet, deleteOrderFromSheet, syncAllToSheet, resetSheet } from '../lib/sheetSync'
@@ -101,6 +101,7 @@ export default function ManagerApp({ profile, onLogout }) {
   const [showFlashSrc, setShowFlashSrc] = useState(false)
   const [exportLogs, setExportLogs] = useState([])
   const [showExportLogs, setShowExportLogs] = useState(false)
+  const [expandedProduct, setExpandedProduct] = useState(null)
   const loadExportLogs = async () => { setExportLogs(await fetchExportLogs(50)); setShowExportLogs(true) }
 
   // ═══ เลือกรายชื่อ (Checkbox) ═══
@@ -1155,6 +1156,144 @@ export default function ManagerApp({ profile, onLogout }) {
               </table>
             })()}
           </div>
+
+          {/* ═══ รายงานแยกสินค้า ═══ */}
+          {filtered.length > 0 && (() => {
+            const productMap = {}
+            filtered.forEach(o => {
+              const prod = (o.remark || '').trim() || '—'
+              if (!productMap[prod]) productMap[prod] = { count: 0, sales: 0, cod: 0, codAmt: 0, trans: 0, transAmt: 0, employees: {}, pages: {} }
+              const pm = productMap[prod]
+              pm.count++
+              pm.sales += parseFloat(o.sale_price) || 0
+              if (o.payment_type === 'transfer') { pm.trans++; pm.transAmt += parseFloat(o.sale_price) || 0 }
+              else { pm.cod++; pm.codAmt += parseFloat(o.cod_amount) || 0 }
+              const eName = o.employee_name || '—'
+              if (!pm.employees[eName]) pm.employees[eName] = { count: 0, sales: 0 }
+              pm.employees[eName].count++
+              pm.employees[eName].sales += parseFloat(o.sale_price) || 0
+              const page = o.sales_channel || '—'
+              if (!pm.pages[page]) pm.pages[page] = { count: 0, sales: 0 }
+              pm.pages[page].count++
+              pm.pages[page].sales += parseFloat(o.sale_price) || 0
+            })
+            const productList = Object.entries(productMap).map(([name, d]) => ({ name, ...d })).sort((a, b) => b.count - a.count)
+            const grandTotal = productList.reduce((s, p) => s + p.sales, 0)
+
+            return <div style={{ ...glass, padding: 14, marginBottom: 10 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>📦 รายงานแยกสินค้า ({productList.length} รายการ)</div>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, fontFamily: T.font }}>
+                  <thead>
+                    <tr style={{ background: T.surfaceAlt }}>
+                      <th style={{ padding: '6px', textAlign: 'center', fontWeight: 600, color: T.textDim, width: 30 }}>#</th>
+                      <th style={{ padding: '6px', textAlign: 'left', fontWeight: 600, color: T.textDim }}>สินค้า</th>
+                      <th style={{ padding: '6px', textAlign: 'center', fontWeight: 600, color: T.textDim }}>ออเดอร์</th>
+                      <th style={{ padding: '6px', textAlign: 'right', fontWeight: 600, color: T.textDim }}>ยอดขาย</th>
+                      <th style={{ padding: '6px', textAlign: 'center', fontWeight: 600, color: T.textDim }}>%</th>
+                      <th style={{ padding: '6px', textAlign: 'center', fontWeight: 600, color: T.textDim }}>📦 COD</th>
+                      <th style={{ padding: '6px', textAlign: 'right', fontWeight: 600, color: T.textDim }}>ยอด COD</th>
+                      <th style={{ padding: '6px', textAlign: 'center', fontWeight: 600, color: T.textDim }}>🏦 โอน</th>
+                      <th style={{ padding: '6px', textAlign: 'right', fontWeight: 600, color: T.textDim }}>ยอดโอน</th>
+                      <th style={{ padding: '6px', textAlign: 'center', fontWeight: 600, color: T.textDim }}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {productList.map((p, i) => {
+                      const pct = grandTotal > 0 ? ((p.sales / grandTotal) * 100).toFixed(1) : '0.0'
+                      const isExpanded = expandedProduct === p.name
+                      const empList = Object.entries(p.employees).map(([n, d]) => ({ name: n, ...d })).sort((a, b) => b.count - a.count)
+                      const pageList = Object.entries(p.pages).map(([n, d]) => ({ name: n, ...d })).sort((a, b) => b.count - a.count)
+                      return <React.Fragment key={p.name}>
+                        <tr style={{ borderBottom: `1px solid ${T.border}`, background: i < 3 ? 'rgba(184,134,11,0.03)' : 'transparent', cursor: 'pointer' }} onClick={() => setExpandedProduct(isExpanded ? null : p.name)}>
+                          <td style={{ padding: '6px', textAlign: 'center', fontWeight: 800, color: i < 3 ? T.gold : T.textDim }}>{i + 1}</td>
+                          <td style={{ padding: '6px', fontWeight: 600 }}>{p.name}</td>
+                          <td style={{ padding: '6px', textAlign: 'center', fontWeight: 700, color: T.gold }}>{p.count}</td>
+                          <td style={{ padding: '6px', textAlign: 'right', fontWeight: 700, color: T.success }}>฿{fmt(p.sales)}</td>
+                          <td style={{ padding: '6px', textAlign: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <div style={{ flex: 1, height: 6, borderRadius: 3, background: T.surfaceAlt, overflow: 'hidden' }}>
+                                <div style={{ width: pct + '%', height: '100%', borderRadius: 3, background: 'linear-gradient(90deg, #B8860B, #DAA520)' }}></div>
+                              </div>
+                              <span style={{ fontSize: 10, color: T.textDim, minWidth: 36, textAlign: 'right' }}>{pct}%</span>
+                            </div>
+                          </td>
+                          <td style={{ padding: '6px', textAlign: 'center', color: T.gold }}>{p.cod}</td>
+                          <td style={{ padding: '6px', textAlign: 'right', color: T.gold }}>฿{fmt(p.codAmt)}</td>
+                          <td style={{ padding: '6px', textAlign: 'center', color: T.success }}>{p.trans}</td>
+                          <td style={{ padding: '6px', textAlign: 'right', color: T.success }}>฿{fmt(p.transAmt)}</td>
+                          <td style={{ padding: '6px', textAlign: 'center', fontSize: 10, color: T.textDim }}>{isExpanded ? '▲' : '▼'}</td>
+                        </tr>
+                        {isExpanded && (
+                          <tr>
+                            <td colSpan="10" style={{ padding: 0, background: 'rgba(184,134,11,0.02)' }}>
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, padding: 12 }}>
+                                {/* แยกรายคน */}
+                                <div>
+                                  <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 6, color: T.textDim }}>👤 แยกรายคน</div>
+                                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10, fontFamily: T.font }}>
+                                    <thead>
+                                      <tr style={{ background: T.surfaceAlt }}>
+                                        <th style={{ padding: '4px 6px', textAlign: 'left', fontWeight: 600, color: T.textDim }}>พนักงาน</th>
+                                        <th style={{ padding: '4px 6px', textAlign: 'center', fontWeight: 600, color: T.textDim }}>จำนวน</th>
+                                        <th style={{ padding: '4px 6px', textAlign: 'right', fontWeight: 600, color: T.textDim }}>ยอดขาย</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {empList.map(e => (
+                                        <tr key={e.name} style={{ borderBottom: `1px solid ${T.border}` }}>
+                                          <td style={{ padding: '4px 6px', fontWeight: 600 }}>{e.name}</td>
+                                          <td style={{ padding: '4px 6px', textAlign: 'center', color: T.gold, fontWeight: 700 }}>{e.count}</td>
+                                          <td style={{ padding: '4px 6px', textAlign: 'right', color: T.success, fontWeight: 700 }}>฿{fmt(e.sales)}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                                {/* แยกรายเพจ */}
+                                <div>
+                                  <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 6, color: T.textDim }}>📢 แยกรายเพจ</div>
+                                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10, fontFamily: T.font }}>
+                                    <thead>
+                                      <tr style={{ background: T.surfaceAlt }}>
+                                        <th style={{ padding: '4px 6px', textAlign: 'left', fontWeight: 600, color: T.textDim }}>เพจ</th>
+                                        <th style={{ padding: '4px 6px', textAlign: 'center', fontWeight: 600, color: T.textDim }}>จำนวน</th>
+                                        <th style={{ padding: '4px 6px', textAlign: 'right', fontWeight: 600, color: T.textDim }}>ยอดขาย</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {pageList.map(pg => (
+                                        <tr key={pg.name} style={{ borderBottom: `1px solid ${T.border}` }}>
+                                          <td style={{ padding: '4px 6px', fontWeight: 600 }}>{pg.name}</td>
+                                          <td style={{ padding: '4px 6px', textAlign: 'center', color: T.gold, fontWeight: 700 }}>{pg.count}</td>
+                                          <td style={{ padding: '4px 6px', textAlign: 'right', color: T.success, fontWeight: 700 }}>฿{fmt(pg.sales)}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    })}
+                    <tr style={{ background: 'rgba(184,134,11,0.05)' }}>
+                      <td colSpan="2" style={{ padding: '6px', fontWeight: 800 }}>รวม</td>
+                      <td style={{ padding: '6px', textAlign: 'center', fontWeight: 800, color: T.gold }}>{productList.reduce((s, p) => s + p.count, 0)}</td>
+                      <td style={{ padding: '6px', textAlign: 'right', fontWeight: 800, color: T.success }}>฿{fmt(grandTotal)}</td>
+                      <td style={{ padding: '6px', textAlign: 'center', fontWeight: 800, color: T.textDim }}>100%</td>
+                      <td style={{ padding: '6px', textAlign: 'center', fontWeight: 700, color: T.gold }}>{productList.reduce((s, p) => s + p.cod, 0)}</td>
+                      <td style={{ padding: '6px', textAlign: 'right', fontWeight: 700, color: T.gold }}>฿{fmt(productList.reduce((s, p) => s + p.codAmt, 0))}</td>
+                      <td style={{ padding: '6px', textAlign: 'center', fontWeight: 700, color: T.success }}>{productList.reduce((s, p) => s + p.trans, 0)}</td>
+                      <td style={{ padding: '6px', textAlign: 'right', fontWeight: 700, color: T.success }}>฿{fmt(productList.reduce((s, p) => s + p.transAmt, 0))}</td>
+                      <td></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          })()}
 
           {/* แจกแจงรายวัน */}
           {filtered.length > 0 && (() => {
