@@ -1295,6 +1295,142 @@ export default function ManagerApp({ profile, onLogout }) {
             </div>
           })()}
 
+          {/* ═══ ช่วงเวลาที่ขายดี ═══ */}
+          {filtered.length > 0 && (() => {
+            const hourMap = Array.from({ length: 24 }, (_, i) => ({ hour: i, label: `${String(i).padStart(2, '0')}:00`, count: 0, sales: 0 }))
+            const dowMap = [
+              { dow: 0, label: 'อาทิตย์', count: 0, sales: 0 },
+              { dow: 1, label: 'จันทร์', count: 0, sales: 0 },
+              { dow: 2, label: 'อังคาร', count: 0, sales: 0 },
+              { dow: 3, label: 'พุธ', count: 0, sales: 0 },
+              { dow: 4, label: 'พฤหัสบดี', count: 0, sales: 0 },
+              { dow: 5, label: 'ศุกร์', count: 0, sales: 0 },
+              { dow: 6, label: 'เสาร์', count: 0, sales: 0 },
+            ]
+            const periodMap = { 'เช้า (06-12)': { count: 0, sales: 0 }, 'บ่าย (12-18)': { count: 0, sales: 0 }, 'ค่ำ (18-24)': { count: 0, sales: 0 }, 'ดึก (00-06)': { count: 0, sales: 0 } }
+            filtered.forEach(o => {
+              const dt = new Date(o.created_at)
+              if (isNaN(dt)) return
+              const bkk = new Date(dt.toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }))
+              const h = bkk.getHours()
+              const dow = bkk.getDay()
+              const amt = parseFloat(o.sale_price) || 0
+              hourMap[h].count++
+              hourMap[h].sales += amt
+              dowMap[dow].count++
+              dowMap[dow].sales += amt
+              if (h >= 6 && h < 12) { periodMap['เช้า (06-12)'].count++; periodMap['เช้า (06-12)'].sales += amt }
+              else if (h >= 12 && h < 18) { periodMap['บ่าย (12-18)'].count++; periodMap['บ่าย (12-18)'].sales += amt }
+              else if (h >= 18) { periodMap['ค่ำ (18-24)'].count++; periodMap['ค่ำ (18-24)'].sales += amt }
+              else { periodMap['ดึก (00-06)'].count++; periodMap['ดึก (00-06)'].sales += amt }
+            })
+            const maxHourCount = Math.max(...hourMap.map(h => h.count), 1)
+            const peakHour = hourMap.reduce((a, b) => b.count > a.count ? b : a)
+            const peakDow = dowMap.reduce((a, b) => b.count > a.count ? b : a)
+            const periodList = Object.entries(periodMap).map(([name, d]) => ({ name, ...d }))
+            const peakPeriod = periodList.reduce((a, b) => b.count > a.count ? b : a)
+            const maxDowCount = Math.max(...dowMap.map(d => d.count), 1)
+
+            return <div style={{ ...glass, padding: 14, marginBottom: 10 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>⏰ ช่วงเวลาที่ขายดี</div>
+
+              {/* สรุป 3 การ์ด */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 12 }}>
+                <div style={{ background: T.surfaceAlt, borderRadius: 8, padding: 10, textAlign: 'center' }}>
+                  <div style={{ fontSize: 10, color: T.textDim, marginBottom: 2 }}>🕐 ชั่วโมงขายดีสุด</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: T.gold }}>{peakHour.label}</div>
+                  <div style={{ fontSize: 10, color: T.textDim }}>{peakHour.count} ออเดอร์ · ฿{fmt(peakHour.sales)}</div>
+                </div>
+                <div style={{ background: T.surfaceAlt, borderRadius: 8, padding: 10, textAlign: 'center' }}>
+                  <div style={{ fontSize: 10, color: T.textDim, marginBottom: 2 }}>📅 วันขายดีสุด</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: T.gold }}>{peakDow.label}</div>
+                  <div style={{ fontSize: 10, color: T.textDim }}>{peakDow.count} ออเดอร์ · ฿{fmt(peakDow.sales)}</div>
+                </div>
+                <div style={{ background: T.surfaceAlt, borderRadius: 8, padding: 10, textAlign: 'center' }}>
+                  <div style={{ fontSize: 10, color: T.textDim, marginBottom: 2 }}>🌤 ช่วงขายดีสุด</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: T.gold }}>{peakPeriod.name}</div>
+                  <div style={{ fontSize: 10, color: T.textDim }}>{peakPeriod.count} ออเดอร์ · ฿{fmt(peakPeriod.sales)}</div>
+                </div>
+              </div>
+
+              {/* กราฟรายชั่วโมง */}
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: T.textDim, marginBottom: 6 }}>📊 ยอดขายรายชั่วโมง</div>
+                <ResponsiveContainer width="100%" height={140}>
+                  <BarChart data={hourMap} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={T.border} />
+                    <XAxis dataKey="label" tick={{ fontSize: 9, fill: T.textDim }} interval={2} />
+                    <YAxis tick={{ fontSize: 9, fill: T.textDim }} />
+                    <Tooltip contentStyle={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 8, fontSize: 11 }} formatter={(v, n) => [n === 'count' ? `${v} ออเดอร์` : `฿${fmt(v)}`, n === 'count' ? 'ออเดอร์' : 'ยอดขาย']} labelFormatter={l => `เวลา ${l}`} />
+                    <Bar dataKey="count" fill="#DAA520" radius={[3, 3, 0, 0]} name="ออเดอร์" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* ตาราง 2 คอลัมน์: รายวัน + ช่วงเวลา */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                {/* แยกรายวัน */}
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: T.textDim, marginBottom: 6 }}>📅 แยกรายวันในสัปดาห์</div>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10, fontFamily: T.font }}>
+                    <thead>
+                      <tr style={{ background: T.surfaceAlt }}>
+                        <th style={{ padding: '4px 6px', textAlign: 'left', fontWeight: 600, color: T.textDim }}>วัน</th>
+                        <th style={{ padding: '4px 6px', textAlign: 'center', fontWeight: 600, color: T.textDim }}>ออเดอร์</th>
+                        <th style={{ padding: '4px 6px', textAlign: 'right', fontWeight: 600, color: T.textDim }}>ยอดขาย</th>
+                        <th style={{ padding: '4px 6px', textAlign: 'right', fontWeight: 600, color: T.textDim, width: '30%' }}></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dowMap.map(d => (
+                        <tr key={d.dow} style={{ borderBottom: `1px solid ${T.border}`, background: d.dow === peakDow.dow ? 'rgba(184,134,11,0.06)' : 'transparent' }}>
+                          <td style={{ padding: '4px 6px', fontWeight: d.dow === peakDow.dow ? 800 : 600 }}>{d.dow === peakDow.dow ? '🏆 ' : ''}{d.label}</td>
+                          <td style={{ padding: '4px 6px', textAlign: 'center', fontWeight: 700, color: T.gold }}>{d.count}</td>
+                          <td style={{ padding: '4px 6px', textAlign: 'right', fontWeight: 700, color: T.success }}>฿{fmt(d.sales)}</td>
+                          <td style={{ padding: '4px 6px' }}>
+                            <div style={{ height: 6, borderRadius: 3, background: T.surfaceAlt, overflow: 'hidden' }}>
+                              <div style={{ width: (d.count / maxDowCount * 100) + '%', height: '100%', borderRadius: 3, background: d.dow === peakDow.dow ? 'linear-gradient(90deg, #B8860B, #DAA520)' : T.gold }}></div>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* แยกช่วงเวลา */}
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: T.textDim, marginBottom: 6 }}>🌤 แยกช่วงเวลา</div>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10, fontFamily: T.font }}>
+                    <thead>
+                      <tr style={{ background: T.surfaceAlt }}>
+                        <th style={{ padding: '4px 6px', textAlign: 'left', fontWeight: 600, color: T.textDim }}>ช่วง</th>
+                        <th style={{ padding: '4px 6px', textAlign: 'center', fontWeight: 600, color: T.textDim }}>ออเดอร์</th>
+                        <th style={{ padding: '4px 6px', textAlign: 'right', fontWeight: 600, color: T.textDim }}>ยอดขาย</th>
+                        <th style={{ padding: '4px 6px', textAlign: 'right', fontWeight: 600, color: T.textDim, width: '30%' }}></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {periodList.map(p => {
+                        const maxP = Math.max(...periodList.map(x => x.count), 1)
+                        return <tr key={p.name} style={{ borderBottom: `1px solid ${T.border}`, background: p.name === peakPeriod.name ? 'rgba(184,134,11,0.06)' : 'transparent' }}>
+                          <td style={{ padding: '4px 6px', fontWeight: p.name === peakPeriod.name ? 800 : 600 }}>{p.name === peakPeriod.name ? '🏆 ' : ''}{p.name}</td>
+                          <td style={{ padding: '4px 6px', textAlign: 'center', fontWeight: 700, color: T.gold }}>{p.count}</td>
+                          <td style={{ padding: '4px 6px', textAlign: 'right', fontWeight: 700, color: T.success }}>฿{fmt(p.sales)}</td>
+                          <td style={{ padding: '4px 6px' }}>
+                            <div style={{ height: 6, borderRadius: 3, background: T.surfaceAlt, overflow: 'hidden' }}>
+                              <div style={{ width: (p.count / maxP * 100) + '%', height: '100%', borderRadius: 3, background: p.name === peakPeriod.name ? 'linear-gradient(90deg, #B8860B, #DAA520)' : T.gold }}></div>
+                            </div>
+                          </td>
+                        </tr>
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          })()}
+
           {/* แจกแจงรายวัน */}
           {filtered.length > 0 && (() => {
             const dayMap = {}
