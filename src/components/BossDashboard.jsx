@@ -6,8 +6,8 @@ import { supabase } from '../lib/supabase'
 //  Classic Executive Theme
 // ═══════════════════════════════════════════
 const C = {
-  font: "'Cormorant Garamond', 'Noto Sans Thai', Georgia, serif",
-  fontSans: "'DM Sans', 'Noto Sans Thai', sans-serif",
+  font: "'Sarabun', 'Noto Sans Thai', sans-serif",
+  fontSans: "'Sarabun', 'Noto Sans Thai', sans-serif",
   bg: '#f4f1ec',
   surface: '#ffffff',
   surfaceAlt: '#faf8f5',
@@ -61,7 +61,7 @@ function BossLogin({ onLogin }) {
   return (
     <div style={{ minHeight: '100vh', background: C.navy, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: C.fontSans }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700;800&family=Noto+Sans+Thai:wght@300;400;500;600;700;800&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&family=Noto+Sans+Thai:wght@300;400;500;600;700;800&display=swap');
       `}</style>
       <div style={{ width: 380, padding: 40, background: C.surface, borderRadius: 2, boxShadow: C.shadowLg }}>
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
@@ -310,7 +310,7 @@ export default function BossDashboard() {
   // ═══ Render ═══
   if (status === 'loading') return (
     <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: C.fontSans }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700;800&family=Noto+Sans+Thai:wght@300;400;500;600;700;800&display=swap');`}</style>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&family=Noto+Sans+Thai:wght@300;400;500;600;700;800&display=swap');`}</style>
       <div style={{ textAlign: 'center', color: C.textDim }}>
         <div style={{ fontSize: 18, fontFamily: C.font, fontWeight: 600 }}>กำลังโหลด...</div>
       </div>
@@ -335,7 +335,7 @@ export default function BossDashboard() {
   return (
     <div style={{ minHeight: '100vh', background: C.bg, fontFamily: C.fontSans }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700;800&family=Noto+Sans+Thai:wght@300;400;500;600;700;800&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&family=Noto+Sans+Thai:wght@300;400;500;600;700;800&display=swap');
         body { background: ${C.bg}; }
         table { border-spacing: 0; width: 100%; }
         ::-webkit-scrollbar { width: 6px; height: 6px; }
