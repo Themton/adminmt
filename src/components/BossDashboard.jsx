@@ -126,6 +126,7 @@ export default function BossDashboard() {
   const [dateFrom, setDateFrom] = useState(todayStr)
   const [dateTo, setDateTo] = useState(todayStr)
   const [quickRange, setQuickRange] = useState('today')
+  const [selectedEmployee, setSelectedEmployee] = useState(null)
 
   const setQuick = (key) => {
     setQuickRange(key)
@@ -405,6 +406,7 @@ export default function BossDashboard() {
         {/* ═══ Main Content ═══ */}
         <div style={{ flex: 1, padding: 32, overflowY: 'auto', maxHeight: 'calc(100vh - 56px)' }}>
           {/* Header */}
+          {!(section === 'employees' && selectedEmployee) && (
           <div style={{ marginBottom: 28 }}>
             <h1 style={{ fontSize: 28, fontFamily: C.font, fontWeight: 700, color: C.text, margin: 0 }}>
               {navItems.find(n => n.id === section)?.icon} {navItems.find(n => n.id === section)?.label}
@@ -413,6 +415,7 @@ export default function BossDashboard() {
               {fmtDateFull(dateFrom)}{dateFrom !== dateTo ? ` — ${fmtDateFull(dateTo)}` : ''} · {totalOrders} ออเดอร์ · ฿{fmt(totalSales)}
             </div>
           </div>
+          )}
 
           {/* ═══════ OVERVIEW ═══════ */}
           {section === 'overview' && (
@@ -530,6 +533,215 @@ export default function BossDashboard() {
           {/* ═══════ EMPLOYEES ═══════ */}
           {section === 'employees' && (
             <div className="fade-in">
+              {selectedEmployee ? (() => {
+                // ═══ Individual Employee Report ═══
+                const emp = selectedEmployee
+                const empOrders = orders.filter(o => o.employee_name === emp.name)
+                const empSales = empOrders.reduce((s, o) => s + (parseFloat(o.sale_price) || 0), 0)
+                const empCod = empOrders.filter(o => o.payment_type !== 'transfer')
+                const empTrans = empOrders.filter(o => o.payment_type === 'transfer')
+                const empCodAmt = empCod.reduce((s, o) => s + (parseFloat(o.sale_price) || 0), 0)
+                const empTransAmt = empTrans.reduce((s, o) => s + (parseFloat(o.sale_price) || 0), 0)
+                const empAvg = empOrders.length > 0 ? empSales / empOrders.length : 0
+
+                // Products
+                const empProducts = {}
+                empOrders.forEach(o => {
+                  const p = (o.remark || '').trim() || '—'
+                  if (!empProducts[p]) empProducts[p] = { name: p, count: 0, sales: 0 }
+                  empProducts[p].count++
+                  empProducts[p].sales += parseFloat(o.sale_price) || 0
+                })
+                const empProdList = Object.values(empProducts).sort((a, b) => b.count - a.count)
+
+                // Channels
+                const empChannels = {}
+                empOrders.forEach(o => {
+                  const ch = o.sales_channel || '—'
+                  if (!empChannels[ch]) empChannels[ch] = { name: ch, count: 0, sales: 0 }
+                  empChannels[ch].count++
+                  empChannels[ch].sales += parseFloat(o.sale_price) || 0
+                })
+                const empChList = Object.values(empChannels).sort((a, b) => b.count - a.count)
+
+                // Hourly
+                const empHourly = Array.from({ length: 24 }, (_, i) => ({ hour: `${String(i).padStart(2, '0')}:00`, ออเดอร์: 0, ยอดขาย: 0 }))
+                empOrders.forEach(o => {
+                  const dt = new Date(o.created_at)
+                  if (isNaN(dt)) return
+                  const bkk = new Date(dt.toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }))
+                  empHourly[bkk.getHours()].ออเดอร์++
+                  empHourly[bkk.getHours()].ยอดขาย += parseFloat(o.sale_price) || 0
+                })
+                const peakH = empHourly.reduce((a, b) => b.ออเดอร์ > a.ออเดอร์ ? b : a)
+
+                // Daily
+                const empDaily = {}
+                empOrders.forEach(o => {
+                  const d = (o.order_date || '').substring(0, 10)
+                  if (!d) return
+                  if (!empDaily[d]) empDaily[d] = { date: d, ยอดขาย: 0, ออเดอร์: 0 }
+                  empDaily[d].ยอดขาย += parseFloat(o.sale_price) || 0
+                  empDaily[d].ออเดอร์++
+                })
+                const empDailyList = Object.values(empDaily).sort((a, b) => a.date.localeCompare(b.date))
+
+                // Rank
+                const rank = empStats.findIndex(e => e.name === emp.name) + 1
+
+                return <>
+                  {/* Back button + header */}
+                  <div style={{ marginBottom: 20 }}>
+                    <button onClick={() => setSelectedEmployee(null)} style={{
+                      padding: '8px 18px', border: `1px solid ${C.border}`, borderRadius: 2,
+                      background: C.surface, color: C.textDim, fontSize: 13, cursor: 'pointer',
+                      fontFamily: C.fontSans, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16,
+                    }}>← กลับ ดูทั้งหมด</button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                      <div style={{ width: 56, height: 56, borderRadius: '50%', background: C.navy, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, color: '#fff', fontWeight: 700 }}>
+                        {emp.name.charAt(0)}
+                      </div>
+                      <div>
+                        <h2 style={{ margin: 0, fontSize: 22, fontFamily: C.font, fontWeight: 700, color: C.text }}>{emp.name}</h2>
+                        <div style={{ fontSize: 12, color: C.textDim, marginTop: 2 }}>อันดับ #{rank} · {empOrders.length} ออเดอร์ · ฿{fmt(empSales)}</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* KPI Cards */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 14, marginBottom: 24 }}>
+                    {[
+                      { label: 'ยอดขายรวม', value: `฿${fmt(empSales)}`, color: C.accent },
+                      { label: 'ออเดอร์', value: empOrders.length, color: C.navy },
+                      { label: 'เฉลี่ย/ออเดอร์', value: `฿${fmt(empAvg)}`, color: C.success },
+                      { label: 'COD', value: `${empCod.length} (฿${fmt(empCodAmt)})`, color: C.accent },
+                      { label: 'โอน', value: `${empTrans.length} (฿${fmt(empTransAmt)})`, color: C.success },
+                    ].map((k, i) => (
+                      <div key={i} style={{ ...card, padding: 16, borderTop: `3px solid ${k.color}` }}>
+                        <div style={{ fontSize: 10, color: C.textMuted, fontWeight: 500, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 6 }}>{k.label}</div>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: C.text, fontFamily: C.font }}>{k.value}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Daily chart */}
+                  {empDailyList.length > 1 && (
+                    <div style={{ ...card, padding: 20, marginBottom: 20 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12, fontFamily: C.font }}>ยอดขายรายวัน</div>
+                      <ResponsiveContainer width="100%" height={180}>
+                        <AreaChart data={empDailyList}>
+                          <defs><linearGradient id="gradEmp" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={C.accent} stopOpacity={0.15} /><stop offset="100%" stopColor={C.accent} stopOpacity={0} /></linearGradient></defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+                          <XAxis dataKey="date" tick={{ fontSize: 10, fill: C.textDim }} tickFormatter={d => fmtDate(d)} />
+                          <YAxis tick={{ fontSize: 10, fill: C.textDim }} tickFormatter={v => `฿${fmt(v)}`} />
+                          <Tooltip content={<ClassicTooltip />} />
+                          <Area type="monotone" dataKey="ยอดขาย" stroke={C.accent} strokeWidth={2} fill="url(#gradEmp)" />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+
+                  {/* 3 columns: Products, Channels, Hourly */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 20 }}>
+                    {/* Products */}
+                    <div style={{ ...card, padding: 16 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 10, fontFamily: C.font }}>📦 สินค้าที่ขาย ({empProdList.length})</div>
+                      <table>
+                        <thead><tr>
+                          <th style={{ ...th, fontSize: 10, padding: '6px 10px' }}>สินค้า</th>
+                          <th style={{ ...th, fontSize: 10, padding: '6px 10px', textAlign: 'center' }}>จำนวน</th>
+                          <th style={{ ...th, fontSize: 10, padding: '6px 10px', textAlign: 'right' }}>ยอด</th>
+                        </tr></thead>
+                        <tbody>
+                          {empProdList.map((p, i) => (
+                            <tr key={p.name} style={{ background: i === 0 ? '#fdfaf3' : 'transparent' }}>
+                              <td style={{ ...td, fontSize: 12, padding: '6px 10px', fontWeight: i === 0 ? 700 : 400 }}>{i === 0 ? '🏆 ' : ''}{p.name}</td>
+                              <td style={{ ...td, fontSize: 12, padding: '6px 10px', textAlign: 'center', fontWeight: 700, color: C.accent }}>{p.count}</td>
+                              <td style={{ ...td, fontSize: 12, padding: '6px 10px', textAlign: 'right', fontWeight: 700, color: C.success }}>฿{fmt(p.sales)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Channels */}
+                    <div style={{ ...card, padding: 16 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 10, fontFamily: C.font }}>📢 ช่องทาง ({empChList.length})</div>
+                      <table>
+                        <thead><tr>
+                          <th style={{ ...th, fontSize: 10, padding: '6px 10px' }}>เพจ</th>
+                          <th style={{ ...th, fontSize: 10, padding: '6px 10px', textAlign: 'center' }}>จำนวน</th>
+                          <th style={{ ...th, fontSize: 10, padding: '6px 10px', textAlign: 'right' }}>ยอด</th>
+                        </tr></thead>
+                        <tbody>
+                          {empChList.map((c, i) => (
+                            <tr key={c.name} style={{ background: i === 0 ? '#fdfaf3' : 'transparent' }}>
+                              <td style={{ ...td, fontSize: 12, padding: '6px 10px', fontWeight: i === 0 ? 700 : 400 }}>{i === 0 ? '🏆 ' : ''}{c.name}</td>
+                              <td style={{ ...td, fontSize: 12, padding: '6px 10px', textAlign: 'center', fontWeight: 700, color: C.accent }}>{c.count}</td>
+                              <td style={{ ...td, fontSize: 12, padding: '6px 10px', textAlign: 'right', fontWeight: 700, color: C.success }}>฿{fmt(c.sales)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Hourly */}
+                    <div style={{ ...card, padding: 16 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 10, fontFamily: C.font }}>⏰ ช่วงเวลาขายดี</div>
+                      <div style={{ textAlign: 'center', padding: '10px 0 14px', background: C.surfaceAlt, borderRadius: 2, marginBottom: 10 }}>
+                        <div style={{ fontSize: 10, color: C.textMuted }}>ชั่วโมงขายดีสุด</div>
+                        <div style={{ fontSize: 24, fontWeight: 800, fontFamily: C.font, color: C.accent }}>{peakH.hour}</div>
+                        <div style={{ fontSize: 10, color: C.textDim }}>{peakH.ออเดอร์} ออเดอร์ · ฿{fmt(peakH.ยอดขาย)}</div>
+                      </div>
+                      <ResponsiveContainer width="100%" height={120}>
+                        <BarChart data={empHourly}>
+                          <XAxis dataKey="hour" tick={{ fontSize: 8, fill: C.textDim }} interval={3} />
+                          <YAxis tick={{ fontSize: 8, fill: C.textDim }} width={20} />
+                          <Tooltip content={<ClassicTooltip />} />
+                          <Bar dataKey="ออเดอร์" fill={C.accent} radius={[2, 2, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  {/* Orders table */}
+                  <div style={{ ...card, padding: 20 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12, fontFamily: C.font }}>📋 รายการออเดอร์ ({empOrders.length})</div>
+                    <div style={{ overflowX: 'auto' }}>
+                      <table>
+                        <thead><tr>
+                          <th style={{ ...th, width: 36 }}>#</th>
+                          <th style={th}>เลขออเดอร์</th>
+                          <th style={th}>วันที่</th>
+                          <th style={th}>ลูกค้า</th>
+                          <th style={th}>สินค้า</th>
+                          <th style={th}>เพจ</th>
+                          <th style={{ ...th, textAlign: 'center' }}>ชำระ</th>
+                          <th style={{ ...th, textAlign: 'right' }}>ยอด</th>
+                        </tr></thead>
+                        <tbody>
+                          {empOrders.slice(0, 100).map((o, i) => (
+                            <tr key={o.id} style={{ background: i % 2 === 0 ? C.surfaceAlt : 'transparent' }}>
+                              <td style={{ ...td, textAlign: 'center', color: C.textMuted, fontSize: 11 }}>{i + 1}</td>
+                              <td style={{ ...td, fontWeight: 600, fontSize: 12 }}>{o.order_number || '—'}</td>
+                              <td style={{ ...td, fontSize: 11, color: C.textDim }}>{o.order_date || '—'}</td>
+                              <td style={{ ...td, fontWeight: 500 }}>{o.customer_name || '—'}</td>
+                              <td style={{ ...td, fontSize: 12, color: C.textDim, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.remark || '—'}</td>
+                              <td style={{ ...td, fontSize: 11, color: C.textDim }}>{o.sales_channel || '—'}</td>
+                              <td style={{ ...td, textAlign: 'center' }}>
+                                <span style={{ padding: '2px 8px', borderRadius: 2, fontSize: 10, fontWeight: 600, background: o.payment_type === 'transfer' ? '#e8f5e9' : '#fff3e0', color: o.payment_type === 'transfer' ? C.success : C.accent }}>{o.payment_type === 'transfer' ? 'โอน' : 'COD'}</span>
+                              </td>
+                              <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: C.success }}>฿{fmt(parseFloat(o.sale_price) || 0)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {empOrders.length > 100 && <div style={{ textAlign: 'center', padding: 12, color: C.textMuted, fontSize: 12 }}>แสดง 100 จาก {empOrders.length} รายการ</div>}
+                    </div>
+                  </div>
+                </>
+              })() : (
+                <>
               {/* Team summary */}
               {teamStats.length > 0 && (
                 <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(teamStats.length, 4)}, 1fr)`, gap: 16, marginBottom: 24 }}>
@@ -559,7 +771,7 @@ export default function BossDashboard() {
 
               {/* Full employee table */}
               <div style={{ ...card, padding: 20 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12, fontFamily: C.font }}>รายละเอียดพนักงาน ({empStats.length} คน)</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12, fontFamily: C.font }}>รายละเอียดพนักงาน ({empStats.length} คน) — กดชื่อเพื่อดูรายงานรายบุคคล</div>
                 <table>
                   <thead><tr>
                     <th style={{ ...th, width: 40 }}>#</th>
@@ -569,15 +781,16 @@ export default function BossDashboard() {
                     <th style={{ ...th, textAlign: 'center' }}>COD</th>
                     <th style={{ ...th, textAlign: 'center' }}>โอน</th>
                     <th style={{ ...th, textAlign: 'right' }}>เฉลี่ย/ออเดอร์</th>
-                    <th style={{ ...th, textAlign: 'right', width: '15%' }}>สัดส่วน</th>
+                    <th style={{ ...th, textAlign: 'right', width: '12%' }}>สัดส่วน</th>
+                    <th style={{ ...th, textAlign: 'center', width: 80 }}></th>
                   </tr></thead>
                   <tbody>
                     {empStats.map((e, i) => {
                       const pct = totalSales > 0 ? (e.sales / totalSales * 100).toFixed(1) : '0.0'
                       return (
-                        <tr key={e.name} style={{ background: i < 3 ? '#fdfaf3' : (i % 2 === 0 ? C.surfaceAlt : 'transparent') }}>
+                        <tr key={e.name} style={{ background: i < 3 ? '#fdfaf3' : (i % 2 === 0 ? C.surfaceAlt : 'transparent'), cursor: 'pointer', transition: 'background 0.15s' }} onClick={() => setSelectedEmployee(e)} onMouseEnter={ev => ev.currentTarget.style.background = '#f0ede6'} onMouseLeave={ev => ev.currentTarget.style.background = i < 3 ? '#fdfaf3' : (i % 2 === 0 ? C.surfaceAlt : 'transparent')}>
                           <td style={{ ...td, textAlign: 'center', fontWeight: 800, color: i < 3 ? C.gold : C.textMuted }}>{i + 1}</td>
-                          <td style={{ ...td, fontWeight: 600 }}>{i === 0 ? '🥇 ' : i === 1 ? '🥈 ' : i === 2 ? '🥉 ' : ''}{e.name}</td>
+                          <td style={{ ...td, fontWeight: 600, color: C.accent }}>{i === 0 ? '🥇 ' : i === 1 ? '🥈 ' : i === 2 ? '🥉 ' : ''}{e.name}</td>
                           <td style={{ ...td, textAlign: 'center', fontWeight: 700, color: C.accent }}>{e.count}</td>
                           <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: C.success }}>฿{fmt(e.sales)}</td>
                           <td style={{ ...td, textAlign: 'center' }}>{e.cod}</td>
@@ -591,6 +804,9 @@ export default function BossDashboard() {
                               <span style={{ fontSize: 10, color: C.textMuted, minWidth: 36 }}>{pct}%</span>
                             </div>
                           </td>
+                          <td style={{ ...td, textAlign: 'center' }}>
+                            <span style={{ padding: '4px 10px', borderRadius: 2, fontSize: 11, fontWeight: 600, background: C.navy, color: '#fff', cursor: 'pointer' }}>ดูรายงาน</span>
+                          </td>
                         </tr>
                       )
                     })}
@@ -602,10 +818,13 @@ export default function BossDashboard() {
                       <td style={{ ...td, textAlign: 'center', fontWeight: 700 }}>{transOrders.length}</td>
                       <td style={{ ...td, textAlign: 'right' }}>฿{fmt(avgOrder)}</td>
                       <td style={{ ...td, textAlign: 'right' }}>100%</td>
+                      <td></td>
                     </tr>
                   </tbody>
                 </table>
               </div>
+                </>
+              )}
             </div>
           )}
 
