@@ -156,16 +156,29 @@ export default function BossDashboard() {
   // Fetch data
   useEffect(() => {
     if (status !== 'ready') return
+    const fetchAllOrders = async () => {
+      let allOrders = []
+      let from = 0
+      const pageSize = 1000
+      while (true) {
+        let query = supabase.from('mt_orders').select('*').order('created_at', { ascending: false }).range(from, from + pageSize - 1)
+        if (dateFrom) query = query.gte('order_date', dateFrom)
+        if (dateTo) query = query.lte('order_date', dateTo)
+        const { data, error } = await query
+        if (error || !data || data.length === 0) break
+        allOrders = allOrders.concat(data)
+        if (data.length < pageSize) break
+        from += pageSize
+      }
+      return allOrders
+    }
     const fetchAll = async () => {
-      let query = supabase.from('mt_orders').select('*').order('created_at', { ascending: false })
-      if (dateFrom) query = query.gte('order_date', dateFrom)
-      if (dateTo) query = query.lte('order_date', dateTo)
-      const [ordRes, teamRes, profRes] = await Promise.all([
-        query,
+      const [ords, teamRes, profRes] = await Promise.all([
+        fetchAllOrders(),
         supabase.from('mt_teams').select('*').order('name'),
         supabase.from('mt_profiles').select('*, mt_teams(id, name)').order('created_at', { ascending: false }),
       ])
-      if (ordRes.data) setOrders(ordRes.data)
+      setOrders(ords)
       if (teamRes.data) setTeams(teamRes.data)
       if (profRes.data) setProfiles(profRes.data)
     }
@@ -175,13 +188,24 @@ export default function BossDashboard() {
   // Realtime
   useEffect(() => {
     if (status !== 'ready') return
-    const ch = supabase.channel('boss-orders')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'mt_orders' }, () => {
-        let query = supabase.from('mt_orders').select('*').order('created_at', { ascending: false })
+    const refetch = async () => {
+      let allOrders = []
+      let from = 0
+      const pageSize = 1000
+      while (true) {
+        let query = supabase.from('mt_orders').select('*').order('created_at', { ascending: false }).range(from, from + pageSize - 1)
         if (dateFrom) query = query.gte('order_date', dateFrom)
         if (dateTo) query = query.lte('order_date', dateTo)
-        query.then(({ data }) => { if (data) setOrders(data) })
-      })
+        const { data } = await query
+        if (!data || data.length === 0) break
+        allOrders = allOrders.concat(data)
+        if (data.length < pageSize) break
+        from += pageSize
+      }
+      setOrders(allOrders)
+    }
+    const ch = supabase.channel('boss-orders')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'mt_orders' }, () => refetch())
       .subscribe()
     return () => supabase.removeChannel(ch)
   }, [status, dateFrom, dateTo])
@@ -414,7 +438,7 @@ export default function BossDashboard() {
               {navItems.find(n => n.id === section)?.icon} {navItems.find(n => n.id === section)?.label}
             </h1>
             <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>
-              {fmtDateFull(dateFrom)}{dateFrom !== dateTo ? ` — ${fmtDateFull(dateTo)}` : ''} · {totalOrders} ออเดอร์ · ฿{fmt(totalSales)}
+              {dateFrom ? fmtDateFull(dateFrom) : 'ทั้งหมด'}{dateFrom && dateFrom !== dateTo ? ` — ${fmtDateFull(dateTo)}` : ''} · {totalOrders} ออเดอร์ · ฿{fmt(totalSales)}
             </div>
           </div>
           )}
