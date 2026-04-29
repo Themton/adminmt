@@ -1422,7 +1422,21 @@ export default function BossDashboard() {
                 </div>
               </div>
               <div style={{ ...card, padding: 20 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12, fontFamily: C.font }}>🏆 ลูกค้าซื้อซ้ำบ่อยที่สุด (Top 30)</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: C.font }}>🏆 ลูกค้าซื้อซ้ำบ่อยที่สุด ({customerStats.repeat.length} คน)</div>
+                  <button onClick={() => {
+                    const bom = '\uFEFF'
+                    const header = '#,ชื่อ,เบอร์โทร,จำนวนครั้ง,ยอดรวม,เฉลี่ย/ครั้ง,ซื้อครั้งแรก,ซื้อล่าสุด\n'
+                    const rows = customerStats.repeat.map((c, i) =>
+                      `${i + 1},"${c.name}","${c.phone}",${c.count},${Math.round(c.sales)},${Math.round(c.count > 0 ? c.sales / c.count : 0)},${c.firstDate || ''},${c.lastDate || ''}`
+                    ).join('\n')
+                    const blob = new Blob([bom + header + rows], { type: 'text/csv;charset=utf-8;' })
+                    const url = URL.createObjectURL(blob)
+                    const a = document.createElement('a'); a.href = url; a.download = `ลูกค้าซื้อซ้ำ_${dateFrom || 'all'}_${dateTo || 'all'}.csv`; a.click(); URL.revokeObjectURL(url)
+                  }} style={{ padding: '6px 16px', border: `1px solid ${C.border}`, borderRadius: 2, background: C.surface, color: C.accent, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: C.fontSans, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    📥 Export CSV
+                  </button>
+                </div>
                 <table>
                   <thead><tr>
                     <th style={{ ...th, width: 36 }}>#</th>
@@ -1431,10 +1445,11 @@ export default function BossDashboard() {
                     <th style={{ ...th, textAlign: 'center' }}>จำนวนครั้ง</th>
                     <th style={{ ...th, textAlign: 'right' }}>ยอดรวม</th>
                     <th style={{ ...th, textAlign: 'right' }}>เฉลี่ย/ครั้ง</th>
+                    <th style={th}>ซื้อครั้งแรก</th>
                     <th style={th}>ซื้อล่าสุด</th>
                   </tr></thead>
                   <tbody>
-                    {customerStats.repeat.slice(0, 30).map((c, i) => (
+                    {customerStats.repeat.slice(0, 50).map((c, i) => (
                       <tr key={c.phone} style={{ background: i < 3 ? '#fdfaf3' : (i % 2 === 0 ? C.surfaceAlt : 'transparent') }}>
                         <td style={{ ...td, textAlign: 'center', fontWeight: 800, color: i < 3 ? C.gold : C.textMuted }}>{i + 1}</td>
                         <td style={{ ...td, fontWeight: 600 }}>{c.name}</td>
@@ -1442,11 +1457,13 @@ export default function BossDashboard() {
                         <td style={{ ...td, textAlign: 'center', fontWeight: 800, color: C.accent }}>{c.count}</td>
                         <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: C.success }}>฿{fmt(c.sales)}</td>
                         <td style={{ ...td, textAlign: 'right' }}>฿{fmt(c.count > 0 ? c.sales / c.count : 0)}</td>
+                        <td style={{ ...td, fontSize: 11, color: C.textDim }}>{c.firstDate || '—'}</td>
                         <td style={{ ...td, fontSize: 11, color: C.textDim }}>{c.lastDate || '—'}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+                {customerStats.repeat.length > 50 && <div style={{ textAlign: 'center', padding: 12, color: C.textMuted, fontSize: 12 }}>แสดง 50 จาก {customerStats.repeat.length} คน — กด Export CSV เพื่อดาวน์โหลดทั้งหมด</div>}
               </div>
             </div>
           )}
