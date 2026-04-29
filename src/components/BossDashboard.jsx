@@ -132,7 +132,8 @@ export default function BossDashboard() {
     setQuickRange(key)
     const now = new Date()
     const todayS = now.toISOString().split('T')[0]
-    if (key === 'today') { setDateFrom(todayS); setDateTo(todayS) }
+    if (key === 'all') { setDateFrom(''); setDateTo('') }
+    else if (key === 'today') { setDateFrom(todayS); setDateTo(todayS) }
     else if (key === 'yesterday') { const y = new Date(now); y.setDate(y.getDate() - 1); const ys = y.toISOString().split('T')[0]; setDateFrom(ys); setDateTo(ys) }
     else if (key === 'week') { const w = new Date(now); w.setDate(w.getDate() - 6); setDateFrom(w.toISOString().split('T')[0]); setDateTo(todayS) }
     else if (key === 'month') { const m = new Date(now.getFullYear(), now.getMonth(), 1); setDateFrom(m.toISOString().split('T')[0]); setDateTo(todayS) }
@@ -379,6 +380,7 @@ export default function BossDashboard() {
           <div style={{ padding: '20px 20px 0', borderTop: `1px solid ${C.border}`, marginTop: 16 }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: C.textMuted, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 10 }}>ช่วงเวลา</div>
             {[
+              { key: 'all', label: 'ทั้งหมด' },
               { key: 'today', label: 'วันนี้' },
               { key: 'yesterday', label: 'เมื่อวาน' },
               { key: 'week', label: '7 วัน' },
