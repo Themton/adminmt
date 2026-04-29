@@ -129,6 +129,11 @@ export default function BossDashboard() {
   const [quickRange, setQuickRange] = useState('today')
   const [selectedEmployee, setSelectedEmployee] = useState(null)
   const [dataLoading, setDataLoading] = useState(false)
+  const [prevOrders, setPrevOrders] = useState([])
+  const [targets, setTargets] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('boss_targets') || '{}') } catch { return {} }
+  })
+  const [editTarget, setEditTarget] = useState(false)
 
   const setQuick = (key) => {
     setQuickRange(key)
@@ -180,14 +185,32 @@ export default function BossDashboard() {
       const results = await Promise.all(promises)
       return results.flatMap(r => r.data || [])
     }
+    const fetchPrevOrders = async () => {
+      if (!dateFrom || !dateTo) return []
+      const from = new Date(dateFrom), to = new Date(dateTo)
+      const days = Math.round((to - from) / 864e5) + 1
+      const prevTo = new Date(from); prevTo.setDate(prevTo.getDate() - 1)
+      const prevFrom = new Date(prevTo); prevFrom.setDate(prevFrom.getDate() - days + 1)
+      const pf = prevFrom.toISOString().split('T')[0], pt = prevTo.toISOString().split('T')[0]
+      let cq = supabase.from('mt_orders').select('id', { count: 'exact', head: true }).gte('order_date', pf).lte('order_date', pt)
+      const { count } = await cq
+      if (!count) return []
+      const ps = 1000, pages = Math.ceil(count / ps)
+      const res = await Promise.all(Array.from({ length: pages }, (_, i) => {
+        return supabase.from('mt_orders').select(selectFields).order('created_at', { ascending: false }).range(i * ps, (i + 1) * ps - 1).gte('order_date', pf).lte('order_date', pt)
+      }))
+      return res.flatMap(r => r.data || [])
+    }
     const fetchAll = async () => {
       setDataLoading(true)
-      const [ords, teamRes, profRes] = await Promise.all([
+      const [ords, prev, teamRes, profRes] = await Promise.all([
         fetchAllOrders(),
+        fetchPrevOrders(),
         supabase.from('mt_teams').select('*').order('name'),
         supabase.from('mt_profiles').select('*, mt_teams(id, name)').order('created_at', { ascending: false }),
       ])
       setOrders(ords)
+      setPrevOrders(prev)
       if (teamRes.data) setTeams(teamRes.data)
       if (profRes.data) setProfiles(profRes.data)
       setDataLoading(false)
@@ -344,6 +367,63 @@ export default function BossDashboard() {
     { name: 'โอน', value: transTotal, color: C.success },
   ].filter(p => p.value > 0), [codTotal, transTotal])
 
+  // Province stats
+  const provinceStats = useMemo(() => {
+    const m = {}
+    orders.forEach(o => {
+      const prov = (o.province || o.district || '').trim() || '—'
+      if (!m[prov]) m[prov] = { name: prov, count: 0, sales: 0 }
+      m[prov].count++
+      m[prov].sales += parseFloat(o.sale_price) || 0
+    })
+    return Object.values(m).sort((a, b) => b.sales - a.sales)
+  }, [orders])
+
+  // Customer stats
+  const customerStats = useMemo(() => {
+    const m = {}
+    orders.forEach(o => {
+      const phone = (o.customer_phone || '').trim() || '—'
+      if (!m[phone]) m[phone] = { phone, name: o.customer_name || '—', count: 0, sales: 0, firstDate: o.order_date, lastDate: o.order_date }
+      m[phone].count++
+      m[phone].sales += parseFloat(o.sale_price) || 0
+      if (o.order_date < m[phone].firstDate) m[phone].firstDate = o.order_date
+      if (o.order_date > m[phone].lastDate) m[phone].lastDate = o.order_date
+      if (o.customer_name && o.customer_name !== '—') m[phone].name = o.customer_name
+    })
+    const all = Object.values(m)
+    const repeat = all.filter(c => c.count >= 2).sort((a, b) => b.count - a.count)
+    const newCust = all.filter(c => c.count === 1)
+    return { all, repeat, new: newCust, repeatSales: repeat.reduce((s, c) => s + c.sales, 0), newSales: newCust.reduce((s, c) => s + c.sales, 0) }
+  }, [orders])
+
+  // Comparison stats
+  const compareStats = useMemo(() => {
+    const curSales = totalSales
+    const curCount = totalOrders
+    const prevSales = prevOrders.reduce((s, o) => s + (parseFloat(o.sale_price) || 0), 0)
+    const prevCount = prevOrders.length
+    const curAvg = curCount > 0 ? curSales / curCount : 0
+    const prevAvg = prevCount > 0 ? prevSales / prevCount : 0
+    const curCod = orders.filter(o => o.payment_type !== 'transfer').length
+    const prevCod = prevOrders.filter(o => o.payment_type !== 'transfer').length
+    const curTrans = orders.filter(o => o.payment_type === 'transfer').length
+    const prevTrans = prevOrders.filter(o => o.payment_type === 'transfer').length
+    const pct = (cur, prev) => prev > 0 ? ((cur - prev) / prev * 100).toFixed(1) : cur > 0 ? '100.0' : '0.0'
+    return {
+      curSales, prevSales, curCount, prevCount, curAvg, prevAvg,
+      curCod, prevCod, curTrans, prevTrans,
+      salesGrowth: pct(curSales, prevSales), countGrowth: pct(curCount, prevCount),
+      avgGrowth: pct(curAvg, prevAvg),
+    }
+  }, [orders, prevOrders, totalSales, totalOrders])
+
+  // Save targets
+  const saveTargets = (newT) => {
+    setTargets(newT)
+    localStorage.setItem('boss_targets', JSON.stringify(newT))
+  }
+
   // ═══ Render ═══
   if (status === 'loading') return (
     <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: C.fontSans }}>
@@ -362,10 +442,14 @@ export default function BossDashboard() {
 
   const navItems = [
     { id: 'overview', icon: '📊', label: 'ภาพรวม' },
+    { id: 'compare', icon: '📈', label: 'เปรียบเทียบ' },
     { id: 'employees', icon: '👥', label: 'พนักงาน' },
     { id: 'products', icon: '📦', label: 'สินค้า' },
+    { id: 'customers', icon: '🔄', label: 'ลูกค้า' },
+    { id: 'provinces', icon: '🗺️', label: 'พื้นที่ขาย' },
     { id: 'time', icon: '⏰', label: 'ช่วงเวลา' },
     { id: 'channels', icon: '📢', label: 'ช่องทาง' },
+    { id: 'targets', icon: '🎯', label: 'เป้าหมาย' },
     { id: 'orders', icon: '📋', label: 'รายการออเดอร์' },
   ]
 
@@ -1187,6 +1271,345 @@ export default function BossDashboard() {
                   {orders.length > 200 && <div style={{ textAlign: 'center', padding: 16, color: C.textMuted, fontSize: 12 }}>แสดง 200 จาก {orders.length} รายการ</div>}
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* ═══════ COMPARE ═══════ */}
+          {section === 'compare' && (
+            <div className="fade-in">
+              {!dateFrom ? (
+                <div style={{ ...card, padding: 40, textAlign: 'center' }}>
+                  <div style={{ fontSize: 16, color: C.textDim, marginBottom: 8 }}>กรุณาเลือกช่วงเวลาที่ต้องการเปรียบเทียบ</div>
+                  <div style={{ fontSize: 12, color: C.textMuted }}>เช่น วันนี้, 7 วัน, เดือนนี้ — ระบบจะเปรียบเทียบกับช่วงเดียวกันก่อนหน้า</div>
+                </div>
+              ) : (() => {
+                const cs = compareStats
+                const from = new Date(dateFrom), to = new Date(dateTo)
+                const days = Math.round((to - from) / 864e5) + 1
+                const prevTo = new Date(from); prevTo.setDate(prevTo.getDate() - 1)
+                const prevFrom = new Date(prevTo); prevFrom.setDate(prevFrom.getDate() - days + 1)
+
+                const GrowthCard = ({ label, cur, prev, prefix = '', isMoney = false }) => {
+                  const g = prev > 0 ? ((cur - prev) / prev * 100) : cur > 0 ? 100 : 0
+                  const up = g >= 0
+                  return (
+                    <div style={{ ...card, padding: 18 }}>
+                      <div style={{ fontSize: 10, color: C.textMuted, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 8 }}>{label}</div>
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                        <span style={{ fontSize: 22, fontWeight: 800, fontFamily: C.font, color: C.text }}>{prefix}{isMoney ? fmt(cur) : cur}</span>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: up ? C.success : C.danger }}>{up ? '▲' : '▼'} {Math.abs(g).toFixed(1)}%</span>
+                      </div>
+                      <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>ก่อนหน้า: {prefix}{isMoney ? fmt(prev) : prev}</div>
+                    </div>
+                  )
+                }
+
+                const curEmpMap = {}, prevEmpMap = {}
+                orders.forEach(o => { const n = o.employee_name || '—'; if (!curEmpMap[n]) curEmpMap[n] = { sales: 0, count: 0 }; curEmpMap[n].sales += parseFloat(o.sale_price) || 0; curEmpMap[n].count++ })
+                prevOrders.forEach(o => { const n = o.employee_name || '—'; if (!prevEmpMap[n]) prevEmpMap[n] = { sales: 0, count: 0 }; prevEmpMap[n].sales += parseFloat(o.sale_price) || 0; prevEmpMap[n].count++ })
+                const allNames = [...new Set([...Object.keys(curEmpMap), ...Object.keys(prevEmpMap)])]
+                const empCompare = allNames.map(n => ({
+                  name: n, curSales: curEmpMap[n]?.sales || 0, prevSales: prevEmpMap[n]?.sales || 0,
+                  curCount: curEmpMap[n]?.count || 0, prevCount: prevEmpMap[n]?.count || 0,
+                })).sort((a, b) => b.curSales - a.curSales)
+
+                return <>
+                  <div style={{ ...card, padding: 14, marginBottom: 20, background: C.surfaceAlt }}>
+                    <div style={{ fontSize: 12, color: C.textDim }}>
+                      📅 ปัจจุบัน: <b>{fmtDateFull(dateFrom)} — {fmtDateFull(dateTo)}</b> ({days} วัน) &nbsp;vs&nbsp;
+                      ก่อนหน้า: <b>{fmtDateFull(prevFrom)} — {fmtDateFull(prevTo)}</b>
+                      {prevOrders.length === 0 && <span style={{ color: C.danger, marginLeft: 8 }}>(ไม่มีข้อมูลก่อนหน้า)</span>}
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 24 }}>
+                    <GrowthCard label="ยอดขาย" cur={cs.curSales} prev={cs.prevSales} prefix="฿" isMoney />
+                    <GrowthCard label="ออเดอร์" cur={cs.curCount} prev={cs.prevCount} />
+                    <GrowthCard label="เฉลี่ย/ออเดอร์" cur={cs.curAvg} prev={cs.prevAvg} prefix="฿" isMoney />
+                    <GrowthCard label="COD" cur={cs.curCod} prev={cs.prevCod} />
+                  </div>
+                  <div style={{ ...card, padding: 20, marginBottom: 24 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12, fontFamily: C.font }}>เปรียบเทียบรายคน</div>
+                    <ResponsiveContainer width="100%" height={Math.max(200, empCompare.length * 36)}>
+                      <BarChart data={empCompare.slice(0, 15)} layout="vertical" margin={{ left: 80, right: 20 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+                        <XAxis type="number" tick={{ fontSize: 10, fill: C.textDim }} tickFormatter={v => `฿${fmt(v)}`} />
+                        <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: C.text }} width={80} />
+                        <Tooltip content={<ClassicTooltip />} />
+                        <Bar dataKey="curSales" fill={C.accent} radius={[0, 3, 3, 0]} name="ช่วงนี้" />
+                        <Bar dataKey="prevSales" fill={C.borderDark} radius={[0, 3, 3, 0]} name="ก่อนหน้า" />
+                        <Legend />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div style={{ ...card, padding: 20 }}>
+                    <table>
+                      <thead><tr>
+                        <th style={th}>พนักงาน</th>
+                        <th style={{ ...th, textAlign: 'center' }}>ออเดอร์ (ปัจจุบัน)</th>
+                        <th style={{ ...th, textAlign: 'center' }}>ออเดอร์ (ก่อนหน้า)</th>
+                        <th style={{ ...th, textAlign: 'right' }}>ยอด (ปัจจุบัน)</th>
+                        <th style={{ ...th, textAlign: 'right' }}>ยอด (ก่อนหน้า)</th>
+                        <th style={{ ...th, textAlign: 'center' }}>เปลี่ยนแปลง</th>
+                      </tr></thead>
+                      <tbody>
+                        {empCompare.map(e => {
+                          const g = e.prevSales > 0 ? ((e.curSales - e.prevSales) / e.prevSales * 100) : e.curSales > 0 ? 100 : 0
+                          return <tr key={e.name}>
+                            <td style={{ ...td, fontWeight: 600 }}>{e.name}</td>
+                            <td style={{ ...td, textAlign: 'center', fontWeight: 700, color: C.accent }}>{e.curCount}</td>
+                            <td style={{ ...td, textAlign: 'center', color: C.textDim }}>{e.prevCount}</td>
+                            <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: C.success }}>฿{fmt(e.curSales)}</td>
+                            <td style={{ ...td, textAlign: 'right', color: C.textDim }}>฿{fmt(e.prevSales)}</td>
+                            <td style={{ ...td, textAlign: 'center', fontWeight: 700, color: g >= 0 ? C.success : C.danger }}>{g >= 0 ? '▲' : '▼'} {Math.abs(g).toFixed(1)}%</td>
+                          </tr>
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              })()}
+            </div>
+          )}
+
+          {/* ═══════ CUSTOMERS ═══════ */}
+          {section === 'customers' && (
+            <div className="fade-in">
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 24 }}>
+                {[
+                  { label: 'ลูกค้าทั้งหมด', value: customerStats.all.length, color: C.navy },
+                  { label: 'ลูกค้าซ้ำ (2+ ครั้ง)', value: customerStats.repeat.length, sub: `฿${fmt(customerStats.repeatSales)}`, color: C.success },
+                  { label: 'ลูกค้าใหม่ (1 ครั้ง)', value: customerStats.new.length, sub: `฿${fmt(customerStats.newSales)}`, color: C.accent },
+                  { label: 'อัตราซื้อซ้ำ', value: customerStats.all.length > 0 ? (customerStats.repeat.length / customerStats.all.length * 100).toFixed(1) + '%' : '0%', color: C.gold },
+                ].map((k, i) => (
+                  <div key={i} style={{ ...card, padding: 18, borderTop: `3px solid ${k.color}` }}>
+                    <div style={{ fontSize: 10, color: C.textMuted, fontWeight: 500, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 6 }}>{k.label}</div>
+                    <div style={{ fontSize: 24, fontWeight: 800, fontFamily: C.font, color: C.text }}>{k.value}</div>
+                    {k.sub && <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>{k.sub}</div>}
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 16, marginBottom: 24 }}>
+                <div style={{ ...card, padding: 20 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12, fontFamily: C.font }}>สัดส่วนยอดขาย</div>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <PieChart>
+                      <Pie data={[{ name: 'ลูกค้าซ้ำ', value: customerStats.repeatSales, color: C.success }, { name: 'ลูกค้าใหม่', value: customerStats.newSales, color: C.accent }].filter(p => p.value > 0)} cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={2} dataKey="value">
+                        {[C.success, C.accent].map((c, i) => <Cell key={i} fill={c} />)}
+                      </Pie>
+                      <Tooltip content={<ClassicTooltip />} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div style={{ display: 'flex', justifyContent: 'center', gap: 14, marginTop: 4 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: C.textDim }}><div style={{ width: 8, height: 8, borderRadius: 1, background: C.success }}></div> ซ้ำ: ฿{fmt(customerStats.repeatSales)}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: C.textDim }}><div style={{ width: 8, height: 8, borderRadius: 1, background: C.accent }}></div> ใหม่: ฿{fmt(customerStats.newSales)}</div>
+                  </div>
+                </div>
+                <div style={{ ...card, padding: 20 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12, fontFamily: C.font }}>จำนวนครั้งที่ซื้อ</div>
+                  {(() => {
+                    const freq = {}
+                    customerStats.all.forEach(c => { const k = c.count >= 5 ? '5+ ครั้ง' : c.count + ' ครั้ง'; if (!freq[k]) freq[k] = { name: k, count: 0, sort: c.count >= 5 ? 5 : c.count }; freq[k].count++ })
+                    return <ResponsiveContainer width="100%" height={200}>
+                      <BarChart data={Object.values(freq).sort((a, b) => a.sort - b.sort)}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+                        <XAxis dataKey="name" tick={{ fontSize: 11, fill: C.textDim }} />
+                        <YAxis tick={{ fontSize: 10, fill: C.textDim }} />
+                        <Tooltip content={<ClassicTooltip />} />
+                        <Bar dataKey="count" fill={C.navy} radius={[3, 3, 0, 0]} name="จำนวนลูกค้า" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  })()}
+                </div>
+              </div>
+              <div style={{ ...card, padding: 20 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12, fontFamily: C.font }}>🏆 ลูกค้าซื้อซ้ำบ่อยที่สุด (Top 30)</div>
+                <table>
+                  <thead><tr>
+                    <th style={{ ...th, width: 36 }}>#</th>
+                    <th style={th}>ชื่อ</th>
+                    <th style={th}>เบอร์โทร</th>
+                    <th style={{ ...th, textAlign: 'center' }}>จำนวนครั้ง</th>
+                    <th style={{ ...th, textAlign: 'right' }}>ยอดรวม</th>
+                    <th style={{ ...th, textAlign: 'right' }}>เฉลี่ย/ครั้ง</th>
+                    <th style={th}>ซื้อล่าสุด</th>
+                  </tr></thead>
+                  <tbody>
+                    {customerStats.repeat.slice(0, 30).map((c, i) => (
+                      <tr key={c.phone} style={{ background: i < 3 ? '#fdfaf3' : (i % 2 === 0 ? C.surfaceAlt : 'transparent') }}>
+                        <td style={{ ...td, textAlign: 'center', fontWeight: 800, color: i < 3 ? C.gold : C.textMuted }}>{i + 1}</td>
+                        <td style={{ ...td, fontWeight: 600 }}>{c.name}</td>
+                        <td style={{ ...td, fontSize: 12, color: C.textDim }}>{c.phone}</td>
+                        <td style={{ ...td, textAlign: 'center', fontWeight: 800, color: C.accent }}>{c.count}</td>
+                        <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: C.success }}>฿{fmt(c.sales)}</td>
+                        <td style={{ ...td, textAlign: 'right' }}>฿{fmt(c.count > 0 ? c.sales / c.count : 0)}</td>
+                        <td style={{ ...td, fontSize: 11, color: C.textDim }}>{c.lastDate || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ═══════ PROVINCES ═══════ */}
+          {section === 'provinces' && (
+            <div className="fade-in">
+              {provinceStats.length > 0 && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 24 }}>
+                  {provinceStats.slice(0, 3).map((p, i) => (
+                    <div key={p.name} style={{ ...card, padding: 18, borderTop: `3px solid ${[C.gold, C.accent, C.navy][i]}` }}>
+                      <div style={{ fontSize: 10, color: C.textMuted, letterSpacing: 0.5, textTransform: 'uppercase' }}>{['🥇 อันดับ 1', '🥈 อันดับ 2', '🥉 อันดับ 3'][i]}</div>
+                      <div style={{ fontSize: 20, fontWeight: 800, fontFamily: C.font, color: C.text, marginTop: 4 }}>{p.name}</div>
+                      <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>{p.count} ออเดอร์ · ฿{fmt(p.sales)}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ ...card, padding: 20, marginBottom: 24 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12, fontFamily: C.font }}>ยอดขายแยกพื้นที่ (Top 20)</div>
+                <ResponsiveContainer width="100%" height={Math.max(200, Math.min(provinceStats.length, 20) * 28)}>
+                  <BarChart data={provinceStats.slice(0, 20)} layout="vertical" margin={{ left: 100, right: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+                    <XAxis type="number" tick={{ fontSize: 10, fill: C.textDim }} tickFormatter={v => `฿${fmt(v)}`} />
+                    <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: C.text }} width={100} />
+                    <Tooltip content={<ClassicTooltip />} />
+                    <Bar dataKey="sales" fill={C.accent} radius={[0, 3, 3, 0]} name="ยอดขาย" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div style={{ ...card, padding: 20 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12, fontFamily: C.font }}>รายละเอียดพื้นที่ ({provinceStats.length} พื้นที่)</div>
+                <table>
+                  <thead><tr>
+                    <th style={{ ...th, width: 36 }}>#</th>
+                    <th style={th}>พื้นที่</th>
+                    <th style={{ ...th, textAlign: 'center' }}>ออเดอร์</th>
+                    <th style={{ ...th, textAlign: 'right' }}>ยอดขาย</th>
+                    <th style={{ ...th, textAlign: 'right' }}>เฉลี่ย</th>
+                    <th style={{ ...th, textAlign: 'right', width: '20%' }}>สัดส่วน</th>
+                  </tr></thead>
+                  <tbody>
+                    {provinceStats.map((p, i) => {
+                      const pct = totalSales > 0 ? (p.sales / totalSales * 100).toFixed(1) : '0.0'
+                      return <tr key={p.name} style={{ background: i < 3 ? '#fdfaf3' : (i % 2 === 0 ? C.surfaceAlt : 'transparent') }}>
+                        <td style={{ ...td, textAlign: 'center', fontWeight: 800, color: i < 3 ? C.gold : C.textMuted }}>{i + 1}</td>
+                        <td style={{ ...td, fontWeight: 600 }}>{p.name}</td>
+                        <td style={{ ...td, textAlign: 'center', fontWeight: 700, color: C.accent }}>{p.count}</td>
+                        <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: C.success }}>฿{fmt(p.sales)}</td>
+                        <td style={{ ...td, textAlign: 'right' }}>฿{fmt(p.count > 0 ? p.sales / p.count : 0)}</td>
+                        <td style={{ ...td }}><div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><div style={{ flex: 1, height: 5, borderRadius: 2, background: C.surfaceHover, overflow: 'hidden' }}><div style={{ width: pct + '%', height: '100%', borderRadius: 2, background: C.accent }}></div></div><span style={{ fontSize: 10, color: C.textMuted, minWidth: 36 }}>{pct}%</span></div></td>
+                      </tr>
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ═══════ TARGETS ═══════ */}
+          {section === 'targets' && (
+            <div className="fade-in">
+              <div style={{ ...card, padding: 20, marginBottom: 24 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: C.font }}>🎯 ตั้งเป้ายอดขาย</div>
+                  <button onClick={() => setEditTarget(!editTarget)} style={{ padding: '6px 16px', border: `1px solid ${C.border}`, borderRadius: 2, background: editTarget ? C.accent : C.surface, color: editTarget ? '#fff' : C.textDim, fontSize: 12, cursor: 'pointer', fontFamily: C.fontSans }}>
+                    {editTarget ? '✓ บันทึก' : '✏️ แก้ไข'}
+                  </button>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+                  {[{ key: 'daily', label: 'เป้ารายวัน (฿)' }, { key: 'monthly', label: 'เป้ารายเดือน (฿)' }, { key: 'dailyOrders', label: 'เป้าออเดอร์/วัน' }].map(t => (
+                    <div key={t.key}>
+                      <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 4, letterSpacing: 0.5, textTransform: 'uppercase' }}>{t.label}</div>
+                      {editTarget ? (
+                        <input type="number" value={targets[t.key] || ''} onChange={e => saveTargets({ ...targets, [t.key]: parseFloat(e.target.value) || 0 })}
+                          style={{ width: '100%', padding: '10px 12px', border: `1px solid ${C.border}`, borderRadius: 2, fontSize: 16, fontWeight: 700, fontFamily: C.fontSans, boxSizing: 'border-box' }} />
+                      ) : (
+                        <div style={{ fontSize: 22, fontWeight: 800, fontFamily: C.font, color: C.text }}>{t.key === 'dailyOrders' ? (targets[t.key] || 0) : `฿${fmt(targets[t.key] || 0)}`}</div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {(() => {
+                const now = new Date()
+                const todayOrd = orders.filter(o => o.order_date === todayStr)
+                const todaySales = todayOrd.reduce((s, o) => s + (parseFloat(o.sale_price) || 0), 0)
+                const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
+                const monthOrd = orders.filter(o => o.order_date >= monthStart)
+                const monthSales = monthOrd.reduce((s, o) => s + (parseFloat(o.sale_price) || 0), 0)
+                const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+                const daysPassed = now.getDate()
+                const projectedMonth = daysPassed > 0 ? (monthSales / daysPassed) * daysInMonth : 0
+                const dailyPct = targets.daily > 0 ? (todaySales / targets.daily) * 100 : 0
+                const monthPct = targets.monthly > 0 ? (monthSales / targets.monthly) * 100 : 0
+                const orderPct = targets.dailyOrders > 0 ? (todayOrd.length / targets.dailyOrders) * 100 : 0
+
+                const PB = ({ label, current, target, pct, prefix = '฿', isMoney = true }) => (
+                  <div style={{ ...card, padding: 18, marginBottom: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600 }}>{label}</span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: pct >= 100 ? C.success : pct >= 70 ? C.gold : C.danger }}>{pct.toFixed(1)}% {pct >= 100 ? '✅' : pct >= 70 ? '🔥' : '⚡'}</span>
+                    </div>
+                    <div style={{ height: 12, borderRadius: 6, background: C.surfaceHover, overflow: 'hidden', marginBottom: 6 }}>
+                      <div style={{ width: Math.min(pct, 100) + '%', height: '100%', borderRadius: 6, background: pct >= 100 ? C.success : pct >= 70 ? C.gold : C.dangerLight }}></div>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: C.textDim }}>
+                      <span>ปัจจุบัน: {isMoney ? `${prefix}${fmt(current)}` : current}</span>
+                      <span>เป้า: {isMoney ? `${prefix}${fmt(target)}` : target}</span>
+                    </div>
+                  </div>
+                )
+
+                return <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12, fontFamily: C.font }}>📅 วันนี้</div>
+                    {targets.daily > 0 && <PB label="ยอดขาย" current={todaySales} target={targets.daily} pct={dailyPct} />}
+                    {targets.dailyOrders > 0 && <PB label="ออเดอร์" current={todayOrd.length} target={targets.dailyOrders} pct={orderPct} prefix="" isMoney={false} />}
+                    {!targets.daily && !targets.dailyOrders && <div style={{ ...card, padding: 30, textAlign: 'center', color: C.textMuted }}>กด "แก้ไข" เพื่อตั้งเป้า</div>}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12, fontFamily: C.font }}>📆 เดือนนี้ (วันที่ {daysPassed}/{daysInMonth})</div>
+                    {targets.monthly > 0 ? <>
+                      <PB label="ยอดขาย" current={monthSales} target={targets.monthly} pct={monthPct} />
+                      <div style={{ ...card, padding: 14 }}>
+                        <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 4 }}>คาดการณ์สิ้นเดือน</div>
+                        <div style={{ fontSize: 20, fontWeight: 800, fontFamily: C.font, color: projectedMonth >= targets.monthly ? C.success : C.danger }}>
+                          ฿{fmt(projectedMonth)} <span style={{ fontSize: 12, fontWeight: 600 }}>({projectedMonth >= targets.monthly ? '✅ น่าจะถึงเป้า' : '⚠️ ยังไม่ถึงเป้า'})</span>
+                        </div>
+                      </div>
+                    </> : <div style={{ ...card, padding: 30, textAlign: 'center', color: C.textMuted }}>กด "แก้ไข" เพื่อตั้งเป้า</div>}
+                  </div>
+                </div>
+              })()}
+              {targets.daily > 0 && empStats.length > 0 && (() => {
+                const perTarget = targets.daily / empStats.length
+                const todayOrd = orders.filter(o => o.order_date === todayStr)
+                const todayEmp = {}
+                todayOrd.forEach(o => { const n = o.employee_name || '—'; if (!todayEmp[n]) todayEmp[n] = { count: 0, sales: 0 }; todayEmp[n].count++; todayEmp[n].sales += parseFloat(o.sale_price) || 0 })
+                return <div style={{ ...card, padding: 20 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12, fontFamily: C.font }}>พนักงานวันนี้ vs เป้าเฉลี่ย (฿{fmt(perTarget)}/คน)</div>
+                  <table>
+                    <thead><tr>
+                      <th style={th}>พนักงาน</th>
+                      <th style={{ ...th, textAlign: 'center' }}>ออเดอร์</th>
+                      <th style={{ ...th, textAlign: 'right' }}>ยอดขาย</th>
+                      <th style={{ ...th, textAlign: 'right', width: '35%' }}>ความคืบหน้า</th>
+                    </tr></thead>
+                    <tbody>
+                      {empStats.map(e => {
+                        const te = todayEmp[e.name] || { count: 0, sales: 0 }
+                        const p = perTarget > 0 ? (te.sales / perTarget) * 100 : 0
+                        return <tr key={e.name}>
+                          <td style={{ ...td, fontWeight: 600 }}>{e.name}</td>
+                          <td style={{ ...td, textAlign: 'center', fontWeight: 700, color: C.accent }}>{te.count}</td>
+                          <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: C.success }}>฿{fmt(te.sales)}</td>
+                          <td style={{ ...td }}><div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><div style={{ flex: 1, height: 8, borderRadius: 4, background: C.surfaceHover, overflow: 'hidden' }}><div style={{ width: Math.min(p, 100) + '%', height: '100%', borderRadius: 4, background: p >= 100 ? C.success : p >= 70 ? C.gold : C.dangerLight }}></div></div><span style={{ fontSize: 11, fontWeight: 700, color: p >= 100 ? C.success : p >= 70 ? C.gold : C.danger, minWidth: 45 }}>{p.toFixed(0)}%{p >= 100 ? ' ✅' : ''}</span></div></td>
+                        </tr>
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              })()}
             </div>
           )}
         </div>
