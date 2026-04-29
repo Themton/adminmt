@@ -958,7 +958,7 @@ export default function BossDashboard() {
               {/* Employee bar chart */}
               <div style={{ ...card, padding: 20, marginBottom: 24 }}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 16, fontFamily: C.font }}>ยอดขายแต่ละคน</div>
-                <ResponsiveContainer width="100%" height={Math.max(200, empStats.length * 32)}>
+                <ResponsiveContainer width="100%" height={Math.min(400, Math.max(180, Math.min(empStats.length, 20) * 32))}>
                   <BarChart data={empStats.slice(0, 20)} layout="vertical" margin={{ left: 80, right: 20 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
                     <XAxis type="number" tick={{ fontSize: 10, fill: C.textDim }} tickFormatter={v => `฿${fmt(v)}`} />
@@ -1033,9 +1033,9 @@ export default function BossDashboard() {
             <div className="fade-in">
               {/* Product bar chart */}
               <div style={{ ...card, padding: 20, marginBottom: 24 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 16, fontFamily: C.font }}>จำนวนออเดอร์แยกสินค้า</div>
-                <ResponsiveContainer width="100%" height={Math.max(200, productStats.length * 32)}>
-                  <BarChart data={productStats.slice(0, 15)} layout="vertical" margin={{ left: 120, right: 20 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 16, fontFamily: C.font }}>จำนวนออเดอร์แยกสินค้า (Top 10)</div>
+                <ResponsiveContainer width="100%" height={Math.min(350, Math.max(180, Math.min(productStats.length, 10) * 32))}>
+                  <BarChart data={productStats.slice(0, 10)} layout="vertical" margin={{ left: 120, right: 20 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
                     <XAxis type="number" tick={{ fontSize: 10, fill: C.textDim }} />
                     <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: C.text, fontFamily: C.fontSans }} width={120} />
@@ -1563,7 +1563,7 @@ export default function BossDashboard() {
                   </div>
                   <div style={{ ...card, padding: 20, marginBottom: 24 }}>
                     <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12, fontFamily: C.font }}>เปรียบเทียบรายคน</div>
-                    <ResponsiveContainer width="100%" height={Math.max(200, empCompare.length * 36)}>
+                    <ResponsiveContainer width="100%" height={Math.min(400, Math.max(180, empCompare.length * 32))}>
                       <BarChart data={empCompare.slice(0, 15)} layout="vertical" margin={{ left: 80, right: 20 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
                         <XAxis type="number" tick={{ fontSize: 10, fill: C.textDim }} tickFormatter={v => `฿${fmt(v)}`} />
@@ -1729,7 +1729,7 @@ export default function BossDashboard() {
               )}
               <div style={{ ...card, padding: 20, marginBottom: 24 }}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12, fontFamily: C.font }}>ยอดขายแยกพื้นที่ (Top 20)</div>
-                <ResponsiveContainer width="100%" height={Math.max(200, Math.min(provinceStats.length, 20) * 28)}>
+                <ResponsiveContainer width="100%" height={Math.min(400, Math.max(180, Math.min(provinceStats.length, 15) * 28))}>
                   <BarChart data={provinceStats.slice(0, 20)} layout="vertical" margin={{ left: 100, right: 20 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
                     <XAxis type="number" tick={{ fontSize: 10, fill: C.textDim }} tickFormatter={v => `฿${fmt(v)}`} />
