@@ -501,7 +501,7 @@ export default function BossDashboard() {
     { id: 'provinces', icon: '🗺️', label: 'พื้นที่ขาย' },
     { id: 'time', icon: '⏰', label: 'ช่วงเวลา' },
     { id: 'channels', icon: '📢', label: 'ช่องทาง' },
-    { id: 'shipping', icon: '🚚', label: 'รายงานจัดส่ง' },
+    { id: 'shipping', icon: '🚚', label: 'ส่งรายชื่อ' },
     { id: 'targets', icon: '🎯', label: 'เป้าหมาย' },
     { id: 'manage', icon: '⚙️', label: 'จัดการพนักงาน' },
     { id: 'orders', icon: '📋', label: 'รายการออเดอร์' },
@@ -1772,157 +1772,164 @@ export default function BossDashboard() {
           {section === 'shipping' && (
             <div className="fade-in">
               {(() => {
-                const ss = shippingStats
-                const totalShipped = ss.shipped + ss.delivered
-                const shipRate = totalOrders > 0 ? (totalShipped / totalOrders * 100).toFixed(1) : '0.0'
-                const deliverRate = totalOrders > 0 ? (ss.delivered / totalOrders * 100).toFixed(1) : '0.0'
-                const returnRate = totalShipped > 0 ? (ss.returned / totalShipped * 100).toFixed(1) : '0.0'
-
-                const pipeline = [
-                  { label: 'รอจัดส่ง', value: ss.waiting, color: '#E67E22', icon: '📦' },
-                  { label: 'พร้อมส่ง', value: ss.printed, color: '#2980B9', icon: '🖨' },
-                  { label: 'สร้างเลขพัสดุ', value: ss.created, color: '#8E44AD', icon: '📋' },
-                  { label: 'กำลังจัดส่ง', value: ss.delivering, color: '#F39C12', icon: '🚚' },
-                  { label: 'ส่งสำเร็จ', value: ss.delivered, color: C.success, icon: '✅' },
-                  { label: 'ตีกลับ/ยกเลิก', value: ss.returned, color: C.danger, icon: '↩️' },
-                ]
-
-                // Rank employees by ship rate
-                const ranked = ss.empList.map((e, i) => {
-                  const shipped = e.shipped + e.delivered
-                  const rate = e.total > 0 ? (shipped / e.total * 100) : 0
-                  return { ...e, shipped, rate, rank: i + 1 }
+                // Analyze submission times per employee per day
+                const empDayMap = {}
+                orders.forEach(o => {
+                  const dt = new Date(o.created_at)
+                  if (isNaN(dt)) return
+                  const bkk = new Date(dt.toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }))
+                  const name = o.employee_name || '—'
+                  const day = (o.order_date || '').substring(0, 10)
+                  if (!day) return
+                  const timeMin = bkk.getHours() * 60 + bkk.getMinutes()
+                  const timeStr = `${String(bkk.getHours()).padStart(2, '0')}:${String(bkk.getMinutes()).padStart(2, '0')}`
+                  if (!empDayMap[name]) empDayMap[name] = {}
+                  if (!empDayMap[name][day]) empDayMap[name][day] = { first: timeMin, last: timeMin, firstStr: timeStr, lastStr: timeStr, count: 0 }
+                  const ed = empDayMap[name][day]
+                  ed.count++
+                  if (timeMin < ed.first) { ed.first = timeMin; ed.firstStr = timeStr }
+                  if (timeMin > ed.last) { ed.last = timeMin; ed.lastStr = timeStr }
                 })
-                const fastest = ranked.length > 0 ? ranked[0] : null
-                const slowest = ranked.length > 1 ? ranked[ranked.length - 1] : null
+
+                // Build employee summary
+                const empSummary = Object.entries(empDayMap).map(([name, days]) => {
+                  const dayList = Object.entries(days).map(([date, d]) => ({ date, ...d })).sort((a, b) => b.date.localeCompare(a.date))
+                  const totalOrds = dayList.reduce((s, d) => s + d.count, 0)
+                  const avgFirst = dayList.length > 0 ? Math.round(dayList.reduce((s, d) => s + d.first, 0) / dayList.length) : 0
+                  const avgLast = dayList.length > 0 ? Math.round(dayList.reduce((s, d) => s + d.last, 0) / dayList.length) : 0
+                  const minToStr = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+                  const earliest = dayList.length > 0 ? Math.min(...dayList.map(d => d.first)) : 0
+                  const latest = dayList.length > 0 ? Math.max(...dayList.map(d => d.last)) : 0
+                  return {
+                    name, days: dayList, totalOrds, activeDays: dayList.length,
+                    avgFirst, avgLast, avgFirstStr: minToStr(avgFirst), avgLastStr: minToStr(avgLast),
+                    earliest, latest, earliestStr: minToStr(earliest), latestStr: minToStr(latest),
+                    avgPerDay: dayList.length > 0 ? (totalOrds / dayList.length).toFixed(1) : '0',
+                  }
+                }).sort((a, b) => a.avgFirst - b.avgFirst)
+
+                const fastest = empSummary.length > 0 ? empSummary[0] : null
+                const slowest = empSummary.length > 1 ? empSummary[empSummary.length - 1] : null
+                const mostActive = [...empSummary].sort((a, b) => parseFloat(b.avgPerDay) - parseFloat(a.avgPerDay))[0] || null
 
                 return <>
-                  {/* KPI Cards */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 14, marginBottom: 24 }}>
-                    {[
-                      { label: 'ออเดอร์ทั้งหมด', value: totalOrders, color: C.navy },
-                      { label: 'จัดส่งแล้ว', value: totalShipped, sub: `${shipRate}%`, color: C.success },
-                      { label: 'ส่งสำเร็จ', value: ss.delivered, sub: `${deliverRate}%`, color: '#2e7d32' },
-                      { label: 'รอจัดส่ง', value: ss.waiting + ss.printed, color: '#E67E22' },
-                      { label: 'ตีกลับ', value: ss.returned, sub: `${returnRate}%`, color: C.danger },
-                    ].map((k, i) => (
-                      <div key={i} style={{ ...card, padding: 18, borderTop: `3px solid ${k.color}` }}>
-                        <div style={{ fontSize: 10, color: C.textMuted, fontWeight: 500, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 6 }}>{k.label}</div>
-                        <div style={{ fontSize: 24, fontWeight: 800, fontFamily: C.font, color: C.text }}>{k.value}</div>
-                        {k.sub && <div style={{ fontSize: 12, color: k.color, fontWeight: 700, marginTop: 2 }}>{k.sub}</div>}
+                  {/* Top cards */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 24 }}>
+                    {fastest && (
+                      <div style={{ ...card, padding: 20, borderTop: `3px solid ${C.success}` }}>
+                        <div style={{ fontSize: 10, color: C.textMuted, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 4 }}>🏆 ส่งรายชื่อไวสุด</div>
+                        <div style={{ fontSize: 22, fontWeight: 800, fontFamily: C.font, color: C.success }}>{fastest.name}</div>
+                        <div style={{ fontSize: 13, color: C.text, marginTop: 4 }}>เฉลี่ยเริ่มส่ง <b>{fastest.avgFirstStr}</b> น.</div>
+                        <div style={{ fontSize: 11, color: C.textDim }}>เร็วสุดเคยส่ง {fastest.earliestStr} น. · {fastest.avgPerDay} ออเดอร์/วัน</div>
                       </div>
-                    ))}
+                    )}
+                    {slowest && slowest.name !== fastest?.name && (
+                      <div style={{ ...card, padding: 20, borderTop: `3px solid ${C.danger}` }}>
+                        <div style={{ fontSize: 10, color: C.textMuted, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 4 }}>⚠️ ส่งรายชื่อช้าสุด</div>
+                        <div style={{ fontSize: 22, fontWeight: 800, fontFamily: C.font, color: C.danger }}>{slowest.name}</div>
+                        <div style={{ fontSize: 13, color: C.text, marginTop: 4 }}>เฉลี่ยเริ่มส่ง <b>{slowest.avgFirstStr}</b> น.</div>
+                        <div style={{ fontSize: 11, color: C.textDim }}>ช้าสุดเคยส่ง {slowest.latestStr} น. · {slowest.avgPerDay} ออเดอร์/วัน</div>
+                      </div>
+                    )}
+                    {mostActive && (
+                      <div style={{ ...card, padding: 20, borderTop: `3px solid ${C.navy}` }}>
+                        <div style={{ fontSize: 10, color: C.textMuted, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 4 }}>🔥 ส่งเยอะสุด / วัน</div>
+                        <div style={{ fontSize: 22, fontWeight: 800, fontFamily: C.font, color: C.navy }}>{mostActive.name}</div>
+                        <div style={{ fontSize: 13, color: C.text, marginTop: 4 }}>เฉลี่ย <b>{mostActive.avgPerDay}</b> ออเดอร์/วัน</div>
+                        <div style={{ fontSize: 11, color: C.textDim }}>{mostActive.totalOrds} ออเดอร์ · {mostActive.activeDays} วัน</div>
+                      </div>
+                    )}
                   </div>
 
-                  {/* Pipeline + Top/Bottom */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16, marginBottom: 24 }}>
-                    {/* Pipeline */}
-                    <div style={{ ...card, padding: 20 }}>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 14, fontFamily: C.font }}>📊 สถานะการจัดส่ง</div>
-                      {pipeline.map(p => {
-                        const pct = totalOrders > 0 ? (p.value / totalOrders * 100) : 0
-                        return (
-                          <div key={p.label} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                            <span style={{ fontSize: 16, width: 24 }}>{p.icon}</span>
-                            <span style={{ fontSize: 12, fontWeight: 600, width: 100, color: C.text }}>{p.label}</span>
-                            <div style={{ flex: 1, height: 18, borderRadius: 3, background: C.surfaceHover, overflow: 'hidden', position: 'relative' }}>
-                              <div style={{ width: pct + '%', height: '100%', borderRadius: 3, background: p.color, transition: 'width 0.5s' }}></div>
-                              <span style={{ position: 'absolute', right: 6, top: 2, fontSize: 10, fontWeight: 700, color: pct > 15 ? '#fff' : C.textDim }}>{p.value}</span>
-                            </div>
-                            <span style={{ fontSize: 11, fontWeight: 700, color: p.color, minWidth: 40, textAlign: 'right' }}>{pct.toFixed(1)}%</span>
-                          </div>
-                        )
-                      })}
-                    </div>
-
-                    {/* Fastest / Slowest */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                      {fastest && (
-                        <div style={{ ...card, padding: 18, borderLeft: `4px solid ${C.success}` }}>
-                          <div style={{ fontSize: 10, color: C.textMuted, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 4 }}>🏆 อัตราส่งสูงสุด</div>
-                          <div style={{ fontSize: 20, fontWeight: 800, fontFamily: C.font, color: C.success }}>{fastest.name}</div>
-                          <div style={{ fontSize: 12, color: C.textDim, marginTop: 4 }}>{fastest.shipped}/{fastest.total} ออเดอร์ · <b style={{ color: C.success }}>{fastest.rate.toFixed(1)}%</b></div>
-                        </div>
-                      )}
-                      {slowest && slowest.name !== fastest?.name && (
-                        <div style={{ ...card, padding: 18, borderLeft: `4px solid ${C.danger}` }}>
-                          <div style={{ fontSize: 10, color: C.textMuted, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 4 }}>⚠️ อัตราส่งต่ำสุด</div>
-                          <div style={{ fontSize: 20, fontWeight: 800, fontFamily: C.font, color: C.danger }}>{slowest.name}</div>
-                          <div style={{ fontSize: 12, color: C.textDim, marginTop: 4 }}>{slowest.shipped}/{slowest.total} ออเดอร์ · <b style={{ color: C.danger }}>{slowest.rate.toFixed(1)}%</b></div>
-                        </div>
-                      )}
-                      <div style={{ ...card, padding: 18 }}>
-                        <div style={{ fontSize: 10, color: C.textMuted, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 4 }}>📊 อัตราส่งเฉลี่ย</div>
-                        <div style={{ fontSize: 28, fontWeight: 800, fontFamily: C.font, color: parseFloat(shipRate) >= 80 ? C.success : parseFloat(shipRate) >= 50 ? C.gold : C.danger }}>{shipRate}%</div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Bar chart */}
+                  {/* Timeline bar chart */}
                   <div style={{ ...card, padding: 20, marginBottom: 24 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12, fontFamily: C.font }}>อัตราจัดส่งรายคน</div>
-                    <ResponsiveContainer width="100%" height={Math.max(200, ranked.length * 36)}>
-                      <BarChart data={ranked.slice(0, 20)} layout="vertical" margin={{ left: 80, right: 20 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
-                        <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 10, fill: C.textDim }} tickFormatter={v => v + '%'} />
-                        <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: C.text }} width={80} />
-                        <Tooltip content={<ClassicTooltip />} />
-                        <Bar dataKey="rate" fill={C.accent} radius={[0, 3, 3, 0]} name="อัตราส่ง (%)" />
-                      </BarChart>
-                    </ResponsiveContainer>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 14, fontFamily: C.font }}>⏰ เวลาเริ่มส่งรายชื่อเฉลี่ย (เรียงจากไวสุด → ช้าสุด)</div>
+                    {empSummary.map((e, i) => {
+                      const startPct = (e.avgFirst / (24 * 60)) * 100
+                      const endPct = (e.avgLast / (24 * 60)) * 100
+                      const width = Math.max(endPct - startPct, 1)
+                      return (
+                        <div key={e.name} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                          <span style={{ fontSize: 12, fontWeight: i < 3 ? 800 : 600, width: 90, textAlign: 'right', color: i === 0 ? C.success : i === empSummary.length - 1 ? C.danger : C.text }}>{i === 0 ? '🏆 ' : i === empSummary.length - 1 && empSummary.length > 1 ? '⚠️ ' : ''}{e.name}</span>
+                          <div style={{ flex: 1, height: 20, borderRadius: 3, background: C.surfaceAlt, position: 'relative', overflow: 'hidden' }}>
+                            {/* Hour markers */}
+                            {[6, 8, 10, 12, 14, 16, 18, 20, 22].map(h => (
+                              <div key={h} style={{ position: 'absolute', left: (h / 24 * 100) + '%', top: 0, bottom: 0, width: 1, background: C.border, zIndex: 0 }}></div>
+                            ))}
+                            {/* Active range */}
+                            <div style={{ position: 'absolute', left: startPct + '%', width: width + '%', top: 2, bottom: 2, borderRadius: 2, background: i === 0 ? C.success : i === empSummary.length - 1 && empSummary.length > 1 ? C.dangerLight : C.accent, zIndex: 1 }}></div>
+                          </div>
+                          <div style={{ fontSize: 11, color: C.textDim, minWidth: 100, textAlign: 'left' }}>
+                            <b style={{ color: C.text }}>{e.avgFirstStr}</b> - {e.avgLastStr}
+                          </div>
+                          <span style={{ fontSize: 11, color: C.textDim, minWidth: 55 }}>{e.avgPerDay}/วัน</span>
+                        </div>
+                      )
+                    })}
+                    {/* Hour labels */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
+                      <span style={{ width: 90 }}></span>
+                      <div style={{ flex: 1, display: 'flex', justifyContent: 'space-between', fontSize: 9, color: C.textMuted }}>
+                        {[0, 4, 8, 12, 16, 20, 24].map(h => <span key={h}>{String(h).padStart(2, '0')}:00</span>)}
+                      </div>
+                      <span style={{ minWidth: 155 }}></span>
+                    </div>
                   </div>
 
-                  {/* Full table */}
+                  {/* Detail table */}
                   <div style={{ ...card, padding: 20 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12, fontFamily: C.font }}>📋 จัดอันดับการทำงาน ({ranked.length} คน)</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12, fontFamily: C.font }}>📋 จัดอันดับเวลาส่งรายชื่อ</div>
                     <table>
                       <thead><tr>
                         <th style={{ ...th, width: 36 }}>#</th>
                         <th style={th}>พนักงาน</th>
-                        <th style={{ ...th, textAlign: 'center' }}>ออเดอร์</th>
-                        <th style={{ ...th, textAlign: 'right' }}>ยอดขาย</th>
-                        <th style={{ ...th, textAlign: 'center' }}>จัดส่งแล้ว</th>
-                        <th style={{ ...th, textAlign: 'center' }}>ส่งสำเร็จ</th>
-                        <th style={{ ...th, textAlign: 'center' }}>รอส่ง</th>
-                        <th style={{ ...th, textAlign: 'center' }}>ตีกลับ</th>
-                        <th style={{ ...th, textAlign: 'right', width: '18%' }}>อัตราส่ง</th>
+                        <th style={{ ...th, textAlign: 'center' }}>เริ่มส่ง (เฉลี่ย)</th>
+                        <th style={{ ...th, textAlign: 'center' }}>ส่งล่าสุด (เฉลี่ย)</th>
+                        <th style={{ ...th, textAlign: 'center' }}>เร็วสุดเคยส่ง</th>
+                        <th style={{ ...th, textAlign: 'center' }}>ช้าสุดเคยส่ง</th>
+                        <th style={{ ...th, textAlign: 'center' }}>ออเดอร์/วัน</th>
+                        <th style={{ ...th, textAlign: 'center' }}>รวมออเดอร์</th>
+                        <th style={{ ...th, textAlign: 'center' }}>วันทำงาน</th>
                       </tr></thead>
                       <tbody>
-                        {ranked.map((e, i) => (
+                        {empSummary.map((e, i) => (
                           <tr key={e.name} style={{ background: i < 3 ? '#fdfaf3' : (i % 2 === 0 ? C.surfaceAlt : 'transparent') }}>
                             <td style={{ ...td, textAlign: 'center', fontWeight: 800, color: i < 3 ? C.gold : C.textMuted }}>
                               {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
                             </td>
                             <td style={{ ...td, fontWeight: 600 }}>{e.name}</td>
-                            <td style={{ ...td, textAlign: 'center', fontWeight: 700 }}>{e.total}</td>
-                            <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: C.success }}>฿{fmt(e.sales)}</td>
-                            <td style={{ ...td, textAlign: 'center', fontWeight: 700, color: C.accent }}>{e.shipped}</td>
-                            <td style={{ ...td, textAlign: 'center', fontWeight: 700, color: C.success }}>{e.delivered}</td>
-                            <td style={{ ...td, textAlign: 'center', color: e.waiting > 0 ? '#E67E22' : C.textMuted }}>{e.waiting}</td>
-                            <td style={{ ...td, textAlign: 'center', color: e.returned > 0 ? C.danger : C.textMuted }}>{e.returned}</td>
-                            <td style={{ ...td }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                <div style={{ flex: 1, height: 8, borderRadius: 4, background: C.surfaceHover, overflow: 'hidden' }}>
-                                  <div style={{ width: Math.min(e.rate, 100) + '%', height: '100%', borderRadius: 4, background: e.rate >= 80 ? C.success : e.rate >= 50 ? C.gold : C.dangerLight }}></div>
-                                </div>
-                                <span style={{ fontSize: 11, fontWeight: 700, color: e.rate >= 80 ? C.success : e.rate >= 50 ? C.gold : C.danger, minWidth: 42 }}>{e.rate.toFixed(1)}%</span>
-                              </div>
-                            </td>
+                            <td style={{ ...td, textAlign: 'center', fontWeight: 800, fontSize: 14, color: i === 0 ? C.success : i === empSummary.length - 1 && empSummary.length > 1 ? C.danger : C.accent }}>{e.avgFirstStr}</td>
+                            <td style={{ ...td, textAlign: 'center', color: C.textDim }}>{e.avgLastStr}</td>
+                            <td style={{ ...td, textAlign: 'center', fontWeight: 700, color: C.success }}>{e.earliestStr}</td>
+                            <td style={{ ...td, textAlign: 'center', color: C.danger }}>{e.latestStr}</td>
+                            <td style={{ ...td, textAlign: 'center', fontWeight: 700, color: C.accent }}>{e.avgPerDay}</td>
+                            <td style={{ ...td, textAlign: 'center', fontWeight: 700 }}>{e.totalOrds}</td>
+                            <td style={{ ...td, textAlign: 'center', color: C.textDim }}>{e.activeDays} วัน</td>
                           </tr>
                         ))}
-                        <tr style={{ background: '#f5f0e8', fontWeight: 700 }}>
-                          <td colSpan="2" style={{ ...td, fontWeight: 800 }}>รวม</td>
-                          <td style={{ ...td, textAlign: 'center', fontWeight: 800 }}>{totalOrders}</td>
-                          <td style={{ ...td, textAlign: 'right', fontWeight: 800, color: C.success }}>฿{fmt(totalSales)}</td>
-                          <td style={{ ...td, textAlign: 'center', fontWeight: 800, color: C.accent }}>{totalShipped}</td>
-                          <td style={{ ...td, textAlign: 'center', fontWeight: 800, color: C.success }}>{ss.delivered}</td>
-                          <td style={{ ...td, textAlign: 'center', fontWeight: 700, color: '#E67E22' }}>{ss.waiting}</td>
-                          <td style={{ ...td, textAlign: 'center', fontWeight: 700, color: C.danger }}>{ss.returned}</td>
-                          <td style={{ ...td, textAlign: 'right', fontWeight: 800, color: parseFloat(shipRate) >= 80 ? C.success : C.gold }}>{shipRate}%</td>
-                        </tr>
                       </tbody>
                     </table>
                   </div>
+
+                  {/* Per-day breakdown */}
+                  {empSummary.length > 0 && (
+                    <div style={{ ...card, padding: 20, marginTop: 20 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12, fontFamily: C.font }}>📅 รายละเอียดรายวัน (5 วันล่าสุด)</div>
+                      {empSummary.map(e => (
+                        <div key={e.name} style={{ marginBottom: 14 }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: C.text, marginBottom: 6 }}>{e.name}</div>
+                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                            {e.days.slice(0, 5).map(d => (
+                              <div key={d.date} style={{ padding: '6px 12px', borderRadius: 2, background: C.surfaceAlt, border: `1px solid ${C.border}`, fontSize: 11, minWidth: 130 }}>
+                                <div style={{ color: C.textDim, marginBottom: 2 }}>{d.date}</div>
+                                <div style={{ fontWeight: 700, color: C.text }}>{d.firstStr} - {d.lastStr} <span style={{ color: C.accent }}>({d.count})</span></div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </>
               })()}
             </div>
