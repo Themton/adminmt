@@ -167,7 +167,7 @@ export default function BossDashboard() {
   }, [])
 
   // Fetch data
-  const selectFields = 'id,order_number,order_date,customer_name,customer_phone,sale_price,cod_amount,payment_type,remark,employee_name,employee_id,team_id,sales_channel,created_at,slip_url,customer_address,sub_district,district,zip_code,province'
+  const selectFields = 'id,order_number,order_date,customer_name,customer_phone,sale_price,cod_amount,payment_type,remark,employee_name,employee_id,team_id,sales_channel,created_at,slip_url,customer_address,sub_district,district,zip_code,province,shipping_status,flash_pno,flash_status,flash_sort_code'
 
   useEffect(() => {
     if (status !== 'ready') return
@@ -268,7 +268,8 @@ export default function BossDashboard() {
 
   const stats = useMemo(() => {
     let _totalSales = 0, _codCount = 0, _transCount = 0, _codTotal = 0, _transTotal = 0
-    const _daily = {}, _emp = {}, _team = {}, _prod = {}, _ch = {}, _prov = {}, _cust = {}
+    const _daily = {}, _emp = {}, _team = {}, _prod = {}, _ch = {}, _prov = {}, _cust = {}, _shipEmp = {}
+    let _shipWaiting = 0, _shipPrinted = 0, _shipCreated = 0, _shipDelivering = 0, _shipDelivered = 0, _shipReturned = 0, _shipCancelled = 0
     const _hourly = Array.from({ length: 24 }, (_, i) => ({ hour: `${String(i).padStart(2, '0')}:00`, ออเดอร์: 0, ยอดขาย: 0 }))
     const dowLabels = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์']
     const _dow = dowLabels.map(l => ({ day: l, ออเดอร์: 0, ยอดขาย: 0 }))
@@ -335,6 +336,20 @@ export default function BossDashboard() {
       if (o.zip_code) cu.zipCode = o.zip_code
       const rp = (o.remark || '').trim()
       if (rp) cu.products[rp] = (cu.products[rp] || 0) + 1
+
+      // Shipping
+      const ss = o.shipping_status || 'waiting'
+      const fs = o.flash_status || ''
+      const hasPno = !!o.flash_pno
+      if (!_shipEmp[eName]) _shipEmp[eName] = { name: eName, total: 0, waiting: 0, printed: 0, shipped: 0, delivered: 0, returned: 0, cancelled: 0, sales: 0 }
+      const se = _shipEmp[eName]; se.total++; se.sales += amt
+      if (fs === 'flash_5') { _shipDelivered++; se.delivered++ }
+      else if (fs === 'flash_4') { _shipDelivering++; se.shipped++ }
+      else if (['flash_2', 'flash_3'].includes(fs)) { se.shipped++ }
+      else if (fs === 'flash_6' || fs === 'cancelled') { _shipReturned++; se.returned++; if (fs === 'cancelled') _shipCancelled++ }
+      else if (hasPno) { _shipCreated++; se.shipped++ }
+      else if (ss === 'printed') { _shipPrinted++; se.printed++ }
+      else { _shipWaiting++; se.waiting++ }
     }
 
     const custAll = Object.values(_cust)
@@ -366,6 +381,16 @@ export default function BossDashboard() {
         { name: 'โอน', value: _transTotal, color: C.success },
       ].filter(p => p.value > 0),
       customerStats: { all: custAll, repeat: custRepeat, new: custNew, repeatSales: custRepeat.reduce((s, c) => s + c.sales, 0), newSales: custNew.reduce((s, c) => s + c.sales, 0) },
+      shippingStats: {
+        waiting: _shipWaiting, printed: _shipPrinted, created: _shipCreated, delivering: _shipDelivering,
+        delivered: _shipDelivered, returned: _shipReturned, cancelled: _shipCancelled,
+        shipped: _shipCreated + _shipDelivering + _shipDelivered,
+        empList: Object.values(_shipEmp).sort((a, b) => {
+          const aRate = a.total > 0 ? (a.shipped + a.delivered) / a.total : 0
+          const bRate = b.total > 0 ? (b.shipped + b.delivered) / b.total : 0
+          return bRate - aRate
+        }),
+      },
       compareStats: {
         curSales: _totalSales, prevSales, curCount: orders.length, prevCount, curAvg, prevAvg,
         curCod: _codCount, prevCod, curTrans: _transCount, prevTrans,
@@ -376,7 +401,7 @@ export default function BossDashboard() {
 
   const { totalSales, totalOrders, avgOrder, codCount, transCount, codTotal, transTotal,
     dailyChart, empStats, teamStats, productStats, channelStats, provinceStats,
-    hourlyStats, dowStats, paymentPie, customerStats, compareStats } = stats
+    hourlyStats, dowStats, paymentPie, customerStats, compareStats, shippingStats } = stats
   const codOrders = { length: codCount }
   const transOrders = { length: transCount }
 
@@ -476,6 +501,7 @@ export default function BossDashboard() {
     { id: 'provinces', icon: '🗺️', label: 'พื้นที่ขาย' },
     { id: 'time', icon: '⏰', label: 'ช่วงเวลา' },
     { id: 'channels', icon: '📢', label: 'ช่องทาง' },
+    { id: 'shipping', icon: '🚚', label: 'รายงานจัดส่ง' },
     { id: 'targets', icon: '🎯', label: 'เป้าหมาย' },
     { id: 'manage', icon: '⚙️', label: 'จัดการพนักงาน' },
     { id: 'orders', icon: '📋', label: 'รายการออเดอร์' },
@@ -1739,6 +1765,166 @@ export default function BossDashboard() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          )}
+
+          {/* ═══════ SHIPPING ═══════ */}
+          {section === 'shipping' && (
+            <div className="fade-in">
+              {(() => {
+                const ss = shippingStats
+                const totalShipped = ss.shipped + ss.delivered
+                const shipRate = totalOrders > 0 ? (totalShipped / totalOrders * 100).toFixed(1) : '0.0'
+                const deliverRate = totalOrders > 0 ? (ss.delivered / totalOrders * 100).toFixed(1) : '0.0'
+                const returnRate = totalShipped > 0 ? (ss.returned / totalShipped * 100).toFixed(1) : '0.0'
+
+                const pipeline = [
+                  { label: 'รอจัดส่ง', value: ss.waiting, color: '#E67E22', icon: '📦' },
+                  { label: 'พร้อมส่ง', value: ss.printed, color: '#2980B9', icon: '🖨' },
+                  { label: 'สร้างเลขพัสดุ', value: ss.created, color: '#8E44AD', icon: '📋' },
+                  { label: 'กำลังจัดส่ง', value: ss.delivering, color: '#F39C12', icon: '🚚' },
+                  { label: 'ส่งสำเร็จ', value: ss.delivered, color: C.success, icon: '✅' },
+                  { label: 'ตีกลับ/ยกเลิก', value: ss.returned, color: C.danger, icon: '↩️' },
+                ]
+
+                // Rank employees by ship rate
+                const ranked = ss.empList.map((e, i) => {
+                  const shipped = e.shipped + e.delivered
+                  const rate = e.total > 0 ? (shipped / e.total * 100) : 0
+                  return { ...e, shipped, rate, rank: i + 1 }
+                })
+                const fastest = ranked.length > 0 ? ranked[0] : null
+                const slowest = ranked.length > 1 ? ranked[ranked.length - 1] : null
+
+                return <>
+                  {/* KPI Cards */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 14, marginBottom: 24 }}>
+                    {[
+                      { label: 'ออเดอร์ทั้งหมด', value: totalOrders, color: C.navy },
+                      { label: 'จัดส่งแล้ว', value: totalShipped, sub: `${shipRate}%`, color: C.success },
+                      { label: 'ส่งสำเร็จ', value: ss.delivered, sub: `${deliverRate}%`, color: '#2e7d32' },
+                      { label: 'รอจัดส่ง', value: ss.waiting + ss.printed, color: '#E67E22' },
+                      { label: 'ตีกลับ', value: ss.returned, sub: `${returnRate}%`, color: C.danger },
+                    ].map((k, i) => (
+                      <div key={i} style={{ ...card, padding: 18, borderTop: `3px solid ${k.color}` }}>
+                        <div style={{ fontSize: 10, color: C.textMuted, fontWeight: 500, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 6 }}>{k.label}</div>
+                        <div style={{ fontSize: 24, fontWeight: 800, fontFamily: C.font, color: C.text }}>{k.value}</div>
+                        {k.sub && <div style={{ fontSize: 12, color: k.color, fontWeight: 700, marginTop: 2 }}>{k.sub}</div>}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Pipeline + Top/Bottom */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16, marginBottom: 24 }}>
+                    {/* Pipeline */}
+                    <div style={{ ...card, padding: 20 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 14, fontFamily: C.font }}>📊 สถานะการจัดส่ง</div>
+                      {pipeline.map(p => {
+                        const pct = totalOrders > 0 ? (p.value / totalOrders * 100) : 0
+                        return (
+                          <div key={p.label} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                            <span style={{ fontSize: 16, width: 24 }}>{p.icon}</span>
+                            <span style={{ fontSize: 12, fontWeight: 600, width: 100, color: C.text }}>{p.label}</span>
+                            <div style={{ flex: 1, height: 18, borderRadius: 3, background: C.surfaceHover, overflow: 'hidden', position: 'relative' }}>
+                              <div style={{ width: pct + '%', height: '100%', borderRadius: 3, background: p.color, transition: 'width 0.5s' }}></div>
+                              <span style={{ position: 'absolute', right: 6, top: 2, fontSize: 10, fontWeight: 700, color: pct > 15 ? '#fff' : C.textDim }}>{p.value}</span>
+                            </div>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: p.color, minWidth: 40, textAlign: 'right' }}>{pct.toFixed(1)}%</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    {/* Fastest / Slowest */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      {fastest && (
+                        <div style={{ ...card, padding: 18, borderLeft: `4px solid ${C.success}` }}>
+                          <div style={{ fontSize: 10, color: C.textMuted, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 4 }}>🏆 อัตราส่งสูงสุด</div>
+                          <div style={{ fontSize: 20, fontWeight: 800, fontFamily: C.font, color: C.success }}>{fastest.name}</div>
+                          <div style={{ fontSize: 12, color: C.textDim, marginTop: 4 }}>{fastest.shipped}/{fastest.total} ออเดอร์ · <b style={{ color: C.success }}>{fastest.rate.toFixed(1)}%</b></div>
+                        </div>
+                      )}
+                      {slowest && slowest.name !== fastest?.name && (
+                        <div style={{ ...card, padding: 18, borderLeft: `4px solid ${C.danger}` }}>
+                          <div style={{ fontSize: 10, color: C.textMuted, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 4 }}>⚠️ อัตราส่งต่ำสุด</div>
+                          <div style={{ fontSize: 20, fontWeight: 800, fontFamily: C.font, color: C.danger }}>{slowest.name}</div>
+                          <div style={{ fontSize: 12, color: C.textDim, marginTop: 4 }}>{slowest.shipped}/{slowest.total} ออเดอร์ · <b style={{ color: C.danger }}>{slowest.rate.toFixed(1)}%</b></div>
+                        </div>
+                      )}
+                      <div style={{ ...card, padding: 18 }}>
+                        <div style={{ fontSize: 10, color: C.textMuted, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 4 }}>📊 อัตราส่งเฉลี่ย</div>
+                        <div style={{ fontSize: 28, fontWeight: 800, fontFamily: C.font, color: parseFloat(shipRate) >= 80 ? C.success : parseFloat(shipRate) >= 50 ? C.gold : C.danger }}>{shipRate}%</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Bar chart */}
+                  <div style={{ ...card, padding: 20, marginBottom: 24 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12, fontFamily: C.font }}>อัตราจัดส่งรายคน</div>
+                    <ResponsiveContainer width="100%" height={Math.max(200, ranked.length * 36)}>
+                      <BarChart data={ranked.slice(0, 20)} layout="vertical" margin={{ left: 80, right: 20 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+                        <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 10, fill: C.textDim }} tickFormatter={v => v + '%'} />
+                        <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: C.text }} width={80} />
+                        <Tooltip content={<ClassicTooltip />} />
+                        <Bar dataKey="rate" fill={C.accent} radius={[0, 3, 3, 0]} name="อัตราส่ง (%)" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Full table */}
+                  <div style={{ ...card, padding: 20 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12, fontFamily: C.font }}>📋 จัดอันดับการทำงาน ({ranked.length} คน)</div>
+                    <table>
+                      <thead><tr>
+                        <th style={{ ...th, width: 36 }}>#</th>
+                        <th style={th}>พนักงาน</th>
+                        <th style={{ ...th, textAlign: 'center' }}>ออเดอร์</th>
+                        <th style={{ ...th, textAlign: 'right' }}>ยอดขาย</th>
+                        <th style={{ ...th, textAlign: 'center' }}>จัดส่งแล้ว</th>
+                        <th style={{ ...th, textAlign: 'center' }}>ส่งสำเร็จ</th>
+                        <th style={{ ...th, textAlign: 'center' }}>รอส่ง</th>
+                        <th style={{ ...th, textAlign: 'center' }}>ตีกลับ</th>
+                        <th style={{ ...th, textAlign: 'right', width: '18%' }}>อัตราส่ง</th>
+                      </tr></thead>
+                      <tbody>
+                        {ranked.map((e, i) => (
+                          <tr key={e.name} style={{ background: i < 3 ? '#fdfaf3' : (i % 2 === 0 ? C.surfaceAlt : 'transparent') }}>
+                            <td style={{ ...td, textAlign: 'center', fontWeight: 800, color: i < 3 ? C.gold : C.textMuted }}>
+                              {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
+                            </td>
+                            <td style={{ ...td, fontWeight: 600 }}>{e.name}</td>
+                            <td style={{ ...td, textAlign: 'center', fontWeight: 700 }}>{e.total}</td>
+                            <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: C.success }}>฿{fmt(e.sales)}</td>
+                            <td style={{ ...td, textAlign: 'center', fontWeight: 700, color: C.accent }}>{e.shipped}</td>
+                            <td style={{ ...td, textAlign: 'center', fontWeight: 700, color: C.success }}>{e.delivered}</td>
+                            <td style={{ ...td, textAlign: 'center', color: e.waiting > 0 ? '#E67E22' : C.textMuted }}>{e.waiting}</td>
+                            <td style={{ ...td, textAlign: 'center', color: e.returned > 0 ? C.danger : C.textMuted }}>{e.returned}</td>
+                            <td style={{ ...td }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <div style={{ flex: 1, height: 8, borderRadius: 4, background: C.surfaceHover, overflow: 'hidden' }}>
+                                  <div style={{ width: Math.min(e.rate, 100) + '%', height: '100%', borderRadius: 4, background: e.rate >= 80 ? C.success : e.rate >= 50 ? C.gold : C.dangerLight }}></div>
+                                </div>
+                                <span style={{ fontSize: 11, fontWeight: 700, color: e.rate >= 80 ? C.success : e.rate >= 50 ? C.gold : C.danger, minWidth: 42 }}>{e.rate.toFixed(1)}%</span>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                        <tr style={{ background: '#f5f0e8', fontWeight: 700 }}>
+                          <td colSpan="2" style={{ ...td, fontWeight: 800 }}>รวม</td>
+                          <td style={{ ...td, textAlign: 'center', fontWeight: 800 }}>{totalOrders}</td>
+                          <td style={{ ...td, textAlign: 'right', fontWeight: 800, color: C.success }}>฿{fmt(totalSales)}</td>
+                          <td style={{ ...td, textAlign: 'center', fontWeight: 800, color: C.accent }}>{totalShipped}</td>
+                          <td style={{ ...td, textAlign: 'center', fontWeight: 800, color: C.success }}>{ss.delivered}</td>
+                          <td style={{ ...td, textAlign: 'center', fontWeight: 700, color: '#E67E22' }}>{ss.waiting}</td>
+                          <td style={{ ...td, textAlign: 'center', fontWeight: 700, color: C.danger }}>{ss.returned}</td>
+                          <td style={{ ...td, textAlign: 'right', fontWeight: 800, color: parseFloat(shipRate) >= 80 ? C.success : C.gold }}>{shipRate}%</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              })()}
             </div>
           )}
 
