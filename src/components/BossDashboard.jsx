@@ -98,12 +98,13 @@ function BossLogin({ onLogin }) {
 // ═══════════════════════════════════════════
 function ClassicTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null
+  const isMoney = (name) => !name?.includes('ออเดอร์') && !name?.includes('จำนวน') && !name?.includes('count')
   return (
     <div style={{ background: C.navy, padding: '10px 14px', borderRadius: 2, boxShadow: C.shadowMd }}>
-      <div style={{ fontSize: 11, color: '#a0a0b0', marginBottom: 4, fontFamily: C.fontSans }}>{label}</div>
+      {label && <div style={{ fontSize: 11, color: '#a0a0b0', marginBottom: 4, fontFamily: C.fontSans }}>{label}</div>}
       {payload.map((p, i) => (
         <div key={i} style={{ fontSize: 13, color: '#fff', fontWeight: 600, fontFamily: C.fontSans }}>
-          {p.name}: {typeof p.value === 'number' ? (p.name.includes('ยอด') || p.name.includes('฿') ? `฿${fmt(p.value)}` : fmt(p.value)) : p.value}
+          {p.name}: {typeof p.value === 'number' ? (isMoney(p.name) ? `฿${fmt(p.value)}` : fmt(p.value)) : p.value}
         </div>
       ))}
     </div>
@@ -127,6 +128,7 @@ export default function BossDashboard() {
   const [dateTo, setDateTo] = useState(todayStr)
   const [quickRange, setQuickRange] = useState('today')
   const [selectedEmployee, setSelectedEmployee] = useState(null)
+  const [dataLoading, setDataLoading] = useState(false)
 
   const setQuick = (key) => {
     setQuickRange(key)
@@ -173,6 +175,7 @@ export default function BossDashboard() {
       return allOrders
     }
     const fetchAll = async () => {
+      setDataLoading(true)
       const [ords, teamRes, profRes] = await Promise.all([
         fetchAllOrders(),
         supabase.from('mt_teams').select('*').order('name'),
@@ -181,6 +184,7 @@ export default function BossDashboard() {
       setOrders(ords)
       if (teamRes.data) setTeams(teamRes.data)
       if (profRes.data) setProfiles(profRes.data)
+      setDataLoading(false)
     }
     fetchAll()
   }, [status, dateFrom, dateTo])
@@ -422,15 +426,26 @@ export default function BossDashboard() {
             ))}
             <div style={{ marginTop: 10 }}>
               <input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setQuickRange('') }}
-                style={{ width: '100%', padding: '6px 8px', border: `1px solid ${C.border}`, borderRadius: 2, fontSize: 11, fontFamily: C.fontSans, marginBottom: 4, boxSizing: 'border-box' }} />
+                disabled={quickRange === 'all'}
+                style={{ width: '100%', padding: '6px 8px', border: `1px solid ${C.border}`, borderRadius: 2, fontSize: 11, fontFamily: C.fontSans, marginBottom: 4, boxSizing: 'border-box', opacity: quickRange === 'all' ? 0.4 : 1 }} />
               <input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setQuickRange('') }}
-                style={{ width: '100%', padding: '6px 8px', border: `1px solid ${C.border}`, borderRadius: 2, fontSize: 11, fontFamily: C.fontSans, boxSizing: 'border-box' }} />
+                disabled={quickRange === 'all'}
+                style={{ width: '100%', padding: '6px 8px', border: `1px solid ${C.border}`, borderRadius: 2, fontSize: 11, fontFamily: C.fontSans, boxSizing: 'border-box', opacity: quickRange === 'all' ? 0.4 : 1 }} />
             </div>
           </div>
         </div>
 
         {/* ═══ Main Content ═══ */}
-        <div style={{ flex: 1, padding: 32, overflowY: 'auto', maxHeight: 'calc(100vh - 56px)' }}>
+        <div style={{ flex: 1, padding: 32, overflowY: 'auto', maxHeight: 'calc(100vh - 56px)', position: 'relative' }}>
+          {dataLoading && (
+            <div style={{ position: 'sticky', top: 0, left: 0, right: 0, zIndex: 10, marginBottom: 12 }}>
+              <div style={{ background: C.surfaceAlt, borderRadius: 2, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10, boxShadow: C.shadow, border: `1px solid ${C.border}` }}>
+                <div style={{ width: 16, height: 16, border: `2px solid ${C.border}`, borderTop: `2px solid ${C.accent}`, borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}></div>
+                <span style={{ fontSize: 13, color: C.textDim }}>กำลังโหลดข้อมูล...</span>
+              </div>
+              <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+            </div>
+          )}
           {/* Header */}
           {!(section === 'employees' && selectedEmployee) && (
           <div style={{ marginBottom: 28 }}>
@@ -468,21 +483,35 @@ export default function BossDashboard() {
                 {/* Daily Trend */}
                 <div style={{ ...card, padding: 20 }}>
                   <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 16, fontFamily: C.font }}>ยอดขายรายวัน</div>
-                  <ResponsiveContainer width="100%" height={220}>
-                    <AreaChart data={dailyChart}>
-                      <defs>
-                        <linearGradient id="gradSales" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor={C.accent} stopOpacity={0.15} />
-                          <stop offset="100%" stopColor={C.accent} stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
-                      <XAxis dataKey="date" tick={{ fontSize: 10, fill: C.textDim, fontFamily: C.fontSans }} tickFormatter={d => fmtDate(d)} />
-                      <YAxis tick={{ fontSize: 10, fill: C.textDim }} tickFormatter={v => `฿${fmt(v)}`} />
-                      <Tooltip content={<ClassicTooltip />} />
-                      <Area type="monotone" dataKey="ยอดขาย" stroke={C.accent} strokeWidth={2} fill="url(#gradSales)" />
-                    </AreaChart>
-                  </ResponsiveContainer>
+                  {dailyChart.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: 40, color: C.textMuted, fontSize: 13 }}>ไม่มีข้อมูล</div>
+                  ) : dailyChart.length <= 2 ? (
+                    <ResponsiveContainer width="100%" height={220}>
+                      <BarChart data={dailyChart}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+                        <XAxis dataKey="date" tick={{ fontSize: 10, fill: C.textDim, fontFamily: C.fontSans }} tickFormatter={d => fmtDate(d)} />
+                        <YAxis tick={{ fontSize: 10, fill: C.textDim }} tickFormatter={v => `฿${fmt(v)}`} />
+                        <Tooltip content={<ClassicTooltip />} />
+                        <Bar dataKey="ยอดขาย" fill={C.accent} radius={[4, 4, 0, 0]} barSize={60} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={220}>
+                      <AreaChart data={dailyChart}>
+                        <defs>
+                          <linearGradient id="gradSales" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor={C.accent} stopOpacity={0.15} />
+                            <stop offset="100%" stopColor={C.accent} stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+                        <XAxis dataKey="date" tick={{ fontSize: 10, fill: C.textDim, fontFamily: C.fontSans }} tickFormatter={d => fmtDate(d)} />
+                        <YAxis tick={{ fontSize: 10, fill: C.textDim }} tickFormatter={v => `฿${fmt(v)}`} />
+                        <Tooltip content={<ClassicTooltip />} />
+                        <Area type="monotone" dataKey="ยอดขาย" stroke={C.accent} strokeWidth={2} fill="url(#gradSales)" />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  )}
                 </div>
 
                 {/* Payment Pie */}
