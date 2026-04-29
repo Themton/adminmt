@@ -134,6 +134,12 @@ export default function BossDashboard() {
     try { return JSON.parse(localStorage.getItem('boss_targets') || '{}') } catch { return {} }
   })
   const [editTarget, setEditTarget] = useState(false)
+  const [showAddUser, setShowAddUser] = useState(false)
+  const [userForm, setUserForm] = useState({ email: '', password: '', fullName: '', role: 'employee', teamId: '' })
+  const [editingUser, setEditingUser] = useState(null)
+  const [editTeamId, setEditTeamId] = useState(null)
+  const [editTeamName, setEditTeamName] = useState('')
+  const [flash, setFlash] = useState('')
 
   const setQuick = (key) => {
     setQuickRange(key)
@@ -380,6 +386,71 @@ export default function BossDashboard() {
     localStorage.setItem('boss_targets', JSON.stringify(newT))
   }
 
+  const showFlash = (msg) => { setFlash(msg); setTimeout(() => setFlash(''), 3000) }
+
+  const refreshProfiles = async () => {
+    const { data } = await supabase.from('mt_profiles').select('*, mt_teams(id, name)').order('created_at', { ascending: false })
+    if (data) setProfiles(data)
+  }
+  const refreshTeams = async () => {
+    const { data } = await supabase.from('mt_teams').select('*').order('name')
+    if (data) setTeams(data)
+  }
+
+  const createUser = async () => {
+    const f = userForm
+    if (!f.email || !f.password || !f.fullName) { showFlash('❌ กรอกให้ครบ'); return }
+    if (f.password.length < 6) { showFlash('❌ รหัสผ่าน 6 ตัวขึ้นไป'); return }
+    showFlash('⏳ กำลังสร้าง...')
+    try {
+      const sbUrl = import.meta.env.VITE_SUPABASE_URL
+      const sbKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+      let newUserId = null
+      const res = await fetch(`${sbUrl}/auth/v1/signup`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': sbKey }, body: JSON.stringify({ email: f.email, password: f.password }) })
+      const result = await res.json()
+      if (res.ok && (result.id || result.user?.id)) { newUserId = result.id || result.user?.id }
+      else if (JSON.stringify(result).includes('already registered')) {
+        const lr = await fetch(`${sbUrl}/auth/v1/token?grant_type=password`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': sbKey }, body: JSON.stringify({ email: f.email, password: f.password }) })
+        const lres = await lr.json()
+        if (lr.ok && lres.user?.id) newUserId = lres.user.id
+        else { showFlash('❌ อีเมลนี้มีอยู่แล้ว รหัสผ่านไม่ตรง'); return }
+      } else { showFlash('❌ ' + (result.error?.message || JSON.stringify(result))); return }
+      if (!newUserId) { showFlash('❌ ไม่ได้ user ID'); return }
+      const { data: existing } = await supabase.from('mt_profiles').select('id').eq('id', newUserId).single()
+      if (existing) { await supabase.from('mt_profiles').update({ full_name: f.fullName, role: f.role, team_id: f.teamId || null, email: f.email, password_text: f.password }).eq('id', newUserId) }
+      else { await new Promise(r => setTimeout(r, 300)); await supabase.from('mt_profiles').insert({ id: newUserId, full_name: f.fullName, role: f.role, team_id: f.teamId || null, email: f.email, password_text: f.password }) }
+      showFlash('✅ สร้างสำเร็จ — ' + f.fullName)
+      setShowAddUser(false); setUserForm({ email: '', password: '', fullName: '', role: 'employee', teamId: '' })
+      refreshProfiles()
+    } catch (e) { showFlash('❌ ' + e.message) }
+  }
+
+  const saveUserEdit = async () => {
+    if (!editingUser) return
+    const u = editingUser
+    await supabase.from('mt_profiles').update({ full_name: u.full_name, role: u.role, team_id: u.team_id || null, email: u.email || '', password_text: u.password_text || '' }).eq('id', u.id)
+    setEditingUser(null); showFlash('✅ แก้ไขสำเร็จ'); refreshProfiles()
+  }
+
+  const deleteUser = async (p) => {
+    if (!confirm(`ลบ ${p.full_name}?`)) return
+    await supabase.from('mt_profiles').delete().eq('id', p.id)
+    showFlash('✅ ลบแล้ว'); refreshProfiles()
+  }
+
+  const saveTeam = async () => {
+    if (!editTeamName.trim()) return
+    if (editTeamId === 'new') { await supabase.from('mt_teams').insert({ name: editTeamName.trim() }) }
+    else { await supabase.from('mt_teams').update({ name: editTeamName.trim() }).eq('id', editTeamId) }
+    setEditTeamId(null); setEditTeamName(''); showFlash('✅ บันทึกทีมสำเร็จ'); refreshTeams()
+  }
+
+  const deleteTeam = async (t) => {
+    if (!confirm(`ลบทีม ${t.name}?`)) return
+    await supabase.from('mt_teams').delete().eq('id', t.id)
+    showFlash('✅ ลบทีมแล้ว'); refreshTeams()
+  }
+
   // ═══ Render ═══
   if (status === 'loading') return (
     <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: C.fontSans }}>
@@ -406,6 +477,7 @@ export default function BossDashboard() {
     { id: 'time', icon: '⏰', label: 'ช่วงเวลา' },
     { id: 'channels', icon: '📢', label: 'ช่องทาง' },
     { id: 'targets', icon: '🎯', label: 'เป้าหมาย' },
+    { id: 'manage', icon: '⚙️', label: 'จัดการพนักงาน' },
     { id: 'orders', icon: '📋', label: 'รายการออเดอร์' },
   ]
 
@@ -1173,6 +1245,186 @@ export default function BossDashboard() {
                                 <div style={{ width: pct + '%', height: '100%', borderRadius: 2, background: [C.accent, C.success, C.navy, C.gold][i % 4] }}></div>
                               </div>
                               <span style={{ fontSize: 10, color: C.textMuted, minWidth: 36 }}>{pct}%</span>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ═══════ MANAGE ═══════ */}
+          {section === 'manage' && (
+            <div className="fade-in">
+              {/* Flash message */}
+              {flash && <div style={{ position: 'fixed', top: 70, right: 32, zIndex: 999, padding: '12px 20px', borderRadius: 2, background: flash.includes('❌') ? '#fef2f2' : '#f0fdf4', color: flash.includes('❌') ? C.danger : C.success, fontSize: 13, fontWeight: 600, boxShadow: C.shadowMd, border: `1px solid ${flash.includes('❌') ? '#fecaca' : '#bbf7d0'}` }}>{flash}</div>}
+
+              {/* Team management */}
+              <div style={{ ...card, padding: 20, marginBottom: 24 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: C.font }}>👥 จัดการทีม ({teams.length} ทีม)</div>
+                  <button onClick={() => { setEditTeamId('new'); setEditTeamName('') }} style={{ padding: '6px 16px', border: `1px solid ${C.border}`, borderRadius: 2, background: C.accent, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: C.fontSans }}>+ เพิ่มทีม</button>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10 }}>
+                  {teams.map(t => (
+                    <div key={t.id} style={{ padding: 14, border: `1px solid ${C.border}`, borderRadius: 2, background: C.surfaceAlt, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      {editTeamId === t.id ? (
+                        <div style={{ display: 'flex', gap: 6, flex: 1 }}>
+                          <input value={editTeamName} onChange={e => setEditTeamName(e.target.value)} style={{ flex: 1, padding: '6px 8px', border: `1px solid ${C.border}`, borderRadius: 2, fontSize: 13, fontFamily: C.fontSans }} autoFocus />
+                          <button onClick={saveTeam} style={{ padding: '6px 10px', border: 'none', borderRadius: 2, background: C.success, color: '#fff', fontSize: 11, cursor: 'pointer' }}>✓</button>
+                          <button onClick={() => setEditTeamId(null)} style={{ padding: '6px 10px', border: `1px solid ${C.border}`, borderRadius: 2, background: C.surface, fontSize: 11, cursor: 'pointer' }}>✕</button>
+                        </div>
+                      ) : (
+                        <>
+                          <div>
+                            <div style={{ fontWeight: 600, fontSize: 13 }}>{t.name}</div>
+                            <div style={{ fontSize: 11, color: C.textDim }}>{profiles.filter(p => p.team_id === t.id).length} คน</div>
+                          </div>
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            <button onClick={() => { setEditTeamId(t.id); setEditTeamName(t.name) }} style={{ padding: '4px 8px', border: `1px solid ${C.border}`, borderRadius: 2, background: C.surface, fontSize: 11, cursor: 'pointer', color: C.accent }}>✏️</button>
+                            <button onClick={() => deleteTeam(t)} style={{ padding: '4px 8px', border: `1px solid ${C.border}`, borderRadius: 2, background: C.surface, fontSize: 11, cursor: 'pointer', color: C.danger }}>🗑</button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                  {editTeamId === 'new' && (
+                    <div style={{ padding: 14, border: `2px dashed ${C.accent}`, borderRadius: 2, display: 'flex', gap: 6 }}>
+                      <input value={editTeamName} onChange={e => setEditTeamName(e.target.value)} placeholder="ชื่อทีมใหม่" style={{ flex: 1, padding: '6px 8px', border: `1px solid ${C.border}`, borderRadius: 2, fontSize: 13, fontFamily: C.fontSans }} autoFocus />
+                      <button onClick={saveTeam} style={{ padding: '6px 10px', border: 'none', borderRadius: 2, background: C.success, color: '#fff', fontSize: 11, cursor: 'pointer' }}>✓</button>
+                      <button onClick={() => setEditTeamId(null)} style={{ padding: '6px 10px', border: `1px solid ${C.border}`, borderRadius: 2, background: C.surface, fontSize: 11, cursor: 'pointer' }}>✕</button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Employee list */}
+              <div style={{ ...card, padding: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: C.font }}>🧑‍💼 พนักงานทั้งหมด ({profiles.length} คน)</div>
+                  <button onClick={() => setShowAddUser(true)} style={{ padding: '8px 20px', border: 'none', borderRadius: 2, background: C.accent, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: C.fontSans }}>+ เพิ่มพนักงาน</button>
+                </div>
+
+                {/* Add user form */}
+                {showAddUser && (
+                  <div style={{ padding: 20, marginBottom: 16, border: `2px solid ${C.accent}`, borderRadius: 2, background: '#fdfaf3' }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12, color: C.accent }}>เพิ่มพนักงานใหม่</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 10 }}>
+                      <div>
+                        <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 4 }}>ชื่อ-นามสกุล *</div>
+                        <input value={userForm.fullName} onChange={e => setUserForm(f => ({ ...f, fullName: e.target.value }))} style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 2, fontSize: 13, fontFamily: C.fontSans, boxSizing: 'border-box' }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 4 }}>อีเมล *</div>
+                        <input type="email" value={userForm.email} onChange={e => setUserForm(f => ({ ...f, email: e.target.value }))} style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 2, fontSize: 13, fontFamily: C.fontSans, boxSizing: 'border-box' }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 4 }}>รหัสผ่าน *</div>
+                        <input value={userForm.password} onChange={e => setUserForm(f => ({ ...f, password: e.target.value }))} style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 2, fontSize: 13, fontFamily: C.fontSans, boxSizing: 'border-box' }} />
+                      </div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 14 }}>
+                      <div>
+                        <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 4 }}>ตำแหน่ง</div>
+                        <select value={userForm.role} onChange={e => setUserForm(f => ({ ...f, role: e.target.value }))} style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 2, fontSize: 13, fontFamily: C.fontSans, boxSizing: 'border-box' }}>
+                          <option value="employee">👤 พนักงาน</option>
+                          <option value="packer">📦 พนักงานจัดส่ง</option>
+                          <option value="head">👑 หัวหน้าจัดส่ง</option>
+                          <option value="export">📊 Export รายงาน</option>
+                          <option value="admin">🔑 แอดมิน</option>
+                          <option value="manager">🏢 ผู้จัดการ</option>
+                        </select>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 4 }}>ทีม</div>
+                        <select value={userForm.teamId} onChange={e => setUserForm(f => ({ ...f, teamId: e.target.value }))} style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 2, fontSize: 13, fontFamily: C.fontSans, boxSizing: 'border-box' }}>
+                          <option value="">— ไม่มีทีม —</option>
+                          {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                        </select>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+                        <button onClick={createUser} style={{ flex: 1, padding: '9px', border: 'none', borderRadius: 2, background: C.accent, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: C.fontSans }}>✓ สร้าง</button>
+                        <button onClick={() => setShowAddUser(false)} style={{ padding: '9px 14px', border: `1px solid ${C.border}`, borderRadius: 2, background: C.surface, fontSize: 13, cursor: 'pointer', fontFamily: C.fontSans }}>ยกเลิก</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Edit user modal */}
+                {editingUser && (
+                  <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={() => setEditingUser(null)}>
+                    <div style={{ background: C.surface, padding: 24, borderRadius: 2, width: 400, boxShadow: C.shadowLg }} onClick={e => e.stopPropagation()}>
+                      <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 16, fontFamily: C.font }}>✏️ แก้ไข {editingUser.full_name}</div>
+                      {[
+                        { label: 'ชื่อ-นามสกุล', key: 'full_name' },
+                        { label: 'อีเมล', key: 'email' },
+                        { label: 'รหัสผ่าน', key: 'password_text' },
+                      ].map(f => (
+                        <div key={f.key} style={{ marginBottom: 10 }}>
+                          <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 4 }}>{f.label}</div>
+                          <input value={editingUser[f.key] || ''} onChange={e => setEditingUser(u => ({ ...u, [f.key]: e.target.value }))} style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 2, fontSize: 13, fontFamily: C.fontSans, boxSizing: 'border-box' }} />
+                        </div>
+                      ))}
+                      <div style={{ marginBottom: 10 }}>
+                        <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 4 }}>ตำแหน่ง</div>
+                        <select value={editingUser.role} onChange={e => setEditingUser(u => ({ ...u, role: e.target.value }))} style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 2, fontSize: 13, fontFamily: C.fontSans, boxSizing: 'border-box' }}>
+                          <option value="employee">👤 พนักงาน</option>
+                          <option value="packer">📦 พนักงานจัดส่ง</option>
+                          <option value="head">👑 หัวหน้าจัดส่ง</option>
+                          <option value="export">📊 Export รายงาน</option>
+                          <option value="admin">🔑 แอดมิน</option>
+                          <option value="manager">🏢 ผู้จัดการ</option>
+                        </select>
+                      </div>
+                      <div style={{ marginBottom: 14 }}>
+                        <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 4 }}>ทีม</div>
+                        <select value={editingUser.team_id || ''} onChange={e => setEditingUser(u => ({ ...u, team_id: e.target.value || null }))} style={{ width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 2, fontSize: 13, fontFamily: C.fontSans, boxSizing: 'border-box' }}>
+                          <option value="">— ไม่มีทีม —</option>
+                          {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                        </select>
+                      </div>
+                      <div style={{ display: 'flex', gap: 10 }}>
+                        <button onClick={saveUserEdit} style={{ flex: 1, padding: '10px', border: 'none', borderRadius: 2, background: C.accent, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>💾 บันทึก</button>
+                        <button onClick={() => setEditingUser(null)} style={{ flex: 1, padding: '10px', border: `1px solid ${C.border}`, borderRadius: 2, background: C.surface, fontSize: 13, cursor: 'pointer' }}>ยกเลิก</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Employee table */}
+                <table>
+                  <thead><tr>
+                    <th style={{ ...th, width: 36 }}>#</th>
+                    <th style={th}>ชื่อ</th>
+                    <th style={th}>อีเมล</th>
+                    <th style={th}>รหัสผ่าน</th>
+                    <th style={{ ...th, textAlign: 'center' }}>ตำแหน่ง</th>
+                    <th style={th}>ทีม</th>
+                    <th style={{ ...th, textAlign: 'center' }}>จัดการ</th>
+                  </tr></thead>
+                  <tbody>
+                    {profiles.map((p, i) => {
+                      const roleMap = { employee: '👤 พนักงาน', packer: '📦 จัดส่ง', head: '👑 หัวหน้าจัดส่ง', export: '📊 Export', admin: '🔑 แอดมิน', manager: '🏢 ผู้จัดการ' }
+                      const roleColors = { employee: C.navy, packer: C.accent, head: C.gold, export: '#8884d8', admin: C.danger, manager: C.success }
+                      return (
+                        <tr key={p.id} style={{ background: i % 2 === 0 ? C.surfaceAlt : 'transparent' }}>
+                          <td style={{ ...td, textAlign: 'center', color: C.textMuted, fontSize: 11 }}>{i + 1}</td>
+                          <td style={{ ...td, fontWeight: 600 }}>{p.full_name}</td>
+                          <td style={{ ...td, fontSize: 12, color: C.textDim }}>{p.email || '—'}</td>
+                          <td style={{ ...td, fontSize: 12, color: C.textDim, fontFamily: 'monospace' }}>{p.password_text || '—'}</td>
+                          <td style={{ ...td, textAlign: 'center' }}>
+                            <span style={{ padding: '3px 10px', borderRadius: 2, fontSize: 11, fontWeight: 600, background: (roleColors[p.role] || C.navy) + '10', color: roleColors[p.role] || C.navy }}>{roleMap[p.role] || p.role}</span>
+                          </td>
+                          <td style={{ ...td, fontSize: 12 }}>{p.mt_teams?.name || '—'}</td>
+                          <td style={{ ...td, textAlign: 'center' }}>
+                            <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
+                              <button onClick={() => setEditingUser({ ...p })} style={{ padding: '5px 12px', border: `1px solid ${C.border}`, borderRadius: 2, background: C.surface, color: C.accent, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>✏️ แก้ไข</button>
+                              {p.id !== profile.id && (
+                                <button onClick={() => deleteUser(p)} style={{ padding: '5px 12px', border: `1px solid #fecaca`, borderRadius: 2, background: '#fef2f2', color: C.danger, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>🗑 ลบ</button>
+                              )}
                             </div>
                           </td>
                         </tr>
