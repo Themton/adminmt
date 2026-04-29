@@ -140,6 +140,9 @@ export default function BossDashboard() {
   const [editTeamId, setEditTeamId] = useState(null)
   const [editTeamName, setEditTeamName] = useState('')
   const [flash, setFlash] = useState('')
+  const [commSettings, setCommSettings] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('boss_comm') || '{}') } catch { return {} }
+  })
 
   const setQuick = (key) => {
     setQuickRange(key)
@@ -502,6 +505,9 @@ export default function BossDashboard() {
     { id: 'time', icon: '⏰', label: 'ช่วงเวลา' },
     { id: 'channels', icon: '📢', label: 'ช่องทาง' },
     { id: 'shipping', icon: '🚚', label: 'ส่งรายชื่อ' },
+    { id: 'weekly', icon: '📊', label: 'สรุปรายสัปดาห์' },
+    { id: 'commission', icon: '💰', label: 'ค่าคอม/โบนัส' },
+    { id: 'alerts', icon: '🔔', label: 'แจ้งเตือน' },
     { id: 'targets', icon: '🎯', label: 'เป้าหมาย' },
     { id: 'manage', icon: '⚙️', label: 'จัดการพนักงาน' },
     { id: 'orders', icon: '📋', label: 'รายการออเดอร์' },
@@ -1930,6 +1936,305 @@ export default function BossDashboard() {
                       ))}
                     </div>
                   )}
+                </>
+              })()}
+            </div>
+          )}
+
+          {/* ═══════ WEEKLY ═══════ */}
+          {section === 'weekly' && (
+            <div className="fade-in">
+              {(() => {
+                // Build weekly data from ALL orders (ignore date filter)
+                const weekMap = {}
+                orders.forEach(o => {
+                  const d = new Date(o.order_date)
+                  if (isNaN(d)) return
+                  const day = d.getDay(); const diff = d.getDate() - day + (day === 0 ? -6 : 1)
+                  const mon = new Date(d.setDate(diff))
+                  const wk = mon.toISOString().split('T')[0]
+                  if (!weekMap[wk]) weekMap[wk] = { week: wk, sales: 0, orders: 0, cod: 0, trans: 0, emps: {} }
+                  const w = weekMap[wk]
+                  w.sales += parseFloat(o.sale_price) || 0; w.orders++
+                  if (o.payment_type === 'transfer') w.trans++; else w.cod++
+                  const en = o.employee_name || '—'
+                  if (!w.emps[en]) w.emps[en] = { name: en, sales: 0, count: 0 }
+                  w.emps[en].sales += parseFloat(o.sale_price) || 0; w.emps[en].count++
+                })
+                const weeks = Object.values(weekMap).sort((a, b) => b.week.localeCompare(a.week))
+                const fmtW = (w) => { const d = new Date(w); const e = new Date(d); e.setDate(e.getDate() + 6); return `${d.getDate()}/${d.getMonth() + 1} - ${e.getDate()}/${e.getMonth() + 1}` }
+
+                return <>
+                  {/* Chart */}
+                  <div style={{ ...card, padding: 20, marginBottom: 24 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12, fontFamily: C.font }}>ยอดขายรายสัปดาห์</div>
+                    <ResponsiveContainer width="100%" height={220}>
+                      <BarChart data={[...weeks].reverse().slice(-12)}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
+                        <XAxis dataKey="week" tick={{ fontSize: 9, fill: C.textDim }} tickFormatter={fmtW} />
+                        <YAxis tick={{ fontSize: 10, fill: C.textDim }} tickFormatter={v => `฿${fmt(v)}`} />
+                        <Tooltip content={<ClassicTooltip />} />
+                        <Bar dataKey="sales" fill={C.accent} radius={[3, 3, 0, 0]} name="ยอดขาย" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Weekly table */}
+                  <div style={{ ...card, padding: 20 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12, fontFamily: C.font }}>เปรียบเทียบรายสัปดาห์</div>
+                    <table>
+                      <thead><tr>
+                        <th style={th}>สัปดาห์</th>
+                        <th style={{ ...th, textAlign: 'center' }}>ออเดอร์</th>
+                        <th style={{ ...th, textAlign: 'right' }}>ยอดขาย</th>
+                        <th style={{ ...th, textAlign: 'right' }}>เฉลี่ย/ออเดอร์</th>
+                        <th style={{ ...th, textAlign: 'center' }}>COD</th>
+                        <th style={{ ...th, textAlign: 'center' }}>โอน</th>
+                        <th style={{ ...th, textAlign: 'center' }}>เทียบสัปดาห์ก่อน</th>
+                        <th style={th}>พนักงานขายดีสุด</th>
+                      </tr></thead>
+                      <tbody>
+                        {weeks.slice(0, 12).map((w, i) => {
+                          const prev = weeks[i + 1]
+                          const growth = prev ? ((w.sales - prev.sales) / prev.sales * 100) : 0
+                          const topEmp = Object.values(w.emps).sort((a, b) => b.sales - a.sales)[0]
+                          return (
+                            <tr key={w.week} style={{ background: i === 0 ? '#fdfaf3' : (i % 2 === 0 ? C.surfaceAlt : 'transparent') }}>
+                              <td style={{ ...td, fontWeight: i === 0 ? 700 : 400 }}>{i === 0 ? '📌 ' : ''}{fmtW(w.week)}</td>
+                              <td style={{ ...td, textAlign: 'center', fontWeight: 700, color: C.accent }}>{w.orders}</td>
+                              <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: C.success }}>฿{fmt(w.sales)}</td>
+                              <td style={{ ...td, textAlign: 'right' }}>฿{fmt(w.orders > 0 ? w.sales / w.orders : 0)}</td>
+                              <td style={{ ...td, textAlign: 'center' }}>{w.cod}</td>
+                              <td style={{ ...td, textAlign: 'center' }}>{w.trans}</td>
+                              <td style={{ ...td, textAlign: 'center', fontWeight: 700, color: !prev ? C.textMuted : growth >= 0 ? C.success : C.danger }}>
+                                {prev ? `${growth >= 0 ? '▲' : '▼'} ${Math.abs(growth).toFixed(1)}%` : '—'}
+                              </td>
+                              <td style={{ ...td, fontSize: 12 }}>{topEmp ? `${topEmp.name} (฿${fmt(topEmp.sales)})` : '—'}</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              })()}
+            </div>
+          )}
+
+          {/* ═══════ COMMISSION ═══════ */}
+          {section === 'commission' && (
+            <div className="fade-in">
+              {(() => {
+                const cs = commSettings
+                const saveComm = (v) => { setCommSettings(v); localStorage.setItem('boss_comm', JSON.stringify(v)) }
+                const rate = cs.rate || 0
+                const bonusThreshold = cs.bonusThreshold || 0
+                const bonusAmount = cs.bonusAmount || 0
+                const fixedSalary = cs.fixedSalary || 0
+
+                const empComm = empStats.map(e => {
+                  const comm = rate > 0 ? (e.sales * rate / 100) : 0
+                  const bonus = bonusThreshold > 0 && e.sales >= bonusThreshold ? bonusAmount : 0
+                  const total = fixedSalary + comm + bonus
+                  return { ...e, comm, bonus, fixedSalary, total }
+                })
+                const totalComm = empComm.reduce((s, e) => s + e.comm, 0)
+                const totalBonus = empComm.reduce((s, e) => s + e.bonus, 0)
+                const totalPay = empComm.reduce((s, e) => s + e.total, 0)
+
+                return <>
+                  {/* Settings */}
+                  <div style={{ ...card, padding: 20, marginBottom: 24 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 14, fontFamily: C.font }}>⚙️ ตั้งค่าคอมมิชชั่น</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+                      <div>
+                        <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 4 }}>เงินเดือน/ฐาน (฿)</div>
+                        <input type="number" value={cs.fixedSalary || ''} placeholder="0" onChange={e => saveComm({ ...cs, fixedSalary: parseFloat(e.target.value) || 0 })}
+                          style={{ width: '100%', padding: '10px', border: `1px solid ${C.border}`, borderRadius: 2, fontSize: 14, fontWeight: 700, fontFamily: C.fontSans, boxSizing: 'border-box' }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 4 }}>ค่าคอม (%)</div>
+                        <input type="number" value={cs.rate || ''} placeholder="0" step="0.5" onChange={e => saveComm({ ...cs, rate: parseFloat(e.target.value) || 0 })}
+                          style={{ width: '100%', padding: '10px', border: `1px solid ${C.border}`, borderRadius: 2, fontSize: 14, fontWeight: 700, fontFamily: C.fontSans, boxSizing: 'border-box' }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 4 }}>โบนัสเมื่อยอดถึง (฿)</div>
+                        <input type="number" value={cs.bonusThreshold || ''} placeholder="0" onChange={e => saveComm({ ...cs, bonusThreshold: parseFloat(e.target.value) || 0 })}
+                          style={{ width: '100%', padding: '10px', border: `1px solid ${C.border}`, borderRadius: 2, fontSize: 14, fontWeight: 700, fontFamily: C.fontSans, boxSizing: 'border-box' }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 4 }}>โบนัส (฿)</div>
+                        <input type="number" value={cs.bonusAmount || ''} placeholder="0" onChange={e => saveComm({ ...cs, bonusAmount: parseFloat(e.target.value) || 0 })}
+                          style={{ width: '100%', padding: '10px', border: `1px solid ${C.border}`, borderRadius: 2, fontSize: 14, fontWeight: 700, fontFamily: C.fontSans, boxSizing: 'border-box' }} />
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 11, color: C.textMuted, marginTop: 8 }}>สูตร: เงินเดือน + (ยอดขาย × {rate}%) {bonusThreshold > 0 ? `+ โบนัส ฿${fmt(bonusAmount)} เมื่อยอดถึง ฿${fmt(bonusThreshold)}` : ''}</div>
+                  </div>
+
+                  {/* Summary cards */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 24 }}>
+                    <div style={{ ...card, padding: 18, borderTop: `3px solid ${C.navy}` }}>
+                      <div style={{ fontSize: 10, color: C.textMuted, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 6 }}>ยอดขายรวม</div>
+                      <div style={{ fontSize: 22, fontWeight: 800, fontFamily: C.font }}>฿{fmt(totalSales)}</div>
+                    </div>
+                    <div style={{ ...card, padding: 18, borderTop: `3px solid ${C.accent}` }}>
+                      <div style={{ fontSize: 10, color: C.textMuted, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 6 }}>คอมมิชชั่นรวม</div>
+                      <div style={{ fontSize: 22, fontWeight: 800, fontFamily: C.font, color: C.accent }}>฿{fmt(totalComm)}</div>
+                    </div>
+                    <div style={{ ...card, padding: 18, borderTop: `3px solid ${C.gold}` }}>
+                      <div style={{ fontSize: 10, color: C.textMuted, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 6 }}>โบนัสรวม</div>
+                      <div style={{ fontSize: 22, fontWeight: 800, fontFamily: C.font, color: C.gold }}>฿{fmt(totalBonus)}</div>
+                      <div style={{ fontSize: 11, color: C.textDim }}>{empComm.filter(e => e.bonus > 0).length}/{empComm.length} คนได้โบนัส</div>
+                    </div>
+                    <div style={{ ...card, padding: 18, borderTop: `3px solid ${C.danger}` }}>
+                      <div style={{ fontSize: 10, color: C.textMuted, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 6 }}>ต้นทุนบุคลากรรวม</div>
+                      <div style={{ fontSize: 22, fontWeight: 800, fontFamily: C.font, color: C.danger }}>฿{fmt(totalPay)}</div>
+                    </div>
+                  </div>
+
+                  {/* Table */}
+                  <div style={{ ...card, padding: 20 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: C.font }}>💰 สรุปค่าคอม/โบนัส ({empComm.length} คน)</div>
+                      <button onClick={() => {
+                        const bom = '\uFEFF'
+                        const h = '#,พนักงาน,ออเดอร์,ยอดขาย,เงินเดือน,คอมมิชชั่น,โบนัส,รวมรับ\n'
+                        const r = empComm.map((e, i) => `${i + 1},"${e.name}",${e.count},${Math.round(e.sales)},${Math.round(e.fixedSalary)},${Math.round(e.comm)},${Math.round(e.bonus)},${Math.round(e.total)}`).join('\n')
+                        const blob = new Blob([bom + h + r], { type: 'text/csv;charset=utf-8;' })
+                        const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `คอมมิชชั่น_${dateFrom || 'all'}.csv`; a.click()
+                      }} style={{ padding: '6px 16px', border: `1px solid ${C.border}`, borderRadius: 2, background: C.surface, color: C.accent, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: C.fontSans }}>📥 Export CSV</button>
+                    </div>
+                    <table>
+                      <thead><tr>
+                        <th style={{ ...th, width: 36 }}>#</th>
+                        <th style={th}>พนักงาน</th>
+                        <th style={{ ...th, textAlign: 'center' }}>ออเดอร์</th>
+                        <th style={{ ...th, textAlign: 'right' }}>ยอดขาย</th>
+                        <th style={{ ...th, textAlign: 'right' }}>เงินเดือน</th>
+                        <th style={{ ...th, textAlign: 'right' }}>คอมมิชชั่น</th>
+                        <th style={{ ...th, textAlign: 'right' }}>โบนัส</th>
+                        <th style={{ ...th, textAlign: 'right' }}>รวมรับ</th>
+                      </tr></thead>
+                      <tbody>
+                        {empComm.map((e, i) => (
+                          <tr key={e.name} style={{ background: i % 2 === 0 ? C.surfaceAlt : 'transparent' }}>
+                            <td style={{ ...td, textAlign: 'center', color: C.textMuted }}>{i + 1}</td>
+                            <td style={{ ...td, fontWeight: 600 }}>{e.name}</td>
+                            <td style={{ ...td, textAlign: 'center', fontWeight: 700 }}>{e.count}</td>
+                            <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: C.success }}>฿{fmt(e.sales)}</td>
+                            <td style={{ ...td, textAlign: 'right' }}>฿{fmt(e.fixedSalary)}</td>
+                            <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: C.accent }}>฿{fmt(e.comm)}</td>
+                            <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: e.bonus > 0 ? C.gold : C.textMuted }}>{e.bonus > 0 ? `฿${fmt(e.bonus)} ✅` : '—'}</td>
+                            <td style={{ ...td, textAlign: 'right', fontWeight: 800, color: C.navy }}>฿{fmt(e.total)}</td>
+                          </tr>
+                        ))}
+                        <tr style={{ background: '#f5f0e8' }}>
+                          <td colSpan="2" style={{ ...td, fontWeight: 800 }}>รวม</td>
+                          <td style={{ ...td, textAlign: 'center', fontWeight: 800 }}>{totalOrders}</td>
+                          <td style={{ ...td, textAlign: 'right', fontWeight: 800, color: C.success }}>฿{fmt(totalSales)}</td>
+                          <td style={{ ...td, textAlign: 'right', fontWeight: 700 }}>฿{fmt(fixedSalary * empComm.length)}</td>
+                          <td style={{ ...td, textAlign: 'right', fontWeight: 800, color: C.accent }}>฿{fmt(totalComm)}</td>
+                          <td style={{ ...td, textAlign: 'right', fontWeight: 800, color: C.gold }}>฿{fmt(totalBonus)}</td>
+                          <td style={{ ...td, textAlign: 'right', fontWeight: 800, color: C.navy }}>฿{fmt(totalPay)}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              })()}
+            </div>
+          )}
+
+          {/* ═══════ ALERTS ═══════ */}
+          {section === 'alerts' && (
+            <div className="fade-in">
+              {(() => {
+                const alerts = []
+
+                // 1. ยอดตกผิดปกติ — compare today vs avg of last 7 days
+                const todayOrd = orders.filter(o => o.order_date === todayStr)
+                const todaySales = todayOrd.reduce((s, o) => s + (parseFloat(o.sale_price) || 0), 0)
+                const last7 = {}
+                orders.forEach(o => {
+                  const d = o.order_date
+                  if (d && d !== todayStr) { if (!last7[d]) last7[d] = { sales: 0, count: 0 }; last7[d].sales += parseFloat(o.sale_price) || 0; last7[d].count++ }
+                })
+                const dayVals = Object.values(last7)
+                if (dayVals.length >= 3) {
+                  const avgSales = dayVals.reduce((s, d) => s + d.sales, 0) / dayVals.length
+                  const avgOrders = dayVals.reduce((s, d) => s + d.count, 0) / dayVals.length
+                  if (todaySales < avgSales * 0.5 && todayOrd.length > 0) alerts.push({ type: 'danger', icon: '📉', title: 'ยอดขายวันนี้ตกมาก', desc: `วันนี้ ฿${fmt(todaySales)} (${todayOrd.length} ออเดอร์) ต่ำกว่าค่าเฉลี่ย ฿${fmt(avgSales)} ถึง ${((1 - todaySales / avgSales) * 100).toFixed(0)}%` })
+                  if (todayOrd.length < avgOrders * 0.5 && todayOrd.length > 0) alerts.push({ type: 'warning', icon: '⚠️', title: 'ออเดอร์วันนี้น้อยผิดปกติ', desc: `วันนี้ ${todayOrd.length} ออเดอร์ ค่าเฉลี่ย ${avgOrders.toFixed(0)} ออเดอร์/วัน` })
+                  if (todayOrd.length === 0) alerts.push({ type: 'danger', icon: '🚨', title: 'วันนี้ยังไม่มีออเดอร์เลย', desc: `ค่าเฉลี่ย ${avgOrders.toFixed(0)} ออเดอร์/วัน · ฿${fmt(avgSales)}/วัน` })
+                }
+
+                // 2. พนักงานยอดตก
+                if (prevOrders.length > 0) {
+                  const curEmp = {}, prevEmp = {}
+                  orders.forEach(o => { const n = o.employee_name || '—'; curEmp[n] = (curEmp[n] || 0) + (parseFloat(o.sale_price) || 0) })
+                  prevOrders.forEach(o => { const n = o.employee_name || '—'; prevEmp[n] = (prevEmp[n] || 0) + (parseFloat(o.sale_price) || 0) })
+                  Object.entries(curEmp).forEach(([name, cur]) => {
+                    const prev = prevEmp[name]
+                    if (prev && prev > 0 && cur < prev * 0.5) alerts.push({ type: 'warning', icon: '👤', title: `${name} ยอดตก`, desc: `ยอดลดจาก ฿${fmt(prev)} → ฿${fmt(cur)} (ลด ${((1 - cur / prev) * 100).toFixed(0)}%)` })
+                  })
+                  Object.entries(prevEmp).forEach(([name, prev]) => {
+                    if (!curEmp[name] && prev > 5000) alerts.push({ type: 'danger', icon: '❓', title: `${name} ไม่มียอดเลย`, desc: `ช่วงก่อนหน้ามียอด ฿${fmt(prev)} แต่ช่วงนี้ไม่มีเลย` })
+                  })
+                }
+
+                // 3. ลูกค้าใหญ่หาย — repeat customers who bought in prev but not current
+                if (prevOrders.length > 0) {
+                  const curPhones = new Set(orders.map(o => fmtPhone(o.customer_phone)))
+                  const prevCust = {}
+                  prevOrders.forEach(o => {
+                    const ph = fmtPhone(o.customer_phone)
+                    if (!prevCust[ph]) prevCust[ph] = { name: o.customer_name || '—', phone: ph, sales: 0, count: 0 }
+                    prevCust[ph].sales += parseFloat(o.sale_price) || 0; prevCust[ph].count++
+                  })
+                  Object.values(prevCust)
+                    .filter(c => c.count >= 2 && c.sales >= 1000 && !curPhones.has(c.phone))
+                    .sort((a, b) => b.sales - a.sales)
+                    .slice(0, 5)
+                    .forEach(c => alerts.push({ type: 'info', icon: '💤', title: `ลูกค้าประจำหาย: ${c.name}`, desc: `เคยซื้อ ${c.count} ครั้ง ยอดรวม ฿${fmt(c.sales)} แต่ช่วงนี้ไม่กลับมาซื้อ (${c.phone})` }))
+                }
+
+                // 4. สินค้ายอดตก
+                if (prevOrders.length > 0) {
+                  const curProd = {}, prevProd = {}
+                  orders.forEach(o => { const p = (o.remark || '').trim() || '—'; curProd[p] = (curProd[p] || 0) + 1 })
+                  prevOrders.forEach(o => { const p = (o.remark || '').trim() || '—'; prevProd[p] = (prevProd[p] || 0) + 1 })
+                  Object.entries(prevProd).forEach(([name, prev]) => {
+                    const cur = curProd[name] || 0
+                    if (prev >= 10 && cur < prev * 0.3) alerts.push({ type: 'warning', icon: '📦', title: `สินค้า "${name}" ยอดตก`, desc: `จาก ${prev} → ${cur} ออเดอร์ (ลด ${((1 - cur / prev) * 100).toFixed(0)}%)` })
+                  })
+                }
+
+                // 5. Good news!
+                if (prevOrders.length > 0) {
+                  const prevTotal = prevOrders.reduce((s, o) => s + (parseFloat(o.sale_price) || 0), 0)
+                  if (totalSales > prevTotal * 1.3 && prevTotal > 0) alerts.push({ type: 'success', icon: '🎉', title: 'ยอดขายเติบโตดี!', desc: `ยอดขายเพิ่มขึ้น ${((totalSales / prevTotal - 1) * 100).toFixed(0)}% จาก ฿${fmt(prevTotal)} → ฿${fmt(totalSales)}` })
+                }
+
+                if (alerts.length === 0) alerts.push({ type: 'success', icon: '✅', title: 'ไม่มีสิ่งผิดปกติ', desc: 'ทุกอย่างปกติดีครับ เลือกช่วงเวลาที่มีข้อมูลเพื่อดูการเปรียบเทียบ' })
+
+                const colors = { danger: { bg: '#fef2f2', border: '#fecaca', text: C.danger }, warning: { bg: '#fffbeb', border: '#fde68a', text: '#92400e' }, info: { bg: '#eff6ff', border: '#bfdbfe', text: '#1e40af' }, success: { bg: '#f0fdf4', border: '#bbf7d0', text: C.success } }
+
+                return <>
+                  <div style={{ fontSize: 12, color: C.textDim, marginBottom: 16 }}>
+                    {!dateFrom ? 'เลือกช่วงเวลา เช่น "เดือนนี้" เพื่อเปรียบเทียบกับเดือนก่อน' : `เปรียบเทียบช่วงปัจจุบันกับช่วงก่อนหน้า · พบ ${alerts.length} รายการ`}
+                  </div>
+                  {alerts.map((a, i) => {
+                    const cl = colors[a.type]
+                    return (
+                      <div key={i} style={{ padding: 16, marginBottom: 10, borderRadius: 2, background: cl.bg, border: `1px solid ${cl.border}`, display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+                        <span style={{ fontSize: 24 }}>{a.icon}</span>
+                        <div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: cl.text, marginBottom: 2 }}>{a.title}</div>
+                          <div style={{ fontSize: 12, color: C.textDim }}>{a.desc}</div>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </>
               })()}
             </div>
