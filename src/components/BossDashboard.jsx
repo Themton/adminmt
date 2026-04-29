@@ -161,7 +161,7 @@ export default function BossDashboard() {
   }, [])
 
   // Fetch data
-  const selectFields = 'id,order_number,order_date,customer_name,customer_phone,sale_price,cod_amount,payment_type,remark,employee_name,employee_id,team_id,sales_channel,created_at,slip_url'
+  const selectFields = 'id,order_number,order_date,customer_name,customer_phone,sale_price,cod_amount,payment_type,remark,employee_name,employee_id,team_id,sales_channel,created_at,slip_url,customer_address,sub_district,district,zip_code,province'
 
   useEffect(() => {
     if (status !== 'ready') return
@@ -380,16 +380,22 @@ export default function BossDashboard() {
   }, [orders])
 
   // Customer stats
+  const fmtPhone = (p) => { if (!p) return '—'; p = String(p).replace(/\D/g, ''); if (p.length === 9) p = '0' + p; return p }
   const customerStats = useMemo(() => {
     const m = {}
     orders.forEach(o => {
-      const phone = (o.customer_phone || '').trim() || '—'
-      if (!m[phone]) m[phone] = { phone, name: o.customer_name || '—', count: 0, sales: 0, firstDate: o.order_date, lastDate: o.order_date }
+      const phone = fmtPhone(o.customer_phone) || '—'
+      if (!m[phone]) m[phone] = { phone, name: o.customer_name || '—', count: 0, sales: 0, firstDate: o.order_date, lastDate: o.order_date, address: '', province: '', district: '' }
       m[phone].count++
       m[phone].sales += parseFloat(o.sale_price) || 0
       if (o.order_date < m[phone].firstDate) m[phone].firstDate = o.order_date
       if (o.order_date > m[phone].lastDate) m[phone].lastDate = o.order_date
       if (o.customer_name && o.customer_name !== '—') m[phone].name = o.customer_name
+      if (o.customer_address) m[phone].address = o.customer_address
+      if (o.province) m[phone].province = o.province
+      if (o.district) m[phone].district = o.district
+      if (o.sub_district) m[phone].subDistrict = o.sub_district
+      if (o.zip_code) m[phone].zipCode = o.zip_code
     })
     const all = Object.values(m)
     const repeat = all.filter(c => c.count >= 2).sort((a, b) => b.count - a.count)
@@ -1426,9 +1432,9 @@ export default function BossDashboard() {
                   <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: C.font }}>🏆 ลูกค้าซื้อซ้ำบ่อยที่สุด ({customerStats.repeat.length} คน)</div>
                   <button onClick={() => {
                     const bom = '\uFEFF'
-                    const header = '#,ชื่อ,เบอร์โทร,จำนวนครั้ง,ยอดรวม,เฉลี่ย/ครั้ง,ซื้อครั้งแรก,ซื้อล่าสุด\n'
+                    const header = '#,ชื่อ,เบอร์โทร,จำนวนครั้ง,ยอดรวม,เฉลี่ย/ครั้ง,ที่อยู่,ตำบล,อำเภอ,จังหวัด,รหัสไปรษณีย์,ซื้อครั้งแรก,ซื้อล่าสุด\n'
                     const rows = customerStats.repeat.map((c, i) =>
-                      `${i + 1},"${c.name}","${c.phone}",${c.count},${Math.round(c.sales)},${Math.round(c.count > 0 ? c.sales / c.count : 0)},${c.firstDate || ''},${c.lastDate || ''}`
+                      `${i + 1},"${c.name}","=""${c.phone}""",${c.count},${Math.round(c.sales)},${Math.round(c.count > 0 ? c.sales / c.count : 0)},"${(c.address || '').replace(/"/g, '""')}","${c.subDistrict || ''}","${c.district || ''}","${c.province || ''}","${c.zipCode || ''}",${c.firstDate || ''},${c.lastDate || ''}`
                     ).join('\n')
                     const blob = new Blob([bom + header + rows], { type: 'text/csv;charset=utf-8;' })
                     const url = URL.createObjectURL(blob)
@@ -1445,6 +1451,8 @@ export default function BossDashboard() {
                     <th style={{ ...th, textAlign: 'center' }}>จำนวนครั้ง</th>
                     <th style={{ ...th, textAlign: 'right' }}>ยอดรวม</th>
                     <th style={{ ...th, textAlign: 'right' }}>เฉลี่ย/ครั้ง</th>
+                    <th style={th}>จังหวัด</th>
+                    <th style={th}>อำเภอ</th>
                     <th style={th}>ซื้อครั้งแรก</th>
                     <th style={th}>ซื้อล่าสุด</th>
                   </tr></thead>
@@ -1453,10 +1461,12 @@ export default function BossDashboard() {
                       <tr key={c.phone} style={{ background: i < 3 ? '#fdfaf3' : (i % 2 === 0 ? C.surfaceAlt : 'transparent') }}>
                         <td style={{ ...td, textAlign: 'center', fontWeight: 800, color: i < 3 ? C.gold : C.textMuted }}>{i + 1}</td>
                         <td style={{ ...td, fontWeight: 600 }}>{c.name}</td>
-                        <td style={{ ...td, fontSize: 12, color: C.textDim }}>{c.phone}</td>
+                        <td style={{ ...td, fontSize: 12, color: C.textDim, fontVariantNumeric: 'tabular-nums' }}>{c.phone}</td>
                         <td style={{ ...td, textAlign: 'center', fontWeight: 800, color: C.accent }}>{c.count}</td>
                         <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: C.success }}>฿{fmt(c.sales)}</td>
                         <td style={{ ...td, textAlign: 'right' }}>฿{fmt(c.count > 0 ? c.sales / c.count : 0)}</td>
+                        <td style={{ ...td, fontSize: 11, color: C.textDim }}>{c.province || '—'}</td>
+                        <td style={{ ...td, fontSize: 11, color: C.textDim }}>{c.district || '—'}</td>
                         <td style={{ ...td, fontSize: 11, color: C.textDim }}>{c.firstDate || '—'}</td>
                         <td style={{ ...td, fontSize: 11, color: C.textDim }}>{c.lastDate || '—'}</td>
                       </tr>
