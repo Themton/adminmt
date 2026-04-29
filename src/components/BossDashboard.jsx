@@ -257,174 +257,122 @@ export default function BossDashboard() {
 
   const handleLogout = () => { setProfile(null); setStatus('login'); supabase.auth.signOut() }
 
-  // ═══ Computed Data ═══
-  const totalSales = useMemo(() => orders.reduce((s, o) => s + (parseFloat(o.sale_price) || 0), 0), [orders])
-  const totalOrders = orders.length
-  const avgOrder = totalOrders > 0 ? totalSales / totalOrders : 0
-  const codOrders = useMemo(() => orders.filter(o => o.payment_type !== 'transfer'), [orders])
-  const transOrders = useMemo(() => orders.filter(o => o.payment_type === 'transfer'), [orders])
-  const codTotal = useMemo(() => codOrders.reduce((s, o) => s + (parseFloat(o.sale_price) || 0), 0), [codOrders])
-  const transTotal = useMemo(() => transOrders.reduce((s, o) => s + (parseFloat(o.sale_price) || 0), 0), [transOrders])
-
-  // Daily chart
-  const dailyChart = useMemo(() => {
-    const map = {}
-    orders.forEach(o => {
-      const d = (o.order_date || '').substring(0, 10)
-      if (!d) return
-      if (!map[d]) map[d] = { date: d, ยอดขาย: 0, ออเดอร์: 0 }
-      map[d].ยอดขาย += parseFloat(o.sale_price) || 0
-      map[d].ออเดอร์++
-    })
-    return Object.values(map).sort((a, b) => a.date.localeCompare(b.date))
-  }, [orders])
-
-  // Employee stats
-  const empStats = useMemo(() => {
-    const m = {}
-    orders.forEach(o => {
-      const name = o.employee_name || '—'
-      if (!m[name]) m[name] = { name, count: 0, sales: 0, cod: 0, trans: 0 }
-      m[name].count++
-      m[name].sales += parseFloat(o.sale_price) || 0
-      if (o.payment_type === 'transfer') m[name].trans++
-      else m[name].cod++
-    })
-    return Object.values(m).sort((a, b) => b.sales - a.sales)
-  }, [orders])
-
-  // Team stats
-  const teamStats = useMemo(() => {
-    const m = {}
-    orders.forEach(o => {
-      const tid = o.team_id || 'none'
-      const tname = teams.find(t => t.id === tid)?.name || '—'
-      if (!m[tid]) m[tid] = { name: tname, count: 0, sales: 0 }
-      m[tid].count++
-      m[tid].sales += parseFloat(o.sale_price) || 0
-    })
-    return Object.values(m).sort((a, b) => b.sales - a.sales)
-  }, [orders, teams])
-
-  // Product stats
-  const productStats = useMemo(() => {
-    const m = {}
-    orders.forEach(o => {
-      const prod = (o.remark || '').trim() || '—'
-      if (!m[prod]) m[prod] = { name: prod, count: 0, sales: 0, cod: 0, codAmt: 0, trans: 0, transAmt: 0 }
-      const p = m[prod]
-      p.count++
-      p.sales += parseFloat(o.sale_price) || 0
-      if (o.payment_type === 'transfer') { p.trans++; p.transAmt += parseFloat(o.sale_price) || 0 }
-      else { p.cod++; p.codAmt += parseFloat(o.cod_amount) || 0 }
-    })
-    return Object.values(m).sort((a, b) => b.count - a.count)
-  }, [orders])
-
-  // Hourly stats
-  const hourlyStats = useMemo(() => {
-    const h = Array.from({ length: 24 }, (_, i) => ({ hour: `${String(i).padStart(2, '0')}:00`, ออเดอร์: 0, ยอดขาย: 0 }))
-    orders.forEach(o => {
-      const dt = new Date(o.created_at)
-      if (isNaN(dt)) return
-      const bkk = new Date(dt.toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }))
-      const hr = bkk.getHours()
-      h[hr].ออเดอร์++
-      h[hr].ยอดขาย += parseFloat(o.sale_price) || 0
-    })
-    return h
-  }, [orders])
-
-  // Day of week stats
-  const dowStats = useMemo(() => {
-    const labels = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์']
-    const d = labels.map((l, i) => ({ day: l, ออเดอร์: 0, ยอดขาย: 0 }))
-    orders.forEach(o => {
-      const dt = new Date(o.created_at)
-      if (isNaN(dt)) return
-      const bkk = new Date(dt.toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }))
-      d[bkk.getDay()].ออเดอร์++
-      d[bkk.getDay()].ยอดขาย += parseFloat(o.sale_price) || 0
-    })
-    return d
-  }, [orders])
-
-  // Channel stats
-  const channelStats = useMemo(() => {
-    const m = {}
-    orders.forEach(o => {
-      const ch = o.sales_channel || '—'
-      if (!m[ch]) m[ch] = { name: ch, count: 0, sales: 0 }
-      m[ch].count++
-      m[ch].sales += parseFloat(o.sale_price) || 0
-    })
-    return Object.values(m).sort((a, b) => b.sales - a.sales)
-  }, [orders])
-
-  // Pie data
-  const paymentPie = useMemo(() => [
-    { name: 'COD', value: codTotal, color: C.accent },
-    { name: 'โอน', value: transTotal, color: C.success },
-  ].filter(p => p.value > 0), [codTotal, transTotal])
-
-  // Province stats
-  const provinceStats = useMemo(() => {
-    const m = {}
-    orders.forEach(o => {
-      const prov = (o.province || o.district || '').trim() || '—'
-      if (!m[prov]) m[prov] = { name: prov, count: 0, sales: 0 }
-      m[prov].count++
-      m[prov].sales += parseFloat(o.sale_price) || 0
-    })
-    return Object.values(m).sort((a, b) => b.sales - a.sales)
-  }, [orders])
-
-  // Customer stats
+  // ═══ Single-pass Computed Data ═══
   const fmtPhone = (p) => { if (!p) return '—'; p = String(p).replace(/\D/g, ''); if (p.length === 9) p = '0' + p; return p }
-  const customerStats = useMemo(() => {
-    const m = {}
-    orders.forEach(o => {
-      const phone = fmtPhone(o.customer_phone) || '—'
-      if (!m[phone]) m[phone] = { phone, name: o.customer_name || '—', count: 0, sales: 0, firstDate: o.order_date, lastDate: o.order_date, address: '', province: '', district: '', products: {} }
-      m[phone].count++
-      m[phone].sales += parseFloat(o.sale_price) || 0
-      if (o.order_date < m[phone].firstDate) m[phone].firstDate = o.order_date
-      if (o.order_date > m[phone].lastDate) m[phone].lastDate = o.order_date
-      if (o.customer_name && o.customer_name !== '—') m[phone].name = o.customer_name
-      if (o.customer_address) m[phone].address = o.customer_address
-      if (o.province) m[phone].province = o.province
-      if (o.district) m[phone].district = o.district
-      if (o.sub_district) m[phone].subDistrict = o.sub_district
-      if (o.zip_code) m[phone].zipCode = o.zip_code
-      const prod = (o.remark || '').trim()
-      if (prod) { m[phone].products[prod] = (m[phone].products[prod] || 0) + 1 }
-    })
-    const all = Object.values(m)
-    const repeat = all.filter(c => c.count >= 2).sort((a, b) => b.count - a.count)
-    const newCust = all.filter(c => c.count === 1)
-    return { all, repeat, new: newCust, repeatSales: repeat.reduce((s, c) => s + c.sales, 0), newSales: newCust.reduce((s, c) => s + c.sales, 0) }
-  }, [orders])
 
-  // Comparison stats
-  const compareStats = useMemo(() => {
-    const curSales = totalSales
-    const curCount = totalOrders
-    const prevSales = prevOrders.reduce((s, o) => s + (parseFloat(o.sale_price) || 0), 0)
-    const prevCount = prevOrders.length
-    const curAvg = curCount > 0 ? curSales / curCount : 0
-    const prevAvg = prevCount > 0 ? prevSales / prevCount : 0
-    const curCod = orders.filter(o => o.payment_type !== 'transfer').length
-    const prevCod = prevOrders.filter(o => o.payment_type !== 'transfer').length
-    const curTrans = orders.filter(o => o.payment_type === 'transfer').length
-    const prevTrans = prevOrders.filter(o => o.payment_type === 'transfer').length
-    const pct = (cur, prev) => prev > 0 ? ((cur - prev) / prev * 100).toFixed(1) : cur > 0 ? '100.0' : '0.0'
-    return {
-      curSales, prevSales, curCount, prevCount, curAvg, prevAvg,
-      curCod, prevCod, curTrans, prevTrans,
-      salesGrowth: pct(curSales, prevSales), countGrowth: pct(curCount, prevCount),
-      avgGrowth: pct(curAvg, prevAvg),
+  const stats = useMemo(() => {
+    let _totalSales = 0, _codCount = 0, _transCount = 0, _codTotal = 0, _transTotal = 0
+    const _daily = {}, _emp = {}, _team = {}, _prod = {}, _ch = {}, _prov = {}, _cust = {}
+    const _hourly = Array.from({ length: 24 }, (_, i) => ({ hour: `${String(i).padStart(2, '0')}:00`, ออเดอร์: 0, ยอดขาย: 0 }))
+    const dowLabels = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์']
+    const _dow = dowLabels.map(l => ({ day: l, ออเดอร์: 0, ยอดขาย: 0 }))
+
+    for (let i = 0; i < orders.length; i++) {
+      const o = orders[i]
+      const amt = parseFloat(o.sale_price) || 0
+      const codAmt = parseFloat(o.cod_amount) || 0
+      const isTrans = o.payment_type === 'transfer'
+      _totalSales += amt
+      if (isTrans) { _transCount++; _transTotal += amt } else { _codCount++; _codTotal += amt }
+
+      // Daily
+      const d = (o.order_date || '').substring(0, 10)
+      if (d) { if (!_daily[d]) _daily[d] = { date: d, ยอดขาย: 0, ออเดอร์: 0 }; _daily[d].ยอดขาย += amt; _daily[d].ออเดอร์++ }
+
+      // Employee
+      const eName = o.employee_name || '—'
+      if (!_emp[eName]) _emp[eName] = { name: eName, count: 0, sales: 0, cod: 0, trans: 0 }
+      _emp[eName].count++; _emp[eName].sales += amt; if (isTrans) _emp[eName].trans++; else _emp[eName].cod++
+
+      // Team
+      const tid = o.team_id || 'none'
+      if (!_team[tid]) { const tname = teams.find(t => t.id === tid)?.name || '—'; _team[tid] = { name: tname, count: 0, sales: 0 } }
+      _team[tid].count++; _team[tid].sales += amt
+
+      // Product
+      const prod = (o.remark || '').trim() || '—'
+      if (!_prod[prod]) _prod[prod] = { name: prod, count: 0, sales: 0, cod: 0, codAmt: 0, trans: 0, transAmt: 0 }
+      _prod[prod].count++; _prod[prod].sales += amt
+      if (isTrans) { _prod[prod].trans++; _prod[prod].transAmt += amt } else { _prod[prod].cod++; _prod[prod].codAmt += codAmt }
+
+      // Channel
+      const ch = o.sales_channel || '—'
+      if (!_ch[ch]) _ch[ch] = { name: ch, count: 0, sales: 0 }
+      _ch[ch].count++; _ch[ch].sales += amt
+
+      // Province
+      const prov = (o.province || o.district || '').trim() || '—'
+      if (!_prov[prov]) _prov[prov] = { name: prov, count: 0, sales: 0 }
+      _prov[prov].count++; _prov[prov].sales += amt
+
+      // Hourly + DOW
+      const dt = new Date(o.created_at)
+      if (!isNaN(dt)) {
+        const bkk = new Date(dt.toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }))
+        const hr = bkk.getHours(), dow = bkk.getDay()
+        _hourly[hr].ออเดอร์++; _hourly[hr].ยอดขาย += amt
+        _dow[dow].ออเดอร์++; _dow[dow].ยอดขาย += amt
+      }
+
+      // Customer
+      const phone = fmtPhone(o.customer_phone) || '—'
+      if (!_cust[phone]) _cust[phone] = { phone, name: o.customer_name || '—', count: 0, sales: 0, firstDate: o.order_date, lastDate: o.order_date, address: '', province: '', district: '', products: {} }
+      const cu = _cust[phone]
+      cu.count++; cu.sales += amt
+      if (o.order_date < cu.firstDate) cu.firstDate = o.order_date
+      if (o.order_date > cu.lastDate) cu.lastDate = o.order_date
+      if (o.customer_name && o.customer_name !== '—') cu.name = o.customer_name
+      if (o.customer_address) cu.address = o.customer_address
+      if (o.province) cu.province = o.province
+      if (o.district) cu.district = o.district
+      if (o.sub_district) cu.subDistrict = o.sub_district
+      if (o.zip_code) cu.zipCode = o.zip_code
+      const rp = (o.remark || '').trim()
+      if (rp) cu.products[rp] = (cu.products[rp] || 0) + 1
     }
-  }, [orders, prevOrders, totalSales, totalOrders])
+
+    const custAll = Object.values(_cust)
+    const custRepeat = custAll.filter(c => c.count >= 2).sort((a, b) => b.count - a.count)
+    const custNew = custAll.filter(c => c.count === 1)
+
+    // Prev period comparison
+    let prevSales = 0, prevCount = prevOrders.length, prevCod = 0, prevTrans = 0
+    for (let i = 0; i < prevOrders.length; i++) {
+      const a = parseFloat(prevOrders[i].sale_price) || 0; prevSales += a
+      if (prevOrders[i].payment_type === 'transfer') prevTrans++; else prevCod++
+    }
+    const prevAvg = prevCount > 0 ? prevSales / prevCount : 0
+    const curAvg = orders.length > 0 ? _totalSales / orders.length : 0
+    const pctFn = (cur, prev) => prev > 0 ? ((cur - prev) / prev * 100).toFixed(1) : cur > 0 ? '100.0' : '0.0'
+
+    return {
+      totalSales: _totalSales, totalOrders: orders.length, avgOrder: curAvg,
+      codCount: _codCount, transCount: _transCount, codTotal: _codTotal, transTotal: _transTotal,
+      dailyChart: Object.values(_daily).sort((a, b) => a.date.localeCompare(b.date)),
+      empStats: Object.values(_emp).sort((a, b) => b.sales - a.sales),
+      teamStats: Object.values(_team).sort((a, b) => b.sales - a.sales),
+      productStats: Object.values(_prod).sort((a, b) => b.count - a.count),
+      channelStats: Object.values(_ch).sort((a, b) => b.sales - a.sales),
+      provinceStats: Object.values(_prov).sort((a, b) => b.sales - a.sales),
+      hourlyStats: _hourly, dowStats: _dow,
+      paymentPie: [
+        { name: 'COD', value: _codTotal, color: C.accent },
+        { name: 'โอน', value: _transTotal, color: C.success },
+      ].filter(p => p.value > 0),
+      customerStats: { all: custAll, repeat: custRepeat, new: custNew, repeatSales: custRepeat.reduce((s, c) => s + c.sales, 0), newSales: custNew.reduce((s, c) => s + c.sales, 0) },
+      compareStats: {
+        curSales: _totalSales, prevSales, curCount: orders.length, prevCount, curAvg, prevAvg,
+        curCod: _codCount, prevCod, curTrans: _transCount, prevTrans,
+        salesGrowth: pctFn(_totalSales, prevSales), countGrowth: pctFn(orders.length, prevCount), avgGrowth: pctFn(curAvg, prevAvg),
+      },
+    }
+  }, [orders, prevOrders, teams])
+
+  const { totalSales, totalOrders, avgOrder, codCount, transCount, codTotal, transTotal,
+    dailyChart, empStats, teamStats, productStats, channelStats, provinceStats,
+    hourlyStats, dowStats, paymentPie, customerStats, compareStats } = stats
+  const codOrders = { length: codCount }
+  const transOrders = { length: transCount }
 
   // Save targets
   const saveTargets = (newT) => {
