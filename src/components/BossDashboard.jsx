@@ -156,23 +156,29 @@ export default function BossDashboard() {
   }, [])
 
   // Fetch data
+  const selectFields = 'id,order_number,order_date,customer_name,customer_phone,sale_price,cod_amount,payment_type,remark,employee_name,employee_id,team_id,sales_channel,created_at,slip_url'
+
   useEffect(() => {
     if (status !== 'ready') return
     const fetchAllOrders = async () => {
-      let allOrders = []
-      let from = 0
+      // Step 1: get count
+      let countQ = supabase.from('mt_orders').select('id', { count: 'exact', head: true })
+      if (dateFrom) countQ = countQ.gte('order_date', dateFrom)
+      if (dateTo) countQ = countQ.lte('order_date', dateTo)
+      const { count } = await countQ
+      if (!count || count === 0) return []
+
+      // Step 2: fetch all pages in parallel
       const pageSize = 1000
-      while (true) {
-        let query = supabase.from('mt_orders').select('*').order('created_at', { ascending: false }).range(from, from + pageSize - 1)
-        if (dateFrom) query = query.gte('order_date', dateFrom)
-        if (dateTo) query = query.lte('order_date', dateTo)
-        const { data, error } = await query
-        if (error || !data || data.length === 0) break
-        allOrders = allOrders.concat(data)
-        if (data.length < pageSize) break
-        from += pageSize
-      }
-      return allOrders
+      const pages = Math.ceil(count / pageSize)
+      const promises = Array.from({ length: pages }, (_, i) => {
+        let q = supabase.from('mt_orders').select(selectFields).order('created_at', { ascending: false }).range(i * pageSize, (i + 1) * pageSize - 1)
+        if (dateFrom) q = q.gte('order_date', dateFrom)
+        if (dateTo) q = q.lte('order_date', dateTo)
+        return q
+      })
+      const results = await Promise.all(promises)
+      return results.flatMap(r => r.data || [])
     }
     const fetchAll = async () => {
       setDataLoading(true)
@@ -193,20 +199,21 @@ export default function BossDashboard() {
   useEffect(() => {
     if (status !== 'ready') return
     const refetch = async () => {
-      let allOrders = []
-      let from = 0
+      let countQ = supabase.from('mt_orders').select('id', { count: 'exact', head: true })
+      if (dateFrom) countQ = countQ.gte('order_date', dateFrom)
+      if (dateTo) countQ = countQ.lte('order_date', dateTo)
+      const { count } = await countQ
+      if (!count || count === 0) { setOrders([]); return }
       const pageSize = 1000
-      while (true) {
-        let query = supabase.from('mt_orders').select('*').order('created_at', { ascending: false }).range(from, from + pageSize - 1)
-        if (dateFrom) query = query.gte('order_date', dateFrom)
-        if (dateTo) query = query.lte('order_date', dateTo)
-        const { data } = await query
-        if (!data || data.length === 0) break
-        allOrders = allOrders.concat(data)
-        if (data.length < pageSize) break
-        from += pageSize
-      }
-      setOrders(allOrders)
+      const pages = Math.ceil(count / pageSize)
+      const promises = Array.from({ length: pages }, (_, i) => {
+        let q = supabase.from('mt_orders').select(selectFields).order('created_at', { ascending: false }).range(i * pageSize, (i + 1) * pageSize - 1)
+        if (dateFrom) q = q.gte('order_date', dateFrom)
+        if (dateTo) q = q.lte('order_date', dateTo)
+        return q
+      })
+      const results = await Promise.all(promises)
+      setOrders(results.flatMap(r => r.data || []))
     }
     const ch = supabase.channel('boss-orders')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'mt_orders' }, () => refetch())
