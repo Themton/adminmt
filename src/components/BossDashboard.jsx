@@ -733,6 +733,26 @@ export default function BossDashboard() {
                   </table>
                 </div>
               </div>
+
+              {/* Top 3 Channels */}
+              <div style={{ ...card, padding: 20, marginTop: 16 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12, fontFamily: C.font }}>📢 Top เพจขายดี</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+                  {channelStats.slice(0, 3).map((ch, i) => {
+                    const pct = totalSales > 0 ? (ch.sales / totalSales * 100).toFixed(1) : '0.0'
+                    return (
+                      <div key={ch.name} style={{ padding: 16, borderRadius: 2, background: i === 0 ? '#fdfaf3' : C.surfaceAlt, border: `1px solid ${C.border}`, borderTop: `3px solid ${[C.gold, C.accent, C.navy][i]}` }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                          <span style={{ fontSize: 20 }}>{['🥇', '🥈', '🥉'][i]}</span>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: [C.gold, C.accent, C.navy][i], padding: '2px 8px', borderRadius: 2, background: [C.gold, C.accent, C.navy][i] + '10' }}>{pct}%</span>
+                        </div>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 4 }}>{ch.name}</div>
+                        <div style={{ fontSize: 12, color: C.textDim }}>{ch.count} ออเดอร์ · <b style={{ color: C.success }}>฿{fmt(ch.sales)}</b></div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
             </div>
           )}
 
