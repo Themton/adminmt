@@ -640,9 +640,28 @@ export default function BossDashboard() {
                 const projectedSales = hrPassed > 0 ? (todaySales / hrPassed * 18) : 0 // assume 18hr work day
 
                 if (!tDaily && !tOrders) return (
-                  <div style={{ ...card, padding: 16, marginBottom: 20, background: C.surfaceAlt, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ fontSize: 13, color: C.textDim }}>🎯 ยังไม่ได้ตั้งเป้ายอดขายวันนี้</div>
-                    <button onClick={() => setSection('targets')} style={{ padding: '6px 14px', border: `1px solid ${C.border}`, borderRadius: 2, background: C.surface, color: C.accent, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: C.fontSans }}>ตั้งเป้า →</button>
+                  <div style={{ ...card, padding: 16, marginBottom: 20 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <span style={{ fontSize: 13, color: C.textDim }}>🎯 ยังไม่ได้ตั้งเป้ายอดขายวันนี้</span>
+                        {todayOrd.length > 0 && <span style={{ fontSize: 13, fontWeight: 700, color: C.success, marginLeft: 12 }}>วันนี้: ฿{fmt(todaySales)} ({todayOrd.length} ออเดอร์)</span>}
+                      </div>
+                      <button onClick={() => setSection('targets')} style={{ padding: '6px 14px', border: `1px solid ${C.border}`, borderRadius: 2, background: C.surface, color: C.accent, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: C.fontSans }}>ตั้งเป้า →</button>
+                    </div>
+                    {todayOrd.length > 0 && (() => {
+                      const tp = {}
+                      todayOrd.forEach(o => { const p = getProductName(o.remark); if (!tp[p]) tp[p] = { name: p, count: 0, sales: 0 }; tp[p].count++; tp[p].sales += parseFloat(o.sale_price) || 0 })
+                      const pl = Object.values(tp).sort((a, b) => b.sales - a.sales)
+                      return (
+                        <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                          {pl.slice(0, 6).map((p, i) => (
+                            <div key={p.name} style={{ padding: '6px 12px', borderRadius: 2, background: i === 0 ? '#fdfaf3' : C.surfaceAlt, border: `1px solid ${C.border}`, fontSize: 12 }}>
+                              <span style={{ fontWeight: 700 }}>{p.name}</span> <span style={{ color: C.success, fontWeight: 700 }}>฿{fmt(p.sales)}</span> <span style={{ color: C.textDim }}>({p.count})</span>
+                            </div>
+                          ))}
+                        </div>
+                      )
+                    })()}
                   </div>
                 )
 
@@ -724,6 +743,38 @@ export default function BossDashboard() {
                             })
                           })()}
                         </div>
+                      </div>
+                    )}
+
+                    {/* Product breakdown today */}
+                    {todayOrd.length > 0 && (
+                      <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
+                        <div style={{ fontSize: 11, color: C.textDim, marginBottom: 8 }}>📦 สินค้าที่ขายได้วันนี้</div>
+                        {(() => {
+                          const todayProds = {}
+                          todayOrd.forEach(o => {
+                            const p = getProductName(o.remark)
+                            if (!todayProds[p]) todayProds[p] = { name: p, count: 0, sales: 0 }
+                            todayProds[p].count++
+                            todayProds[p].sales += parseFloat(o.sale_price) || 0
+                          })
+                          const prodList = Object.values(todayProds).sort((a, b) => b.sales - a.sales)
+                          const maxSales = prodList.length > 0 ? prodList[0].sales : 1
+                          return (
+                            <div style={{ display: 'grid', gridTemplateColumns: prodList.length <= 4 ? `repeat(${prodList.length}, 1fr)` : 'repeat(4, 1fr)', gap: 8 }}>
+                              {prodList.slice(0, 8).map((p, i) => (
+                                <div key={p.name} style={{ padding: 10, borderRadius: 2, background: i === 0 ? '#fdfaf3' : C.surfaceAlt, border: `1px solid ${i === 0 ? C.gold + '40' : C.border}` }}>
+                                  <div style={{ fontSize: 11, fontWeight: 700, color: C.text, marginBottom: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{i === 0 ? '🏆 ' : ''}{p.name}</div>
+                                  <div style={{ fontSize: 16, fontWeight: 800, color: C.success, fontFamily: C.font }}>฿{fmt(p.sales)}</div>
+                                  <div style={{ fontSize: 10, color: C.textDim }}>{p.count} ออเดอร์</div>
+                                  <div style={{ height: 4, borderRadius: 2, background: C.surfaceHover, overflow: 'hidden', marginTop: 4 }}>
+                                    <div style={{ width: (p.sales / maxSales * 100) + '%', height: '100%', borderRadius: 2, background: i === 0 ? C.gold : C.accent }}></div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )
+                        })()}
                       </div>
                     )}
                   </div>
