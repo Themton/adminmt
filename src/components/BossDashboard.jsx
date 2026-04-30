@@ -147,6 +147,10 @@ export default function BossDashboard() {
     try { return JSON.parse(localStorage.getItem('boss_product_map') || '{}') } catch { return {} }
   })
   const [editProductMap, setEditProductMap] = useState(false)
+  const [productTargets, setProductTargets] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('boss_prod_targets') || '{}') } catch { return {} }
+  })
+  const saveProductTargets = (v) => { setProductTargets(v); localStorage.setItem('boss_prod_targets', JSON.stringify(v)) }
 
   const setQuick = (key) => {
     setQuickRange(key)
@@ -762,16 +766,28 @@ export default function BossDashboard() {
                           const maxSales = prodList.length > 0 ? prodList[0].sales : 1
                           return (
                             <div style={{ display: 'grid', gridTemplateColumns: prodList.length <= 4 ? `repeat(${prodList.length}, 1fr)` : 'repeat(4, 1fr)', gap: 8 }}>
-                              {prodList.slice(0, 8).map((p, i) => (
-                                <div key={p.name} style={{ padding: 10, borderRadius: 2, background: i === 0 ? '#fdfaf3' : C.surfaceAlt, border: `1px solid ${i === 0 ? C.gold + '40' : C.border}` }}>
-                                  <div style={{ fontSize: 11, fontWeight: 700, color: C.text, marginBottom: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{i === 0 ? '🏆 ' : ''}{p.name}</div>
+                              {prodList.slice(0, 8).map((p, i) => {
+                                const pt = productTargets[p.name] || 0
+                                const ptPct = pt > 0 ? (p.sales / pt * 100) : 0
+                                return (
+                                <div key={p.name} style={{ padding: 10, borderRadius: 2, background: ptPct >= 100 ? '#f0fdf4' : i === 0 ? '#fdfaf3' : C.surfaceAlt, border: `1px solid ${ptPct >= 100 ? '#bbf7d0' : i === 0 ? C.gold + '40' : C.border}` }}>
+                                  <div style={{ fontSize: 11, fontWeight: 700, color: C.text, marginBottom: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ptPct >= 100 ? '✅ ' : i === 0 ? '🏆 ' : ''}{p.name}</div>
                                   <div style={{ fontSize: 16, fontWeight: 800, color: C.success, fontFamily: C.font }}>฿{fmt(p.sales)}</div>
-                                  <div style={{ fontSize: 10, color: C.textDim }}>{p.count} ออเดอร์</div>
-                                  <div style={{ height: 4, borderRadius: 2, background: C.surfaceHover, overflow: 'hidden', marginTop: 4 }}>
-                                    <div style={{ width: (p.sales / maxSales * 100) + '%', height: '100%', borderRadius: 2, background: i === 0 ? C.gold : C.accent }}></div>
-                                  </div>
+                                  <div style={{ fontSize: 10, color: C.textDim }}>{p.count} ออเดอร์{pt > 0 ? ` · เป้า ฿${fmt(pt)}` : ''}</div>
+                                  {pt > 0 ? (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                                      <div style={{ flex: 1, height: 5, borderRadius: 3, background: C.surfaceHover, overflow: 'hidden' }}>
+                                        <div style={{ width: Math.min(ptPct, 100) + '%', height: '100%', borderRadius: 3, background: ptPct >= 100 ? C.success : ptPct >= 70 ? C.gold : C.dangerLight }}></div>
+                                      </div>
+                                      <span style={{ fontSize: 9, fontWeight: 700, color: ptPct >= 100 ? C.success : ptPct >= 70 ? C.gold : C.danger }}>{ptPct.toFixed(0)}%</span>
+                                    </div>
+                                  ) : (
+                                    <div style={{ height: 4, borderRadius: 2, background: C.surfaceHover, overflow: 'hidden', marginTop: 4 }}>
+                                      <div style={{ width: (p.sales / maxSales * 100) + '%', height: '100%', borderRadius: 2, background: i === 0 ? C.gold : C.accent }}></div>
+                                    </div>
+                                  )}
                                 </div>
-                              ))}
+                              )})}
                             </div>
                           )
                         })()}
@@ -2562,6 +2578,66 @@ export default function BossDashboard() {
                   ))}
                 </div>
               </div>
+
+              {/* Product Targets */}
+              <div style={{ ...card, padding: 20, marginBottom: 24 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 14, fontFamily: C.font }}>📦 เป้าหมายรายสินค้า</div>
+                <div style={{ fontSize: 11, color: C.textDim, marginBottom: 12 }}>ตั้งเป้ายอดขายรายวันแยกตามสินค้า · สินค้ามาจากรายงาน (จัดกลุ่มแล้ว)</div>
+                <table>
+                  <thead><tr>
+                    <th style={th}>สินค้า</th>
+                    <th style={{ ...th, textAlign: 'center' }}>ออเดอร์ (วันนี้)</th>
+                    <th style={{ ...th, textAlign: 'right' }}>ยอดขาย (วันนี้)</th>
+                    <th style={{ ...th, textAlign: 'right', width: 150 }}>เป้ารายวัน (฿)</th>
+                    <th style={{ ...th, textAlign: 'right', width: '20%' }}>ความคืบหน้า</th>
+                  </tr></thead>
+                  <tbody>
+                    {(() => {
+                      const todayOrd2 = orders.filter(o => o.order_date === todayStr)
+                      const todayByProd = {}
+                      todayOrd2.forEach(o => {
+                        const p = getProductName(o.remark)
+                        if (!todayByProd[p]) todayByProd[p] = { count: 0, sales: 0 }
+                        todayByProd[p].count++
+                        todayByProd[p].sales += parseFloat(o.sale_price) || 0
+                      })
+                      // Merge: all products from productStats + any that have targets
+                      const allProds = new Set([...productStats.map(p => p.name), ...Object.keys(productTargets)])
+                      return [...allProds].filter(n => n !== '—').sort((a, b) => {
+                        const sa = todayByProd[a]?.sales || 0, sb = todayByProd[b]?.sales || 0
+                        return sb - sa
+                      }).map(name => {
+                        const today = todayByProd[name] || { count: 0, sales: 0 }
+                        const target = productTargets[name] || 0
+                        const pct = target > 0 ? (today.sales / target * 100) : 0
+                        return (
+                          <tr key={name} style={{ background: pct >= 100 ? '#f0fdf4' : 'transparent' }}>
+                            <td style={{ ...td, fontWeight: 600 }}>{pct >= 100 ? '✅ ' : ''}{name}</td>
+                            <td style={{ ...td, textAlign: 'center', fontWeight: 700, color: C.accent }}>{today.count}</td>
+                            <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: C.success }}>฿{fmt(today.sales)}</td>
+                            <td style={{ ...td, textAlign: 'right' }}>
+                              <input type="number" value={productTargets[name] || ''} placeholder="—"
+                                onChange={e => saveProductTargets({ ...productTargets, [name]: parseFloat(e.target.value) || 0 })}
+                                style={{ width: '100%', padding: '6px 8px', border: `1px solid ${C.border}`, borderRadius: 2, fontSize: 13, fontWeight: 700, fontFamily: C.fontSans, textAlign: 'right', boxSizing: 'border-box' }} />
+                            </td>
+                            <td style={{ ...td }}>
+                              {target > 0 ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  <div style={{ flex: 1, height: 8, borderRadius: 4, background: C.surfaceHover, overflow: 'hidden' }}>
+                                    <div style={{ width: Math.min(pct, 100) + '%', height: '100%', borderRadius: 4, background: pct >= 100 ? C.success : pct >= 70 ? C.gold : C.dangerLight }}></div>
+                                  </div>
+                                  <span style={{ fontSize: 11, fontWeight: 700, color: pct >= 100 ? C.success : pct >= 70 ? C.gold : C.danger, minWidth: 42 }}>{pct.toFixed(0)}%</span>
+                                </div>
+                              ) : <span style={{ fontSize: 11, color: C.textMuted }}>—</span>}
+                            </td>
+                          </tr>
+                        )
+                      })
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+
               {(() => {
                 const now = new Date()
                 const todayOrd = orders.filter(o => o.order_date === todayStr)
