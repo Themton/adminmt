@@ -143,6 +143,10 @@ export default function BossDashboard() {
   const [commSettings, setCommSettings] = useState(() => {
     try { return JSON.parse(localStorage.getItem('boss_comm') || '{}') } catch { return {} }
   })
+  const [productMap, setProductMap] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('boss_product_map') || '{}') } catch { return {} }
+  })
+  const [editProductMap, setEditProductMap] = useState(false)
 
   const setQuick = (key) => {
     setQuickRange(key)
@@ -268,10 +272,17 @@ export default function BossDashboard() {
 
   // ═══ Single-pass Computed Data ═══
   const fmtPhone = (p) => { if (!p) return '—'; p = String(p).replace(/\D/g, ''); if (p.length === 9) p = '0' + p; return p }
+  const getProductName = (remark) => {
+    const r = (remark || '').trim()
+    if (!r) return '—'
+    if (productMap[r]) return productMap[r]
+    return r
+  }
+  const saveProductMap = (m) => { setProductMap(m); localStorage.setItem('boss_product_map', JSON.stringify(m)) }
 
   const stats = useMemo(() => {
     let _totalSales = 0, _codCount = 0, _transCount = 0, _codTotal = 0, _transTotal = 0
-    const _daily = {}, _emp = {}, _team = {}, _prod = {}, _ch = {}, _prov = {}, _cust = {}, _shipEmp = {}
+    const _daily = {}, _emp = {}, _team = {}, _prod = {}, _ch = {}, _prov = {}, _cust = {}, _shipEmp = {}, _rawRemarks = {}
     let _shipWaiting = 0, _shipPrinted = 0, _shipCreated = 0, _shipDelivering = 0, _shipDelivered = 0, _shipReturned = 0, _shipCancelled = 0
     const _hourly = Array.from({ length: 24 }, (_, i) => ({ hour: `${String(i).padStart(2, '0')}:00`, ออเดอร์: 0, ยอดขาย: 0 }))
     const dowLabels = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์']
@@ -300,10 +311,13 @@ export default function BossDashboard() {
       _team[tid].count++; _team[tid].sales += amt
 
       // Product
-      const prod = (o.remark || '').trim() || '—'
-      if (!_prod[prod]) _prod[prod] = { name: prod, count: 0, sales: 0, cod: 0, codAmt: 0, trans: 0, transAmt: 0 }
+      const rawRemark = (o.remark || '').trim() || '—'
+      const prod = getProductName(o.remark)
+      if (!_prod[prod]) _prod[prod] = { name: prod, count: 0, sales: 0, cod: 0, codAmt: 0, trans: 0, transAmt: 0, remarks: {} }
       _prod[prod].count++; _prod[prod].sales += amt
       if (isTrans) { _prod[prod].trans++; _prod[prod].transAmt += amt } else { _prod[prod].cod++; _prod[prod].codAmt += codAmt }
+      _prod[prod].remarks[rawRemark] = (_prod[prod].remarks[rawRemark] || 0) + 1
+      if (rawRemark !== '—') _rawRemarks[rawRemark] = (_rawRemarks[rawRemark] || 0) + 1
 
       // Channel
       const ch = o.sales_channel || '—'
@@ -338,7 +352,7 @@ export default function BossDashboard() {
       if (o.sub_district) cu.subDistrict = o.sub_district
       if (o.zip_code) cu.zipCode = o.zip_code
       const rp = (o.remark || '').trim()
-      if (rp) cu.products[rp] = (cu.products[rp] || 0) + 1
+      if (rp) { const rpMapped = getProductName(o.remark); cu.products[rpMapped] = (cu.products[rpMapped] || 0) + 1 }
 
       // Shipping
       const ss = o.shipping_status || 'waiting'
@@ -376,6 +390,7 @@ export default function BossDashboard() {
       empStats: Object.values(_emp).sort((a, b) => b.sales - a.sales),
       teamStats: Object.values(_team).sort((a, b) => b.sales - a.sales),
       productStats: Object.values(_prod).sort((a, b) => b.count - a.count),
+      rawRemarks: Object.entries(_rawRemarks).map(([name, count]) => ({ name, count, mapped: productMap[name] || '' })).sort((a, b) => b.count - a.count),
       channelStats: Object.values(_ch).sort((a, b) => b.sales - a.sales),
       provinceStats: Object.values(_prov).sort((a, b) => b.sales - a.sales),
       hourlyStats: _hourly, dowStats: _dow,
@@ -400,10 +415,10 @@ export default function BossDashboard() {
         salesGrowth: pctFn(_totalSales, prevSales), countGrowth: pctFn(orders.length, prevCount), avgGrowth: pctFn(curAvg, prevAvg),
       },
     }
-  }, [orders, prevOrders, teams])
+  }, [orders, prevOrders, teams, productMap])
 
   const { totalSales, totalOrders, avgOrder, codCount, transCount, codTotal, transTotal,
-    dailyChart, empStats, teamStats, productStats, channelStats, provinceStats,
+    dailyChart, empStats, teamStats, productStats, rawRemarks, channelStats, provinceStats,
     hourlyStats, dowStats, paymentPie, customerStats, compareStats, shippingStats } = stats
   const codOrders = { length: codCount }
   const transOrders = { length: transCount }
@@ -1057,6 +1072,111 @@ export default function BossDashboard() {
           {/* ═══════ PRODUCTS ═══════ */}
           {section === 'products' && (
             <div className="fade-in">
+              {/* Product mapping toggle */}
+              <div style={{ ...card, padding: 16, marginBottom: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: C.font }}>🏷️ จัดกลุ่มสินค้า</span>
+                    <span style={{ fontSize: 12, color: C.textDim, marginLeft: 8 }}>
+                      {Object.keys(productMap).length > 0 ? `(จัดกลุ่มแล้ว ${Object.keys(productMap).length} รายการ)` : '(ยังไม่ได้จัดกลุ่ม — ใช้ชื่อจาก remark ตรงๆ)'}
+                    </span>
+                  </div>
+                  <button onClick={() => setEditProductMap(!editProductMap)} style={{ padding: '6px 16px', border: `1px solid ${C.border}`, borderRadius: 2, background: editProductMap ? C.accent : C.surface, color: editProductMap ? '#fff' : C.accent, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: C.fontSans }}>
+                    {editProductMap ? '✓ เสร็จสิ้น' : '✏️ จัดกลุ่ม'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Product mapping editor */}
+              {editProductMap && (
+                <div style={{ ...card, padding: 20, marginBottom: 20 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 6 }}>เลือกชื่อสินค้าจริงให้แต่ละ remark</div>
+                  <div style={{ fontSize: 11, color: C.textDim, marginBottom: 14 }}>remark ที่เลือกชื่อเดียวกันจะถูกรวมกลุ่มในรายงานทุกหน้า · ปล่อยว่างถ้าไม่ต้องการจัดกลุ่ม</div>
+
+                  {/* Quick: list all existing product names for datalist */}
+                  {(() => {
+                    const existingNames = [...new Set(Object.values(productMap).filter(v => v))]
+                    return <>
+                      <datalist id="prod-names">
+                        {existingNames.map(n => <option key={n} value={n} />)}
+                      </datalist>
+
+                      {/* Grouped view */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                        {/* Unmapped */}
+                        <div>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: C.danger, marginBottom: 8 }}>⚪ ยังไม่ได้จัดกลุ่ม ({rawRemarks.filter(r => !productMap[r.name]).length})</div>
+                          <div style={{ maxHeight: 400, overflowY: 'auto' }}>
+                            {rawRemarks.filter(r => !productMap[r.name]).map(r => (
+                              <div key={r.name} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: `1px solid ${C.border}` }}>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}</div>
+                                  <div style={{ fontSize: 10, color: C.textDim }}>{r.count} ออเดอร์</div>
+                                </div>
+                                <span style={{ fontSize: 11, color: C.textDim }}>→</span>
+                                <input list="prod-names" placeholder="ชื่อสินค้าจริง"
+                                  style={{ width: 150, padding: '5px 8px', border: `1px solid ${C.border}`, borderRadius: 2, fontSize: 12, fontFamily: C.fontSans }}
+                                  onBlur={e => { if (e.target.value.trim()) { saveProductMap({ ...productMap, [r.name]: e.target.value.trim() }); e.target.value = '' } }}
+                                  onKeyDown={e => { if (e.key === 'Enter' && e.target.value.trim()) { saveProductMap({ ...productMap, [r.name]: e.target.value.trim() }); e.target.value = '' } }}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Mapped */}
+                        <div>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: C.success, marginBottom: 8 }}>✅ จัดกลุ่มแล้ว ({rawRemarks.filter(r => productMap[r.name]).length})</div>
+                          <div style={{ maxHeight: 400, overflowY: 'auto' }}>
+                            {(() => {
+                              const grouped = {}
+                              rawRemarks.filter(r => productMap[r.name]).forEach(r => {
+                                const target = productMap[r.name]
+                                if (!grouped[target]) grouped[target] = []
+                                grouped[target].push(r)
+                              })
+                              return Object.entries(grouped).sort((a, b) => a[0].localeCompare(b[0])).map(([target, remarks]) => (
+                                <div key={target} style={{ marginBottom: 10, padding: 10, background: '#f0fdf4', borderRadius: 2, border: `1px solid #bbf7d0` }}>
+                                  <div style={{ fontSize: 13, fontWeight: 700, color: C.success, marginBottom: 4 }}>{target} <span style={{ fontWeight: 400, color: C.textDim }}>({remarks.reduce((s, r) => s + r.count, 0)} ออเดอร์)</span></div>
+                                  {remarks.map(r => (
+                                    <div key={r.name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, color: C.textDim, padding: '2px 0' }}>
+                                      <span>• {r.name} ({r.count})</span>
+                                      <button onClick={() => { const m = { ...productMap }; delete m[r.name]; saveProductMap(m) }}
+                                        style={{ border: 'none', background: 'none', color: C.danger, fontSize: 11, cursor: 'pointer', padding: '2px 6px' }}>✕</button>
+                                    </div>
+                                  ))}
+                                </div>
+                              ))
+                            })()}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Quick assign all unmapped with same prefix */}
+                      {existingNames.length > 0 && rawRemarks.filter(r => !productMap[r.name]).length > 0 && (
+                        <div style={{ marginTop: 14, padding: 12, background: C.surfaceAlt, borderRadius: 2, border: `1px solid ${C.border}` }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: C.text, marginBottom: 8 }}>⚡ จัดกลุ่มเร็ว — กดเพื่อจัดกลุ่มอัตโนมัติตามชื่อที่ขึ้นต้นด้วย</div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                            {existingNames.map(name => {
+                              const unmapped = rawRemarks.filter(r => !productMap[r.name] && r.name.toLowerCase().startsWith(name.toLowerCase().substring(0, 4)))
+                              if (unmapped.length === 0) return null
+                              return (
+                                <button key={name} onClick={() => {
+                                  const m = { ...productMap }
+                                  unmapped.forEach(r => { m[r.name] = name })
+                                  saveProductMap(m)
+                                }} style={{ padding: '4px 12px', border: `1px solid ${C.border}`, borderRadius: 2, background: C.surface, fontSize: 11, cursor: 'pointer', fontFamily: C.fontSans }}>
+                                  {name} (+{unmapped.length})
+                                </button>
+                              )
+                            }).filter(Boolean)}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  })()}
+                </div>
+              )}
               {/* Product bar chart */}
               <div style={{ ...card, padding: 20, marginBottom: 24 }}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 16, fontFamily: C.font }}>จำนวนออเดอร์แยกสินค้า (Top 10)</div>
@@ -1092,7 +1212,12 @@ export default function BossDashboard() {
                       return (
                         <tr key={p.name} style={{ background: i < 3 ? '#fdfaf3' : (i % 2 === 0 ? C.surfaceAlt : 'transparent') }}>
                           <td style={{ ...td, textAlign: 'center', fontWeight: 800, color: i < 3 ? C.gold : C.textMuted }}>{i + 1}</td>
-                          <td style={{ ...td, fontWeight: 600 }}>{p.name}</td>
+                          <td style={{ ...td, fontWeight: 600 }}>
+                            {p.name}
+                            {p.remarks && Object.keys(p.remarks).length > 1 && (
+                              <div style={{ fontSize: 10, color: C.textDim, marginTop: 2 }}>{Object.keys(p.remarks).length} remark รวมกลุ่ม</div>
+                            )}
+                          </td>
                           <td style={{ ...td, textAlign: 'center', fontWeight: 700, color: C.accent }}>{p.count}</td>
                           <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: C.success }}>฿{fmt(p.sales)}</td>
                           <td style={{ ...td, textAlign: 'center' }}>{p.cod}</td>
