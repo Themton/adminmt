@@ -2581,8 +2581,68 @@ export default function BossDashboard() {
 
               {/* Product Targets */}
               <div style={{ ...card, padding: 20, marginBottom: 24 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 14, fontFamily: C.font }}>📦 เป้าหมายรายสินค้า</div>
-                <div style={{ fontSize: 11, color: C.textDim, marginBottom: 12 }}>ตั้งเป้ายอดขายรายวันแยกตามสินค้า · สินค้ามาจากรายงาน (จัดกลุ่มแล้ว)</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: C.font }}>📦 เป้าหมายรายสินค้า</div>
+                  <button onClick={() => setEditProductMap(!editProductMap)} style={{ padding: '6px 14px', border: `1px solid ${C.border}`, borderRadius: 2, background: editProductMap ? C.accent : C.surface, color: editProductMap ? '#fff' : C.accent, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: C.fontSans }}>
+                    {editProductMap ? '✓ เสร็จ' : '🏷️ จัดกลุ่มสินค้า'}
+                  </button>
+                </div>
+                <div style={{ fontSize: 11, color: C.textDim, marginBottom: 12 }}>
+                  {Object.keys(productMap).length > 0
+                    ? `จัดกลุ่มแล้ว ${Object.keys(productMap).length} remark → ${[...new Set(Object.values(productMap))].length} สินค้า`
+                    : 'ยังไม่ได้จัดกลุ่ม — กด "จัดกลุ่มสินค้า" เพื่อรวม remark ที่เป็นสินค้าเดียวกัน'}
+                </div>
+
+                {/* Inline product mapping editor */}
+                {editProductMap && (
+                  <div style={{ padding: 16, marginBottom: 16, border: `2px solid ${C.accent}`, borderRadius: 2, background: '#fdfaf3' }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: C.accent, marginBottom: 4 }}>🏷️ จัดกลุ่ม remark → สินค้าจริง</div>
+                    <div style={{ fontSize: 11, color: C.textDim, marginBottom: 12 }}>พิมพ์ชื่อสินค้าจริงแล้ว Enter · remark ที่ตั้งชื่อเดียวกันจะรวมกลุ่มในทุกรายงาน</div>
+                    <datalist id="prod-names-t">{[...new Set(Object.values(productMap).filter(v => v))].map(n => <option key={n} value={n} />)}</datalist>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: C.danger, marginBottom: 6 }}>⚪ ยังไม่จัดกลุ่ม ({rawRemarks.filter(r => !productMap[r.name]).length})</div>
+                        <div style={{ maxHeight: 350, overflowY: 'auto' }}>
+                          {rawRemarks.filter(r => !productMap[r.name]).map(r => (
+                            <div key={r.name} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 0', borderBottom: `1px solid ${C.border}` }}>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</div>
+                                <div style={{ fontSize: 10, color: C.textDim }}>{r.count} ออเดอร์</div>
+                              </div>
+                              <span style={{ fontSize: 10, color: C.textDim }}>→</span>
+                              <input list="prod-names-t" placeholder="ชื่อสินค้าจริง"
+                                style={{ width: 140, padding: '4px 8px', border: `1px solid ${C.border}`, borderRadius: 2, fontSize: 11, fontFamily: C.fontSans }}
+                                onBlur={e => { if (e.target.value.trim()) { saveProductMap({ ...productMap, [r.name]: e.target.value.trim() }); e.target.value = '' } }}
+                                onKeyDown={e => { if (e.key === 'Enter' && e.target.value.trim()) { saveProductMap({ ...productMap, [r.name]: e.target.value.trim() }); e.target.value = '' } }} />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: C.success, marginBottom: 6 }}>✅ จัดกลุ่มแล้ว</div>
+                        <div style={{ maxHeight: 350, overflowY: 'auto' }}>
+                          {(() => {
+                            const grp = {}
+                            rawRemarks.filter(r => productMap[r.name]).forEach(r => { const t = productMap[r.name]; if (!grp[t]) grp[t] = []; grp[t].push(r) })
+                            return Object.entries(grp).sort((a, b) => a[0].localeCompare(b[0])).map(([target, rems]) => (
+                              <div key={target} style={{ marginBottom: 8, padding: 8, background: '#f0fdf4', borderRadius: 2, border: `1px solid #bbf7d0` }}>
+                                <div style={{ fontSize: 12, fontWeight: 700, color: C.success }}>{target} <span style={{ fontWeight: 400, color: C.textDim }}>({rems.reduce((s, r) => s + r.count, 0)})</span></div>
+                                {rems.map(r => (
+                                  <div key={r.name} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: C.textDim, padding: '1px 0' }}>
+                                    <span>• {r.name} ({r.count})</span>
+                                    <button onClick={() => { const m = { ...productMap }; delete m[r.name]; saveProductMap(m) }}
+                                      style={{ border: 'none', background: 'none', color: C.danger, fontSize: 10, cursor: 'pointer' }}>✕</button>
+                                  </div>
+                                ))}
+                              </div>
+                            ))
+                          })()}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <table>
                   <thead><tr>
                     <th style={th}>สินค้า</th>
