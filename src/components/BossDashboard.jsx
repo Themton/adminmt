@@ -627,6 +627,108 @@ export default function BossDashboard() {
           {/* ═══════ OVERVIEW ═══════ */}
           {section === 'overview' && (
             <div className="fade-in">
+              {/* Today's Target */}
+              {(() => {
+                const todayOrd = orders.filter(o => o.order_date === todayStr)
+                const todaySales = todayOrd.reduce((s, o) => s + (parseFloat(o.sale_price) || 0), 0)
+                const tDaily = targets.daily || 0
+                const tOrders = targets.dailyOrders || 0
+                const pctSales = tDaily > 0 ? (todaySales / tDaily * 100) : 0
+                const pctOrders = tOrders > 0 ? (todayOrd.length / tOrders * 100) : 0
+                const now = new Date()
+                const hrPassed = now.getHours() + now.getMinutes() / 60
+                const projectedSales = hrPassed > 0 ? (todaySales / hrPassed * 18) : 0 // assume 18hr work day
+
+                if (!tDaily && !tOrders) return (
+                  <div style={{ ...card, padding: 16, marginBottom: 20, background: C.surfaceAlt, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ fontSize: 13, color: C.textDim }}>🎯 ยังไม่ได้ตั้งเป้ายอดขายวันนี้</div>
+                    <button onClick={() => setSection('targets')} style={{ padding: '6px 14px', border: `1px solid ${C.border}`, borderRadius: 2, background: C.surface, color: C.accent, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: C.fontSans }}>ตั้งเป้า →</button>
+                  </div>
+                )
+
+                return (
+                  <div style={{ ...card, padding: 20, marginBottom: 20 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: C.font }}>🎯 เป้าหมายวันนี้</div>
+                      <div style={{ fontSize: 11, color: C.textDim }}>{todayStr} · {String(now.getHours()).padStart(2, '0')}:{String(now.getMinutes()).padStart(2, '0')} น.</div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: tDaily && tOrders ? '2fr 1fr' : '1fr', gap: 16 }}>
+                      {/* Sales progress */}
+                      {tDaily > 0 && (
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+                            <div>
+                              <span style={{ fontSize: 28, fontWeight: 800, fontFamily: C.font, color: pctSales >= 100 ? C.success : C.text }}>฿{fmt(todaySales)}</span>
+                              <span style={{ fontSize: 13, color: C.textDim, marginLeft: 8 }}>/ ฿{fmt(tDaily)}</span>
+                            </div>
+                            <span style={{ fontSize: 18, fontWeight: 800, color: pctSales >= 100 ? C.success : pctSales >= 70 ? C.gold : C.danger }}>
+                              {pctSales.toFixed(0)}% {pctSales >= 100 ? '✅' : pctSales >= 70 ? '🔥' : ''}
+                            </span>
+                          </div>
+                          <div style={{ height: 16, borderRadius: 8, background: C.surfaceHover, overflow: 'hidden', marginBottom: 6 }}>
+                            <div style={{
+                              width: Math.min(pctSales, 100) + '%', height: '100%', borderRadius: 8, transition: 'width 0.6s',
+                              background: pctSales >= 100 ? `linear-gradient(90deg, ${C.success}, ${C.successLight})` : pctSales >= 70 ? `linear-gradient(90deg, ${C.gold}, #DAA520)` : `linear-gradient(90deg, ${C.accent}, ${C.accentLight})`,
+                            }}></div>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: C.textDim }}>
+                            <span>ขาดอีก ฿{fmt(Math.max(0, tDaily - todaySales))}</span>
+                            <span>คาดการณ์: ฿{fmt(projectedSales)} {projectedSales >= tDaily ? '✅' : '⚠️'}</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Orders progress */}
+                      {tOrders > 0 && (
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+                            <div>
+                              <span style={{ fontSize: 28, fontWeight: 800, fontFamily: C.font, color: pctOrders >= 100 ? C.success : C.text }}>{todayOrd.length}</span>
+                              <span style={{ fontSize: 13, color: C.textDim, marginLeft: 8 }}>/ {tOrders} ออเดอร์</span>
+                            </div>
+                            <span style={{ fontSize: 18, fontWeight: 800, color: pctOrders >= 100 ? C.success : pctOrders >= 70 ? C.gold : C.danger }}>
+                              {pctOrders.toFixed(0)}%
+                            </span>
+                          </div>
+                          <div style={{ height: 16, borderRadius: 8, background: C.surfaceHover, overflow: 'hidden' }}>
+                            <div style={{
+                              width: Math.min(pctOrders, 100) + '%', height: '100%', borderRadius: 8, transition: 'width 0.6s',
+                              background: pctOrders >= 100 ? C.success : pctOrders >= 70 ? C.gold : C.accent,
+                            }}></div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Per-employee mini progress */}
+                    {tDaily > 0 && empStats.length > 0 && (
+                      <div style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
+                        <div style={{ fontSize: 11, color: C.textDim, marginBottom: 8 }}>รายคน (เป้าเฉลี่ย ฿{fmt(tDaily / empStats.length)}/คน)</div>
+                        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(empStats.length, 5)}, 1fr)`, gap: 8 }}>
+                          {(() => {
+                            const perTarget = tDaily / empStats.length
+                            const todayEmp = {}
+                            todayOrd.forEach(o => { const n = o.employee_name || '—'; if (!todayEmp[n]) todayEmp[n] = 0; todayEmp[n] += parseFloat(o.sale_price) || 0 })
+                            return empStats.slice(0, 5).map(e => {
+                              const sales = todayEmp[e.name] || 0
+                              const p = perTarget > 0 ? (sales / perTarget * 100) : 0
+                              return (
+                                <div key={e.name} style={{ textAlign: 'center' }}>
+                                  <div style={{ fontSize: 11, fontWeight: 600, color: C.text, marginBottom: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.name}</div>
+                                  <div style={{ height: 6, borderRadius: 3, background: C.surfaceHover, overflow: 'hidden', marginBottom: 2 }}>
+                                    <div style={{ width: Math.min(p, 100) + '%', height: '100%', borderRadius: 3, background: p >= 100 ? C.success : p >= 70 ? C.gold : C.dangerLight }}></div>
+                                  </div>
+                                  <div style={{ fontSize: 10, fontWeight: 700, color: p >= 100 ? C.success : p >= 70 ? C.gold : C.danger }}>{p.toFixed(0)}%</div>
+                                </div>
+                              )
+                            })
+                          })()}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
               {/* KPI Cards */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 16, marginBottom: 24 }}>
                 {[
