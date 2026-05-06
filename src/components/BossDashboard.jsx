@@ -1284,16 +1284,32 @@ export default function BossDashboard() {
                             const selectedUnmapped = unmapped.filter(r => selectedRemarks.has(r.name))
                             const allSelected = unmapped.length > 0 && unmapped.every(r => selectedRemarks.has(r.name))
                             return selectedUnmapped.length > 0 ? (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', marginBottom: 8, background: '#eef2ff', border: `1px solid ${C.accent}`, borderRadius: 4 }}>
-                                <span style={{ fontSize: 12, fontWeight: 700, color: C.accent, whiteSpace: 'nowrap' }}>เลือก {selectedUnmapped.length} รายการ →</span>
-                                <input id="bulk-assign-input" list="prod-names" placeholder="พิมพ์ชื่อสินค้าแล้ว Enter"
-                                  style={{ flex: 1, padding: '5px 8px', border: `1px solid ${C.border}`, borderRadius: 2, fontSize: 12, fontFamily: C.fontSans }}
-                                  onKeyDown={e => { if (e.key === 'Enter' && e.target.value.trim()) { const m = { ...productMap }; selectedUnmapped.forEach(r => { m[r.name] = e.target.value.trim() }); saveProductMap(m); setSelectedRemarks(new Set()); e.target.value = '' } }}
-                                />
-                                <button onClick={() => { const el = document.getElementById('bulk-assign-input'); if (el && el.value.trim()) { const m = { ...productMap }; selectedUnmapped.forEach(r => { m[r.name] = el.value.trim() }); saveProductMap(m); setSelectedRemarks(new Set()); el.value = '' } }}
-                                  style={{ padding: '5px 12px', border: 'none', borderRadius: 2, background: C.accent, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>✓ กำหนด</button>
-                                <button onClick={() => setSelectedRemarks(new Set())}
-                                  style={{ padding: '5px 8px', border: `1px solid ${C.border}`, borderRadius: 2, background: C.surface, fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}>ยกเลิก</button>
+                              <div style={{ padding: '10px 12px', marginBottom: 8, background: '#eef2ff', border: `1px solid ${C.accent}`, borderRadius: 6 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: existingNames.length > 0 ? 10 : 0 }}>
+                                  <span style={{ fontSize: 12, fontWeight: 700, color: C.accent, whiteSpace: 'nowrap' }}>✅ เลือก {selectedUnmapped.length} รายการ →</span>
+                                  <input id="bulk-assign-input" list="prod-names" placeholder="พิมพ์ชื่อสินค้าแล้ว Enter"
+                                    style={{ flex: 1, padding: '5px 8px', border: `1px solid ${C.border}`, borderRadius: 2, fontSize: 12, fontFamily: C.fontSans }}
+                                    onKeyDown={e => { if (e.key === 'Enter' && e.target.value.trim()) { const m = { ...productMap }; selectedUnmapped.forEach(r => { m[r.name] = e.target.value.trim() }); saveProductMap(m); setSelectedRemarks(new Set()); e.target.value = '' } }}
+                                  />
+                                  <button onClick={() => { const el = document.getElementById('bulk-assign-input'); if (el && el.value.trim()) { const m = { ...productMap }; selectedUnmapped.forEach(r => { m[r.name] = el.value.trim() }); saveProductMap(m); setSelectedRemarks(new Set()); el.value = '' } }}
+                                    style={{ padding: '5px 12px', border: 'none', borderRadius: 2, background: C.accent, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>✓ กำหนด</button>
+                                  <button onClick={() => setSelectedRemarks(new Set())}
+                                    style={{ padding: '5px 8px', border: `1px solid ${C.border}`, borderRadius: 2, background: C.surface, fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}>ยกเลิก</button>
+                                </div>
+                                {existingNames.length > 0 && (
+                                  <div>
+                                    <div style={{ fontSize: 11, color: C.accent, fontWeight: 600, marginBottom: 6 }}>🏷️ หรือเลือกจากสินค้าที่บันทึกไว้:</div>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                                      {existingNames.sort().map(name => (
+                                        <button key={name} onClick={() => { const m = { ...productMap }; selectedUnmapped.forEach(r => { m[r.name] = name }); saveProductMap(m); setSelectedRemarks(new Set()) }}
+                                          style={{ padding: '5px 14px', border: `1px solid #bbf7d0`, borderRadius: 20, background: '#f0fdf4', color: '#16a34a', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: C.fontSans, transition: 'all .15s' }}
+                                          onMouseEnter={e => { e.target.style.background = '#16a34a'; e.target.style.color = '#fff' }}
+                                          onMouseLeave={e => { e.target.style.background = '#f0fdf4'; e.target.style.color = '#16a34a' }}
+                                        >{name}</button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             ) : null
                           })()}
@@ -2646,17 +2662,34 @@ export default function BossDashboard() {
                         {(() => {
                           const unmapped = rawRemarks.filter(r => !productMap[r.name])
                           const selectedUnmapped = unmapped.filter(r => selectedRemarks.has(r.name))
+                          const existNames = [...new Set(Object.values(productMap).filter(v => v))]
                           return selectedUnmapped.length > 0 ? (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 10px', marginBottom: 6, background: '#eef2ff', border: `1px solid ${C.accent}`, borderRadius: 4 }}>
-                              <span style={{ fontSize: 11, fontWeight: 700, color: C.accent, whiteSpace: 'nowrap' }}>เลือก {selectedUnmapped.length} →</span>
-                              <input id="bulk-assign-input-t" list="prod-names-t" placeholder="ชื่อสินค้าแล้ว Enter"
-                                style={{ flex: 1, padding: '4px 8px', border: `1px solid ${C.border}`, borderRadius: 2, fontSize: 11, fontFamily: C.fontSans }}
-                                onKeyDown={e => { if (e.key === 'Enter' && e.target.value.trim()) { const m = { ...productMap }; selectedUnmapped.forEach(r => { m[r.name] = e.target.value.trim() }); saveProductMap(m); setSelectedRemarks(new Set()); e.target.value = '' } }}
-                              />
-                              <button onClick={() => { const el = document.getElementById('bulk-assign-input-t'); if (el && el.value.trim()) { const m = { ...productMap }; selectedUnmapped.forEach(r => { m[r.name] = el.value.trim() }); saveProductMap(m); setSelectedRemarks(new Set()); el.value = '' } }}
-                                style={{ padding: '4px 10px', border: 'none', borderRadius: 2, background: C.accent, color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>✓</button>
-                              <button onClick={() => setSelectedRemarks(new Set())}
-                                style={{ padding: '4px 6px', border: `1px solid ${C.border}`, borderRadius: 2, background: C.surface, fontSize: 10, cursor: 'pointer' }}>✕</button>
+                            <div style={{ padding: '8px 10px', marginBottom: 6, background: '#eef2ff', border: `1px solid ${C.accent}`, borderRadius: 6 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: existNames.length > 0 ? 8 : 0 }}>
+                                <span style={{ fontSize: 11, fontWeight: 700, color: C.accent, whiteSpace: 'nowrap' }}>✅ เลือก {selectedUnmapped.length} →</span>
+                                <input id="bulk-assign-input-t" list="prod-names-t" placeholder="ชื่อสินค้าแล้ว Enter"
+                                  style={{ flex: 1, padding: '4px 8px', border: `1px solid ${C.border}`, borderRadius: 2, fontSize: 11, fontFamily: C.fontSans }}
+                                  onKeyDown={e => { if (e.key === 'Enter' && e.target.value.trim()) { const m = { ...productMap }; selectedUnmapped.forEach(r => { m[r.name] = e.target.value.trim() }); saveProductMap(m); setSelectedRemarks(new Set()); e.target.value = '' } }}
+                                />
+                                <button onClick={() => { const el = document.getElementById('bulk-assign-input-t'); if (el && el.value.trim()) { const m = { ...productMap }; selectedUnmapped.forEach(r => { m[r.name] = el.value.trim() }); saveProductMap(m); setSelectedRemarks(new Set()); el.value = '' } }}
+                                  style={{ padding: '4px 10px', border: 'none', borderRadius: 2, background: C.accent, color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>✓</button>
+                                <button onClick={() => setSelectedRemarks(new Set())}
+                                  style={{ padding: '4px 6px', border: `1px solid ${C.border}`, borderRadius: 2, background: C.surface, fontSize: 10, cursor: 'pointer' }}>✕</button>
+                              </div>
+                              {existNames.length > 0 && (
+                                <div>
+                                  <div style={{ fontSize: 10, color: C.accent, fontWeight: 600, marginBottom: 5 }}>🏷️ หรือเลือกจากสินค้าที่บันทึกไว้:</div>
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                                    {existNames.sort().map(name => (
+                                      <button key={name} onClick={() => { const m = { ...productMap }; selectedUnmapped.forEach(r => { m[r.name] = name }); saveProductMap(m); setSelectedRemarks(new Set()) }}
+                                        style={{ padding: '4px 12px', border: `1px solid #bbf7d0`, borderRadius: 20, background: '#f0fdf4', color: '#16a34a', fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: C.fontSans, transition: 'all .15s' }}
+                                        onMouseEnter={e => { e.target.style.background = '#16a34a'; e.target.style.color = '#fff' }}
+                                        onMouseLeave={e => { e.target.style.background = '#f0fdf4'; e.target.style.color = '#16a34a' }}
+                                      >{name}</button>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           ) : null
                         })()}
