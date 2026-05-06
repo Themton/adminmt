@@ -154,6 +154,14 @@ export default function BossDashboard() {
   })
   const saveProductTargets = (v) => { setProductTargets(v); localStorage.setItem('boss_prod_targets', JSON.stringify(v)) }
 
+  // Ad cost per day
+  const [adCosts, setAdCosts] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('boss_ad_costs') || '{}') } catch { return {} }
+  })
+  const [editAdCost, setEditAdCost] = useState(false)
+  const saveAdCost = (date, val) => { const c = { ...adCosts, [date]: val }; setAdCosts(c); localStorage.setItem('boss_ad_costs', JSON.stringify(c)) }
+  const adCostToday = adCosts[todayStr] || 0
+
   const setQuick = (key) => {
     setQuickRange(key)
     const now = new Date()
@@ -633,6 +641,54 @@ export default function BossDashboard() {
           {/* ═══════ OVERVIEW ═══════ */}
           {section === 'overview' && (
             <div className="fade-in">
+              {/* ══ Ad Cost Today Banner ══ */}
+              {(() => {
+                const todayOrd = orders.filter(o => o.order_date === todayStr)
+                const todaySales = todayOrd.reduce((s, o) => s + (parseFloat(o.sale_price) || 0), 0)
+                const roas = adCostToday > 0 ? (todaySales / adCostToday) : 0
+                return (
+                  <div style={{
+                    ...card, padding: '20px 24px', marginBottom: 20, textAlign: 'center',
+                    background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 50%, #fbbf24 100%)',
+                    border: '2px solid #f59e0b', position: 'relative'
+                  }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#92400e', marginBottom: 6, letterSpacing: 1, textTransform: 'uppercase' }}>📣 ค่าแอดวันนี้</div>
+                    {editAdCost ? (
+                      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10 }}>
+                        <span style={{ fontSize: 32, fontWeight: 800, color: '#92400e', fontFamily: C.font }}>฿</span>
+                        <input autoFocus type="number" defaultValue={adCostToday || ''} placeholder="0"
+                          style={{ width: 200, padding: '10px 16px', border: '2px solid #f59e0b', borderRadius: 8, fontSize: 32, fontWeight: 800, fontFamily: C.font, textAlign: 'center', background: '#fffbeb', color: '#92400e' }}
+                          onKeyDown={e => { if (e.key === 'Enter') { saveAdCost(todayStr, parseFloat(e.target.value) || 0); setEditAdCost(false) } }}
+                          onBlur={e => { saveAdCost(todayStr, parseFloat(e.target.value) || 0); setEditAdCost(false) }}
+                        />
+                        <button onClick={() => setEditAdCost(false)}
+                          style={{ padding: '8px 16px', border: 'none', borderRadius: 6, background: '#92400e', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>✓</button>
+                      </div>
+                    ) : (
+                      <div onClick={() => setEditAdCost(true)} style={{ cursor: 'pointer' }}>
+                        <div style={{ fontSize: 42, fontWeight: 900, color: '#92400e', fontFamily: C.font, lineHeight: 1.1 }}>
+                          ฿{fmt(adCostToday)}
+                        </div>
+                        {adCostToday > 0 && todaySales > 0 && (
+                          <div style={{ display: 'flex', justifyContent: 'center', gap: 20, marginTop: 8 }}>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: '#78350f', background: '#fef3c7', padding: '3px 12px', borderRadius: 20 }}>
+                              ROAS: {roas.toFixed(2)}x
+                            </span>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: '#78350f', background: '#fef3c7', padding: '3px 12px', borderRadius: 20 }}>
+                              ยอดขาย: ฿{fmt(todaySales)}
+                            </span>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: todaySales - adCostToday >= 0 ? '#166534' : '#dc2626', background: todaySales - adCostToday >= 0 ? '#dcfce7' : '#fee2e2', padding: '3px 12px', borderRadius: 20 }}>
+                              {todaySales - adCostToday >= 0 ? '📈 กำไร' : '📉 ขาดทุน'}: ฿{fmt(Math.abs(todaySales - adCostToday))}
+                            </span>
+                          </div>
+                        )}
+                        <div style={{ fontSize: 11, color: '#a16207', marginTop: 6 }}>กดเพื่อแก้ไข</div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
+
               {/* Today's Target */}
               {(() => {
                 const todayOrd = orders.filter(o => o.order_date === todayStr)
