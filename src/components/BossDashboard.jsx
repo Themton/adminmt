@@ -147,6 +147,8 @@ export default function BossDashboard() {
     try { return JSON.parse(localStorage.getItem('boss_product_map') || '{}') } catch { return {} }
   })
   const [editProductMap, setEditProductMap] = useState(false)
+  const [selectedRemarks, setSelectedRemarks] = useState(new Set())
+  const toggleSelectRemark = (name) => setSelectedRemarks(prev => { const s = new Set(prev); s.has(name) ? s.delete(name) : s.add(name); return s })
   const [productTargets, setProductTargets] = useState(() => {
     try { return JSON.parse(localStorage.getItem('boss_prod_targets') || '{}') } catch { return {} }
   })
@@ -1250,7 +1252,7 @@ export default function BossDashboard() {
                       {Object.keys(productMap).length > 0 ? `(จัดกลุ่มแล้ว ${Object.keys(productMap).length} รายการ)` : '(ยังไม่ได้จัดกลุ่ม — ใช้ชื่อจาก remark ตรงๆ)'}
                     </span>
                   </div>
-                  <button onClick={() => setEditProductMap(!editProductMap)} style={{ padding: '6px 16px', border: `1px solid ${C.border}`, borderRadius: 2, background: editProductMap ? C.accent : C.surface, color: editProductMap ? '#fff' : C.accent, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: C.fontSans }}>
+                  <button onClick={() => { setEditProductMap(!editProductMap); setSelectedRemarks(new Set()) }} style={{ padding: '6px 16px', border: `1px solid ${C.border}`, borderRadius: 2, background: editProductMap ? C.accent : C.surface, color: editProductMap ? '#fff' : C.accent, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: C.fontSans }}>
                     {editProductMap ? '✓ เสร็จสิ้น' : '✏️ จัดกลุ่ม'}
                   </button>
                 </div>
@@ -1260,7 +1262,7 @@ export default function BossDashboard() {
               {editProductMap && (
                 <div style={{ ...card, padding: 20, marginBottom: 20 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 6 }}>เลือกชื่อสินค้าจริงให้แต่ละ remark</div>
-                  <div style={{ fontSize: 11, color: C.textDim, marginBottom: 14 }}>remark ที่เลือกชื่อเดียวกันจะถูกรวมกลุ่มในรายงานทุกหน้า · ปล่อยว่างถ้าไม่ต้องการจัดกลุ่ม</div>
+                  <div style={{ fontSize: 11, color: C.textDim, marginBottom: 14 }}>✅ เลือกหลายรายการพร้อมกันด้วย checkbox แล้วพิมพ์ชื่อสินค้าจริง · remark ที่ตั้งชื่อเดียวกันจะถูกรวมกลุ่มในรายงานทุกหน้า</div>
 
                   {/* Quick: list all existing product names for datalist */}
                   {(() => {
@@ -1275,18 +1277,54 @@ export default function BossDashboard() {
                         {/* Unmapped */}
                         <div>
                           <div style={{ fontSize: 12, fontWeight: 700, color: C.danger, marginBottom: 8 }}>⚪ ยังไม่ได้จัดกลุ่ม ({rawRemarks.filter(r => !productMap[r.name]).length})</div>
+
+                          {/* Bulk assign bar */}
+                          {(() => {
+                            const unmapped = rawRemarks.filter(r => !productMap[r.name])
+                            const selectedUnmapped = unmapped.filter(r => selectedRemarks.has(r.name))
+                            const allSelected = unmapped.length > 0 && unmapped.every(r => selectedRemarks.has(r.name))
+                            return selectedUnmapped.length > 0 ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', marginBottom: 8, background: '#eef2ff', border: `1px solid ${C.accent}`, borderRadius: 4 }}>
+                                <span style={{ fontSize: 12, fontWeight: 700, color: C.accent, whiteSpace: 'nowrap' }}>เลือก {selectedUnmapped.length} รายการ →</span>
+                                <input id="bulk-assign-input" list="prod-names" placeholder="พิมพ์ชื่อสินค้าแล้ว Enter"
+                                  style={{ flex: 1, padding: '5px 8px', border: `1px solid ${C.border}`, borderRadius: 2, fontSize: 12, fontFamily: C.fontSans }}
+                                  onKeyDown={e => { if (e.key === 'Enter' && e.target.value.trim()) { const m = { ...productMap }; selectedUnmapped.forEach(r => { m[r.name] = e.target.value.trim() }); saveProductMap(m); setSelectedRemarks(new Set()); e.target.value = '' } }}
+                                />
+                                <button onClick={() => { const el = document.getElementById('bulk-assign-input'); if (el && el.value.trim()) { const m = { ...productMap }; selectedUnmapped.forEach(r => { m[r.name] = el.value.trim() }); saveProductMap(m); setSelectedRemarks(new Set()); el.value = '' } }}
+                                  style={{ padding: '5px 12px', border: 'none', borderRadius: 2, background: C.accent, color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>✓ กำหนด</button>
+                                <button onClick={() => setSelectedRemarks(new Set())}
+                                  style={{ padding: '5px 8px', border: `1px solid ${C.border}`, borderRadius: 2, background: C.surface, fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}>ยกเลิก</button>
+                              </div>
+                            ) : null
+                          })()}
+
+                          {/* Select all checkbox */}
+                          {(() => {
+                            const unmapped = rawRemarks.filter(r => !productMap[r.name])
+                            const allSelected = unmapped.length > 0 && unmapped.every(r => selectedRemarks.has(r.name))
+                            return unmapped.length > 0 && (
+                              <label style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 0', marginBottom: 4, cursor: 'pointer', fontSize: 11, color: C.textDim, fontWeight: 600 }}>
+                                <input type="checkbox" checked={allSelected} onChange={() => { if (allSelected) { setSelectedRemarks(new Set()) } else { setSelectedRemarks(new Set(unmapped.map(r => r.name))) } }}
+                                  style={{ accentColor: C.accent }} />
+                                เลือกทั้งหมด
+                              </label>
+                            )
+                          })()}
+
                           <div style={{ maxHeight: 400, overflowY: 'auto' }}>
                             {rawRemarks.filter(r => !productMap[r.name]).map(r => (
-                              <div key={r.name} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: `1px solid ${C.border}` }}>
-                                <div style={{ flex: 1, minWidth: 0 }}>
+                              <div key={r.name} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: `1px solid ${C.border}`, background: selectedRemarks.has(r.name) ? '#eef2ff' : 'transparent', paddingLeft: 4, borderRadius: 2 }}>
+                                <input type="checkbox" checked={selectedRemarks.has(r.name)} onChange={() => toggleSelectRemark(r.name)}
+                                  style={{ accentColor: C.accent, cursor: 'pointer', flexShrink: 0 }} />
+                                <div style={{ flex: 1, minWidth: 0, cursor: 'pointer' }} onClick={() => toggleSelectRemark(r.name)}>
                                   <div style={{ fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}</div>
                                   <div style={{ fontSize: 10, color: C.textDim }}>{r.count} ออเดอร์</div>
                                 </div>
                                 <span style={{ fontSize: 11, color: C.textDim }}>→</span>
                                 <input list="prod-names" placeholder="ชื่อสินค้าจริง"
-                                  style={{ width: 150, padding: '5px 8px', border: `1px solid ${C.border}`, borderRadius: 2, fontSize: 12, fontFamily: C.fontSans }}
-                                  onBlur={e => { if (e.target.value.trim()) { saveProductMap({ ...productMap, [r.name]: e.target.value.trim() }); e.target.value = '' } }}
-                                  onKeyDown={e => { if (e.key === 'Enter' && e.target.value.trim()) { saveProductMap({ ...productMap, [r.name]: e.target.value.trim() }); e.target.value = '' } }}
+                                  style={{ width: 130, padding: '5px 8px', border: `1px solid ${C.border}`, borderRadius: 2, fontSize: 12, fontFamily: C.fontSans }}
+                                  onBlur={e => { if (e.target.value.trim()) { saveProductMap({ ...productMap, [r.name]: e.target.value.trim() }); setSelectedRemarks(prev => { const s = new Set(prev); s.delete(r.name); return s }); e.target.value = '' } }}
+                                  onKeyDown={e => { if (e.key === 'Enter' && e.target.value.trim()) { saveProductMap({ ...productMap, [r.name]: e.target.value.trim() }); setSelectedRemarks(prev => { const s = new Set(prev); s.delete(r.name); return s }); e.target.value = '' } }}
                                 />
                               </div>
                             ))}
@@ -2583,7 +2621,7 @@ export default function BossDashboard() {
               <div style={{ ...card, padding: 20, marginBottom: 24 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                   <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: C.font }}>📦 เป้าหมายรายสินค้า</div>
-                  <button onClick={() => setEditProductMap(!editProductMap)} style={{ padding: '6px 14px', border: `1px solid ${C.border}`, borderRadius: 2, background: editProductMap ? C.accent : C.surface, color: editProductMap ? '#fff' : C.accent, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: C.fontSans }}>
+                  <button onClick={() => { setEditProductMap(!editProductMap); setSelectedRemarks(new Set()) }} style={{ padding: '6px 14px', border: `1px solid ${C.border}`, borderRadius: 2, background: editProductMap ? C.accent : C.surface, color: editProductMap ? '#fff' : C.accent, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: C.fontSans }}>
                     {editProductMap ? '✓ เสร็จ' : '🏷️ จัดกลุ่มสินค้า'}
                   </button>
                 </div>
@@ -2597,24 +2635,59 @@ export default function BossDashboard() {
                 {editProductMap && (
                   <div style={{ padding: 16, marginBottom: 16, border: `2px solid ${C.accent}`, borderRadius: 2, background: '#fdfaf3' }}>
                     <div style={{ fontSize: 13, fontWeight: 700, color: C.accent, marginBottom: 4 }}>🏷️ จัดกลุ่ม remark → สินค้าจริง</div>
-                    <div style={{ fontSize: 11, color: C.textDim, marginBottom: 12 }}>พิมพ์ชื่อสินค้าจริงแล้ว Enter · remark ที่ตั้งชื่อเดียวกันจะรวมกลุ่มในทุกรายงาน</div>
+                    <div style={{ fontSize: 11, color: C.textDim, marginBottom: 12 }}>✅ เลือกหลายรายการด้วย checkbox แล้วพิมพ์ชื่อสินค้าจริง Enter · remark ที่ตั้งชื่อเดียวกันจะรวมกลุ่มในทุกรายงาน</div>
                     <datalist id="prod-names-t">{[...new Set(Object.values(productMap).filter(v => v))].map(n => <option key={n} value={n} />)}</datalist>
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                       <div>
                         <div style={{ fontSize: 12, fontWeight: 700, color: C.danger, marginBottom: 6 }}>⚪ ยังไม่จัดกลุ่ม ({rawRemarks.filter(r => !productMap[r.name]).length})</div>
+
+                        {/* Bulk assign bar */}
+                        {(() => {
+                          const unmapped = rawRemarks.filter(r => !productMap[r.name])
+                          const selectedUnmapped = unmapped.filter(r => selectedRemarks.has(r.name))
+                          return selectedUnmapped.length > 0 ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 10px', marginBottom: 6, background: '#eef2ff', border: `1px solid ${C.accent}`, borderRadius: 4 }}>
+                              <span style={{ fontSize: 11, fontWeight: 700, color: C.accent, whiteSpace: 'nowrap' }}>เลือก {selectedUnmapped.length} →</span>
+                              <input id="bulk-assign-input-t" list="prod-names-t" placeholder="ชื่อสินค้าแล้ว Enter"
+                                style={{ flex: 1, padding: '4px 8px', border: `1px solid ${C.border}`, borderRadius: 2, fontSize: 11, fontFamily: C.fontSans }}
+                                onKeyDown={e => { if (e.key === 'Enter' && e.target.value.trim()) { const m = { ...productMap }; selectedUnmapped.forEach(r => { m[r.name] = e.target.value.trim() }); saveProductMap(m); setSelectedRemarks(new Set()); e.target.value = '' } }}
+                              />
+                              <button onClick={() => { const el = document.getElementById('bulk-assign-input-t'); if (el && el.value.trim()) { const m = { ...productMap }; selectedUnmapped.forEach(r => { m[r.name] = el.value.trim() }); saveProductMap(m); setSelectedRemarks(new Set()); el.value = '' } }}
+                                style={{ padding: '4px 10px', border: 'none', borderRadius: 2, background: C.accent, color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>✓</button>
+                              <button onClick={() => setSelectedRemarks(new Set())}
+                                style={{ padding: '4px 6px', border: `1px solid ${C.border}`, borderRadius: 2, background: C.surface, fontSize: 10, cursor: 'pointer' }}>✕</button>
+                            </div>
+                          ) : null
+                        })()}
+
+                        {/* Select all */}
+                        {(() => {
+                          const unmapped = rawRemarks.filter(r => !productMap[r.name])
+                          const allSelected = unmapped.length > 0 && unmapped.every(r => selectedRemarks.has(r.name))
+                          return unmapped.length > 0 && (
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 0', marginBottom: 4, cursor: 'pointer', fontSize: 10, color: C.textDim, fontWeight: 600 }}>
+                              <input type="checkbox" checked={allSelected} onChange={() => { if (allSelected) { setSelectedRemarks(new Set()) } else { setSelectedRemarks(new Set(unmapped.map(r => r.name))) } }}
+                                style={{ accentColor: C.accent }} />
+                              เลือกทั้งหมด
+                            </label>
+                          )
+                        })()}
+
                         <div style={{ maxHeight: 350, overflowY: 'auto' }}>
                           {rawRemarks.filter(r => !productMap[r.name]).map(r => (
-                            <div key={r.name} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 0', borderBottom: `1px solid ${C.border}` }}>
-                              <div style={{ flex: 1, minWidth: 0 }}>
+                            <div key={r.name} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 0', borderBottom: `1px solid ${C.border}`, background: selectedRemarks.has(r.name) ? '#eef2ff' : 'transparent', paddingLeft: 4, borderRadius: 2 }}>
+                              <input type="checkbox" checked={selectedRemarks.has(r.name)} onChange={() => toggleSelectRemark(r.name)}
+                                style={{ accentColor: C.accent, cursor: 'pointer', flexShrink: 0 }} />
+                              <div style={{ flex: 1, minWidth: 0, cursor: 'pointer' }} onClick={() => toggleSelectRemark(r.name)}>
                                 <div style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</div>
                                 <div style={{ fontSize: 10, color: C.textDim }}>{r.count} ออเดอร์</div>
                               </div>
                               <span style={{ fontSize: 10, color: C.textDim }}>→</span>
                               <input list="prod-names-t" placeholder="ชื่อสินค้าจริง"
-                                style={{ width: 140, padding: '4px 8px', border: `1px solid ${C.border}`, borderRadius: 2, fontSize: 11, fontFamily: C.fontSans }}
-                                onBlur={e => { if (e.target.value.trim()) { saveProductMap({ ...productMap, [r.name]: e.target.value.trim() }); e.target.value = '' } }}
-                                onKeyDown={e => { if (e.key === 'Enter' && e.target.value.trim()) { saveProductMap({ ...productMap, [r.name]: e.target.value.trim() }); e.target.value = '' } }} />
+                                style={{ width: 120, padding: '4px 8px', border: `1px solid ${C.border}`, borderRadius: 2, fontSize: 11, fontFamily: C.fontSans }}
+                                onBlur={e => { if (e.target.value.trim()) { saveProductMap({ ...productMap, [r.name]: e.target.value.trim() }); setSelectedRemarks(prev => { const s = new Set(prev); s.delete(r.name); return s }); e.target.value = '' } }}
+                                onKeyDown={e => { if (e.key === 'Enter' && e.target.value.trim()) { saveProductMap({ ...productMap, [r.name]: e.target.value.trim() }); setSelectedRemarks(prev => { const s = new Set(prev); s.delete(r.name); return s }); e.target.value = '' } }} />
                             </div>
                           ))}
                         </div>
