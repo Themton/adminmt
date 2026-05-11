@@ -1893,107 +1893,143 @@ export default function ManagerApp({ profile, onLogout }) {
         </>}
 
         {/* ══ USERS ══ */}
-        {tab === 'users' && <>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}><div style={{ fontSize: 15, fontWeight: 700 }}>ผู้ใช้ ({profiles.length})</div><Btn sm onClick={() => setShowUserModal(true)}>+ เพิ่มผู้ใช้</Btn></div>
+        {tab === 'users' && (() => {
+          const ROLE_GROUPS = [
+            { key: 'management', label: '🏢 ผู้บริหาร', roles: ['manager', 'admin'], color: '#8B5CF6' },
+            { key: 'sales', label: '👤 พนักงานขาย', roles: ['employee'], color: '#D4A017' },
+            { key: 'shipping', label: '📦 ฝ่ายจัดส่ง', roles: ['packer', 'head'], color: '#0891B2' },
+            { key: 'other', label: '📊 อื่นๆ', roles: ['export'], color: '#6B7280' },
+          ]
+          const grouped = ROLE_GROUPS.map(g => ({
+            ...g,
+            members: profiles.filter(p => g.roles.includes(p.role))
+          })).filter(g => g.members.length > 0)
 
-          {/* Modal สร้าง user */}
-          <Modal show={showUserModal} onClose={() => setShowUserModal(false)} title="🧑‍💼 เพิ่มผู้ใช้">
-            <FI label="ชื่อ *" value={userForm.fullName} onChange={e => setUserForm(p=>({...p,fullName:e.target.value}))} placeholder="สมชาย ใจดี" />
-            <FI label="อีเมล *" type="email" value={userForm.email} onChange={e => setUserForm(p=>({...p,email:e.target.value}))} placeholder="user@mail.com" />
-            <FI label="รหัสผ่าน *" value={userForm.password} onChange={e => setUserForm(p=>({...p,password:e.target.value}))} placeholder="6 ตัวขึ้นไป" />
-            <div style={{ marginBottom: 14 }}><label style={{ display: 'block', fontSize: 12, color: T.textDim, fontWeight: 500, marginBottom: 6 }}>ตำแหน่ง</label>
-              <select value={userForm.role} onChange={e => setUserForm(p=>({...p,role:e.target.value}))} style={{ width: '100%', padding: '13px 16px', borderRadius: T.radiusSm, border: `1px solid ${T.border}`, background: T.surfaceAlt, color: T.text, fontSize: 15, fontFamily: T.font, outline: 'none', boxSizing: 'border-box' }}><option value="employee">👤 พนักงาน</option><option value="packer">📦 พนักงานจัดส่ง</option><option value="head">👑 หัวหน้าจัดส่ง</option><option value="export">📊 Export รายงาน</option><option value="admin">🔑 แอดมิน</option><option value="manager">🏢 ผู้จัดการ</option></select>
+          const roleLabel = (r) => ({ manager: 'ผู้จัดการ', admin: 'แอดมิน', employee: 'พนักงาน', packer: 'จัดส่ง', head: 'หัวหน้าจัดส่ง', export: 'Export' }[r] || r)
+
+          return <>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>พนักงาน ({profiles.length} คน)</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <Btn sm onClick={() => setShowUserModal(true)}>+ เพิ่ม</Btn>
+              </div>
             </div>
-            {userForm.role === 'employee' && <div style={{ marginBottom: 14 }}><label style={{ display: 'block', fontSize: 12, color: T.textDim, fontWeight: 500, marginBottom: 6 }}>ทีม</label>
-              <select value={userForm.teamId} onChange={e => setUserForm(p=>({...p,teamId:e.target.value}))} style={{ width: '100%', padding: '13px 16px', borderRadius: T.radiusSm, border: `1px solid ${T.border}`, background: T.surfaceAlt, color: T.text, fontSize: 15, fontFamily: T.font, outline: 'none', boxSizing: 'border-box' }}><option value="">— เลือกทีม —</option>{teams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select>
-            </div>}
-            <div style={{ display: 'flex', gap: 10 }}><Btn full onClick={createUser} grad={T.grad2}>✅ สร้าง</Btn><Btn full outline onClick={() => setShowUserModal(false)}>ยกเลิก</Btn></div>
-          </Modal>
 
-          {/* Modal แก้ไข user */}
-          <Modal show={!!editUserData} onClose={() => setEditUserData(null)} title={`✏️ แก้ไขผู้ใช้`}>
-            {editUserData && <>
-              <FI label="ชื่อ" value={editUserData.full_name} onChange={e => setEditUserData(p=>({...p,full_name:e.target.value}))} />
-              <FI label="อีเมล" value={editUserData.email||''} onChange={e => setEditUserData(p=>({...p,email:e.target.value}))} />
-              <FI label="รหัสผ่าน" value={editUserData.password_text||''} onChange={e => setEditUserData(p=>({...p,password_text:e.target.value}))} />
+            {/* สรุปจำนวนตามแผนก */}
+            <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
+              {grouped.map(g => (
+                <div key={g.key} style={{ padding: '10px 16px', borderRadius: 10, background: T.surface, border: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: g.color }} />
+                  <span style={{ fontSize: 13, color: T.textDim }}>{g.label}</span>
+                  <span style={{ fontSize: 15, fontWeight: 800, color: g.color }}>{g.members.length}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Modals */}
+            <Modal show={showUserModal} onClose={() => setShowUserModal(false)} title="🧑‍💼 เพิ่มผู้ใช้">
+              <FI label="ชื่อ *" value={userForm.fullName} onChange={e => setUserForm(p=>({...p,fullName:e.target.value}))} placeholder="สมชาย ใจดี" />
+              <FI label="อีเมล *" type="email" value={userForm.email} onChange={e => setUserForm(p=>({...p,email:e.target.value}))} placeholder="user@mail.com" />
+              <FI label="รหัสผ่าน *" value={userForm.password} onChange={e => setUserForm(p=>({...p,password:e.target.value}))} placeholder="6 ตัวขึ้นไป" />
               <div style={{ marginBottom: 14 }}><label style={{ display: 'block', fontSize: 12, color: T.textDim, fontWeight: 500, marginBottom: 6 }}>ตำแหน่ง</label>
-                <select value={editUserData.role} onChange={e => setEditUserData(p=>({...p,role:e.target.value}))} style={{ width: '100%', padding: '13px 16px', borderRadius: T.radiusSm, border: `1px solid ${T.border}`, background: T.surfaceAlt, color: T.text, fontSize: 15, fontFamily: T.font, outline: 'none', boxSizing: 'border-box' }}><option value="employee">👤 พนักงาน</option><option value="packer">📦 พนักงานจัดส่ง</option><option value="head">👑 หัวหน้าจัดส่ง</option><option value="export">📊 Export รายงาน</option><option value="admin">🔑 แอดมิน</option><option value="manager">🏢 ผู้จัดการ</option></select>
+                <select value={userForm.role} onChange={e => setUserForm(p=>({...p,role:e.target.value}))} style={{ width: '100%', padding: '13px 16px', borderRadius: T.radiusSm, border: `1px solid ${T.border}`, background: T.surfaceAlt, color: T.text, fontSize: 15, fontFamily: T.font, outline: 'none', boxSizing: 'border-box' }}><option value="employee">👤 พนักงาน</option><option value="packer">📦 พนักงานจัดส่ง</option><option value="head">👑 หัวหน้าจัดส่ง</option><option value="export">📊 Export รายงาน</option><option value="admin">🔑 แอดมิน</option><option value="manager">🏢 ผู้จัดการ</option></select>
               </div>
-              <div style={{ marginBottom: 14 }}><label style={{ display: 'block', fontSize: 12, color: T.textDim, fontWeight: 500, marginBottom: 6 }}>ทีม</label>
-                <select value={editUserData.team_id||''} onChange={e => setEditUserData(p=>({...p,team_id:e.target.value||null}))} style={{ width: '100%', padding: '13px 16px', borderRadius: T.radiusSm, border: `1px solid ${T.border}`, background: T.surfaceAlt, color: T.text, fontSize: 15, fontFamily: T.font, outline: 'none', boxSizing: 'border-box' }}><option value="">— ไม่มีทีม —</option>{teams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select>
+              {userForm.role === 'employee' && <div style={{ marginBottom: 14 }}><label style={{ display: 'block', fontSize: 12, color: T.textDim, fontWeight: 500, marginBottom: 6 }}>ทีม</label>
+                <select value={userForm.teamId} onChange={e => setUserForm(p=>({...p,teamId:e.target.value}))} style={{ width: '100%', padding: '13px 16px', borderRadius: T.radiusSm, border: `1px solid ${T.border}`, background: T.surfaceAlt, color: T.text, fontSize: 15, fontFamily: T.font, outline: 'none', boxSizing: 'border-box' }}><option value="">— เลือกทีม —</option>{teams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select>
+              </div>}
+              <div style={{ display: 'flex', gap: 10 }}><Btn full onClick={createUser} grad={T.grad2}>✅ สร้าง</Btn><Btn full outline onClick={() => setShowUserModal(false)}>ยกเลิก</Btn></div>
+            </Modal>
+
+            <Modal show={!!editUserData} onClose={() => setEditUserData(null)} title="✏️ แก้ไขผู้ใช้">
+              {editUserData && <>
+                <FI label="ชื่อ" value={editUserData.full_name} onChange={e => setEditUserData(p=>({...p,full_name:e.target.value}))} />
+                <FI label="อีเมล" value={editUserData.email||''} onChange={e => setEditUserData(p=>({...p,email:e.target.value}))} />
+                <FI label="รหัสผ่าน" value={editUserData.password_text||''} onChange={e => setEditUserData(p=>({...p,password_text:e.target.value}))} />
+                <div style={{ marginBottom: 14 }}><label style={{ display: 'block', fontSize: 12, color: T.textDim, fontWeight: 500, marginBottom: 6 }}>ตำแหน่ง</label>
+                  <select value={editUserData.role} onChange={e => setEditUserData(p=>({...p,role:e.target.value}))} style={{ width: '100%', padding: '13px 16px', borderRadius: T.radiusSm, border: `1px solid ${T.border}`, background: T.surfaceAlt, color: T.text, fontSize: 15, fontFamily: T.font, outline: 'none', boxSizing: 'border-box' }}><option value="employee">👤 พนักงาน</option><option value="packer">📦 พนักงานจัดส่ง</option><option value="head">👑 หัวหน้าจัดส่ง</option><option value="export">📊 Export รายงาน</option><option value="admin">🔑 แอดมิน</option><option value="manager">🏢 ผู้จัดการ</option></select>
+                </div>
+                <div style={{ marginBottom: 14 }}><label style={{ display: 'block', fontSize: 12, color: T.textDim, fontWeight: 500, marginBottom: 6 }}>ทีม</label>
+                  <select value={editUserData.team_id||''} onChange={e => setEditUserData(p=>({...p,team_id:e.target.value||null}))} style={{ width: '100%', padding: '13px 16px', borderRadius: T.radiusSm, border: `1px solid ${T.border}`, background: T.surfaceAlt, color: T.text, fontSize: 15, fontFamily: T.font, outline: 'none', boxSizing: 'border-box' }}><option value="">— ไม่มีทีม —</option>{teams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select>
+                </div>
+                <div style={{ display: 'flex', gap: 10 }}><Btn full onClick={saveUserEdit} grad={T.grad2}>💾 บันทึก</Btn><Btn full outline onClick={() => setEditUserData(null)}>ยกเลิก</Btn></div>
+              </>}
+            </Modal>
+
+            {/* ตารางพนักงานแยกตามแผนก */}
+            {grouped.map(g => (
+              <div key={g.key} style={{ marginBottom: 24 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, padding: '8px 0', borderBottom: `2px solid ${g.color}` }}>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: g.color }}>{g.label}</span>
+                  <span style={{ fontSize: 12, color: T.textMuted }}>({g.members.length} คน)</span>
+                </div>
+                <div style={{ borderRadius: 12, overflow: 'hidden', border: `1px solid ${T.border}`, background: T.surface }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                    <thead>
+                      <tr style={{ background: T.surfaceAlt, borderBottom: `1px solid ${T.border}` }}>
+                        <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 700, color: T.textDim, width: 40 }}>#</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 700, color: T.textDim }}>ชื่อ</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 700, color: T.textDim }}>ตำแหน่ง</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 700, color: T.textDim }}>ทีม</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'left', fontWeight: 700, color: T.textDim }}>อีเมล</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 700, color: T.textDim }}>รหัสผ่าน</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 700, color: T.gold }}>วันนี้</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 700, color: T.success }}>เดือนนี้</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'center', fontWeight: 700, color: T.textDim }}>จัดการ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {g.members.map((p, idx) => {
+                        const userOrders = orders.filter(o => o.employee_id === p.id)
+                        const todayOrd = userOrders.filter(o => sameDay(o.created_at, new Date()))
+                        const monthOrd = userOrders.filter(o => thisMonth(o.created_at))
+                        const todaySales = todayOrd.reduce((s, o) => s + (parseFloat(o.sale_price) || 0), 0)
+                        const monthSales = monthOrd.reduce((s, o) => s + (parseFloat(o.sale_price) || 0), 0)
+                        const pwVisible = showPw[p.id]
+                        return (
+                          <tr key={p.id} style={{ borderBottom: `1px solid ${T.border}` }}>
+                            <td style={{ padding: '10px 14px', color: T.textMuted, fontSize: 12 }}>{idx + 1}</td>
+                            <td style={{ padding: '10px 14px' }}>
+                              <div style={{ fontWeight: 700, fontSize: 14 }}>{p.full_name}</div>
+                              {p.nickname && p.nickname !== p.full_name && <div style={{ fontSize: 11, color: T.textDim }}>({p.nickname})</div>}
+                            </td>
+                            <td style={{ padding: '10px 14px' }}>
+                              <span style={{ padding: '3px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: `${g.color}18`, color: g.color }}>{roleLabel(p.role)}</span>
+                            </td>
+                            <td style={{ padding: '10px 14px', fontSize: 12, color: T.textDim }}>{p.mt_teams?.name || '—'}</td>
+                            <td style={{ padding: '10px 14px', fontSize: 12, color: T.textDim }}>{p.email || '—'}</td>
+                            <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                                <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{pwVisible ? (p.password_text || '—') : '••••'}</span>
+                                <button onClick={() => setShowPw(prev => ({...prev, [p.id]: !prev[p.id]}))} style={{ padding: '2px 4px', borderRadius: 4, border: 'none', background: 'none', fontSize: 11, cursor: 'pointer', color: T.textMuted }}>{pwVisible ? '🙈' : '👁'}</button>
+                              </div>
+                            </td>
+                            <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                              <div style={{ fontWeight: 800, fontSize: 14, color: T.gold }}>{todayOrd.length}</div>
+                              <div style={{ fontSize: 10, color: T.textDim }}>฿{fmt(todaySales)}</div>
+                            </td>
+                            <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                              <div style={{ fontWeight: 800, fontSize: 14, color: T.success }}>{monthOrd.length}</div>
+                              <div style={{ fontSize: 10, color: T.textDim }}>฿{fmt(monthSales)}</div>
+                            </td>
+                            <td style={{ padding: '10px 14px', textAlign: 'center' }}>
+                              {p.id !== profile.id ? (
+                                <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
+                                  <button onClick={() => { setTab('orders'); setUserFilter(p.id) }} style={{ padding: '5px 8px', borderRadius: 6, border: `1px solid ${T.border}`, background: T.surfaceAlt, fontSize: 11, cursor: 'pointer', fontFamily: T.font, color: T.gold }} title="ดูรายงาน">📋</button>
+                                  <button onClick={() => setEditUserData({...p})} style={{ padding: '5px 8px', borderRadius: 6, border: `1px solid ${T.border}`, background: T.surfaceAlt, fontSize: 11, cursor: 'pointer', fontFamily: T.font, color: T.gold }} title="แก้ไข">✏️</button>
+                                  <button onClick={() => deleteUser(p)} style={{ padding: '5px 8px', borderRadius: 6, border: '1px solid rgba(214,48,49,0.2)', background: 'rgba(214,48,49,0.04)', fontSize: 11, cursor: 'pointer', fontFamily: T.font, color: T.danger }} title="ลบ">🗑</button>
+                                </div>
+                              ) : <span style={{ fontSize: 11, color: T.textMuted }}>คุณ</span>}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-              <div style={{ display: 'flex', gap: 10 }}><Btn full onClick={saveUserEdit} grad={T.grad2}>💾 บันทึก</Btn><Btn full outline onClick={() => setEditUserData(null)}>ยกเลิก</Btn></div>
-            </>}
-          </Modal>
-
-          {/* รายชื่อ user */}
-          {profiles.map(p => {
-            const userOrders = orders.filter(o => o.employee_id === p.id)
-            const todayOrd = userOrders.filter(o => sameDay(o.created_at, new Date()))
-            const monthOrd = userOrders.filter(o => thisMonth(o.created_at))
-            const todaySales = todayOrd.reduce((s, o) => s + (parseFloat(o.sale_price) || 0), 0)
-            const monthSales = monthOrd.reduce((s, o) => s + (parseFloat(o.sale_price) || 0), 0)
-            const codCount = monthOrd.filter(o => o.payment_type !== 'transfer').length
-            const transCount = monthOrd.filter(o => o.payment_type === 'transfer').length
-            const pwVisible = showPw[p.id]
-            return (
-              <div key={p.id} style={{ ...glass, padding: '16px 18px', marginBottom: 10 }}>
-                {/* ชื่อ + ตำแหน่ง */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 8 }}>
-                  <div style={{ width: 46, height: 46, borderRadius: T.radiusSm, background: p.role === 'manager' ? T.grad3 : T.grad1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 800, color: '#fff' }}>{p.full_name?.[0]||'?'}</div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700, fontSize: 15 }}>{p.full_name}</div>
-                    <div style={{ fontSize: 11, color: T.textDim }}>{p.role === 'manager' ? '🏢 ผู้จัดการ' : p.role === 'admin' ? '🔑 แอดมิน' : p.role === 'packer' ? '📦 พนักงานจัดส่ง' : p.role === 'head' ? '👑 หัวหน้าจัดส่ง' : p.role === 'export' ? '📊 Export' : '👤 พนักงาน'}{p.mt_teams?.name && ` · ${p.mt_teams.name}`}</div>
-                  </div>
-                </div>
-
-                {/* email + password */}
-                <div style={{ padding: '10px 12px', borderRadius: T.radiusSm, background: T.surfaceAlt, marginBottom: 8, fontSize: 12 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <span style={{ color: T.textDim }}>📧 อีเมล</span>
-                    <span style={{ fontWeight: 600 }}>{p.email || '—'}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ color: T.textDim }}>🔑 รหัสผ่าน</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ fontWeight: 600, fontFamily: 'monospace' }}>{pwVisible ? (p.password_text || '—') : '••••••'}</span>
-                      <button onClick={() => setShowPw(prev => ({...prev, [p.id]: !prev[p.id]}))} style={{ padding: '2px 6px', borderRadius: 4, border: `1px solid ${T.border}`, background: '#fff', fontSize: 10, cursor: 'pointer', fontFamily: T.font, color: T.textDim }}>{pwVisible ? '🙈' : '👁'}</button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* ยอดขาย */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 6, marginBottom: 8 }}>
-                  <div style={{ padding: '8px', borderRadius: T.radiusSm, background: 'rgba(184,134,11,0.04)', textAlign: 'center' }}>
-                    <div style={{ fontSize: 9, color: T.textMuted }}>วันนี้</div>
-                    <div style={{ fontSize: 14, fontWeight: 800, color: T.gold }}>{todayOrd.length}</div>
-                    <div style={{ fontSize: 10, color: T.textDim }}>฿{fmt(todaySales)}</div>
-                  </div>
-                  <div style={{ padding: '8px', borderRadius: T.radiusSm, background: 'rgba(45,138,78,0.04)', textAlign: 'center' }}>
-                    <div style={{ fontSize: 9, color: T.textMuted }}>เดือนนี้</div>
-                    <div style={{ fontSize: 14, fontWeight: 800, color: T.success }}>{monthOrd.length}</div>
-                    <div style={{ fontSize: 10, color: T.textDim }}>฿{fmt(monthSales)}</div>
-                  </div>
-                  <div style={{ padding: '8px', borderRadius: T.radiusSm, background: 'rgba(184,134,11,0.03)', textAlign: 'center' }}>
-                    <div style={{ fontSize: 9, color: T.textMuted }}>📦 COD</div>
-                    <div style={{ fontSize: 14, fontWeight: 800, color: T.gold }}>{codCount}</div>
-                  </div>
-                  <div style={{ padding: '8px', borderRadius: T.radiusSm, background: 'rgba(45,138,78,0.03)', textAlign: 'center' }}>
-                    <div style={{ fontSize: 9, color: T.textMuted }}>🏦 โอน</div>
-                    <div style={{ fontSize: 14, fontWeight: 800, color: T.success }}>{transCount}</div>
-                  </div>
-                </div>
-
-                {/* ปุ่ม */}
-                <div style={{ display: 'grid', gridTemplateColumns: p.id === profile.id ? '1fr' : '1fr 1fr 1fr', gap: 6 }}>
-                  <button onClick={() => { setTab('orders'); setUserFilter(p.id) }} style={{ padding: '8px', borderRadius: 8, border: `1px solid ${T.border}`, background: T.surfaceAlt, color: T.gold, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>📋 รายงาน</button>
-                  {p.id !== profile.id && <button onClick={() => setEditUserData({...p})} style={{ padding: '8px', borderRadius: 8, border: `1px solid ${T.border}`, background: T.surfaceAlt, color: T.gold, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>✏️ แก้ไข</button>}
-                  {p.id !== profile.id && <button onClick={() => deleteUser(p)} style={{ padding: '8px', borderRadius: 8, border: '1px solid rgba(214,48,49,0.2)', background: 'rgba(214,48,49,0.04)', color: T.danger, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>🗑 ลบ</button>}
-                </div>
-              </div>
-            )
-          })}
-        </>}
+            ))}
+          </>
+        })()}
 
         {/* ══ BACKUP ══ */}
       </div>
