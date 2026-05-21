@@ -1,8 +1,9 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Cell
 } from "recharts";
+import { supabase } from '../lib/supabase'
 
 // ═══════════════════════════════════════════
 //  Theme — matching BossDashboard
@@ -103,52 +104,15 @@ function GrowthBadge({ cur, prev }) {
 }
 
 // ═══════════════════════════════════════════
-//  DEMO DATA GENERATOR
-//  (ลบส่วนนี้ออกตอนใช้จริง — ใช้ orders จาก props แทน)
-// ═══════════════════════════════════════════
-function generateDemoOrders() {
-  const employees = ['สมชาย', 'สมหญิง', 'วิชัย', 'พิมพ์', 'อานนท์', 'กรรณิกา'];
-  const products = ['ครีมบำรุง', 'เซรั่ม', 'โลชั่น', 'สบู่', 'แชมพู', 'ครีมกันแดด'];
-  const channels = ['LINE', 'Facebook', 'TikTok', 'Shopee'];
-  const provinces = ['กรุงเทพ', 'เชียงใหม่', 'ชลบุรี', 'นครราชสีมา', 'ขอนแก่น', 'สงขลา', 'ภูเก็ต'];
-  const orders = [];
-  // Generate 4 months of data
-  for (let m = 0; m < 4; m++) {
-    const baseDate = new Date();
-    baseDate.setMonth(baseDate.getMonth() - m);
-    const daysInMonth = new Date(baseDate.getFullYear(), baseDate.getMonth() + 1, 0).getDate();
-    const ordersThisMonth = 120 + Math.floor(Math.random() * 80) - m * 15;
-    for (let i = 0; i < ordersThisMonth; i++) {
-      const day = Math.ceil(Math.random() * Math.min(daysInMonth, baseDate.getMonth() === new Date().getMonth() ? new Date().getDate() : daysInMonth));
-      const d = new Date(baseDate.getFullYear(), baseDate.getMonth(), day);
-      const price = 300 + Math.floor(Math.random() * 2500);
-      const isTrans = Math.random() > 0.55;
-      orders.push({
-        id: `demo-${m}-${i}`,
-        order_date: d.toISOString().split('T')[0],
-        employee_name: employees[Math.floor(Math.random() * employees.length)],
-        sale_price: price,
-        cod_amount: isTrans ? 0 : price,
-        payment_type: isTrans ? 'transfer' : 'cod',
-        remark: products[Math.floor(Math.random() * products.length)],
-        sales_channel: channels[Math.floor(Math.random() * channels.length)],
-        province: provinces[Math.floor(Math.random() * provinces.length)],
-        created_at: d.toISOString(),
-      });
-    }
-  }
-  return orders;
-}
-
-// ═══════════════════════════════════════════
 //  MAIN: SalesCompare Component
 // ═══════════════════════════════════════════
-export default function SalesCompare({ orders: externalOrders, teams = [], productMap = {} }) {
-  // Use external orders or demo data
-  const allOrders = useMemo(() => externalOrders || generateDemoOrders(), [externalOrders]);
+export default function SalesCompare({ teams = [], productMap = {} }) {
+  // ─── Self-fetch orders from Supabase ───
+  const [allOrders, setAllOrders] = useState([]);
+  const [dataLoading, setDataLoading] = useState(false);
 
   // ─── State ───
-  const [compareMode, setCompareMode] = useState('custom'); // custom | month | employee | product | channel
+  const [compareMode, setCompareMode] = useState('daily'); // custom | daily | month | employee | product | channel
   const [chartType, setChartType] = useState('bar'); // bar | line | area
 
   // Custom date compare
@@ -169,6 +133,60 @@ export default function SalesCompare({ orders: externalOrders, teams = [], produ
   const [dimension, setDimension] = useState('employee'); // for dimension mode
   const [selectedItemsA, setSelectedItemsA] = useState([]);
   const [selectedItemsB, setSelectedItemsB] = useState([]);
+
+  // ─── Compute actual date range needed ───
+  const fetchRange = useMemo(() => {
+    if (['employee', 'product', 'channel'].includes(compareMode)) {
+      return { from: null, to: null }; // fetch all
+    }
+    if (compareMode === 'month') {
+      const [yA, mA] = monthA.split('-').map(Number);
+      const [yB, mB] = monthB.split('-').map(Number);
+      const fromA = `${yA}-${String(mA).padStart(2, '0')}-01`;
+      const fromB = `${yB}-${String(mB).padStart(2, '0')}-01`;
+      const toA = new Date(yA, mA, 0).toISOString().split('T')[0];
+      const toB = new Date(yB, mB, 0).toISOString().split('T')[0];
+      return { from: fromA < fromB ? fromA : fromB, to: toA > toB ? toA : toB };
+    }
+    // custom or daily
+    const allDates = [dateA_from, dateA_to, dateB_from, dateB_to].filter(Boolean);
+    if (allDates.length === 0) return { from: null, to: null };
+    return { from: allDates.sort()[0], to: allDates.sort().pop() };
+  }, [compareMode, dateA_from, dateA_to, dateB_from, dateB_to, monthA, monthB]);
+
+  // ─── Fetch orders from Supabase ───
+  const selectFields = 'id,order_date,sale_price,cod_amount,payment_type,remark,employee_name,team_id,sales_channel,province,created_at';
+  useEffect(() => {
+    const fetchOrders = async () => {
+      setDataLoading(true);
+      try {
+        // Get count first
+        let countQ = supabase.from('mt_orders').select('id', { count: 'exact', head: true });
+        if (fetchRange.from) countQ = countQ.gte('order_date', fetchRange.from);
+        if (fetchRange.to) countQ = countQ.lte('order_date', fetchRange.to);
+        const { count } = await countQ;
+        if (!count || count === 0) { setAllOrders([]); setDataLoading(false); return; }
+
+        // Fetch all pages in parallel
+        const pageSize = 1000;
+        const pages = Math.ceil(count / pageSize);
+        const promises = Array.from({ length: pages }, (_, i) => {
+          let q = supabase.from('mt_orders').select(selectFields)
+            .order('order_date', { ascending: true })
+            .range(i * pageSize, (i + 1) * pageSize - 1);
+          if (fetchRange.from) q = q.gte('order_date', fetchRange.from);
+          if (fetchRange.to) q = q.lte('order_date', fetchRange.to);
+          return q;
+        });
+        const results = await Promise.all(promises);
+        setAllOrders(results.flatMap(r => r.data || []));
+      } catch (e) {
+        console.error('SalesCompare fetch error:', e);
+      }
+      setDataLoading(false);
+    };
+    fetchOrders();
+  }, [fetchRange.from, fetchRange.to]);
 
   // Quick preset
   const applyPreset = (key) => {
@@ -413,7 +431,11 @@ export default function SalesCompare({ orders: externalOrders, teams = [], produ
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div>
           <div style={{ fontSize: 18, fontWeight: 800, fontFamily: C.font, color: C.text }}>📊 สถิติยอดขาย แบบเปรียบเทียบ</div>
-          <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>เลือกโหมด และช่วงเวลาที่ต้องการเปรียบเทียบ</div>
+          <div style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
+            เลือกโหมด และช่วงเวลาที่ต้องการเปรียบเทียบ
+            {dataLoading && <span style={{ marginLeft: 8, color: C.accent, fontWeight: 600 }}>⏳ กำลังโหลด...</span>}
+            {!dataLoading && allOrders.length > 0 && <span style={{ marginLeft: 8, color: C.success }}> ({allOrders.length} รายการ)</span>}
+          </div>
         </div>
       </div>
 

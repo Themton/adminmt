@@ -2044,7 +2044,7 @@ export default function BossDashboard() {
           {/* ═══════ SALES COMPARE ═══════ */}
           {section === 'sales_compare' && (
             <div className="fade-in">
-              <SalesCompare orders={orders} teams={teams} productMap={productMap} />
+              <SalesCompare teams={teams} productMap={productMap} />
             </div>
           )}
 
