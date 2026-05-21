@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { supabase } from '../lib/supabase'
+import SalesCompare from './SalesCompare'
 
 // ═══════════════════════════════════════════
 //  Classic Executive Theme
@@ -527,6 +528,7 @@ export default function BossDashboard() {
   const navItems = [
     { id: 'overview', icon: '📊', label: 'ภาพรวม' },
     { id: 'compare', icon: '📈', label: 'เปรียบเทียบ' },
+    { id: 'sales_compare', icon: '📊', label: 'สถิติเปรียบเทียบ' },
     { id: 'employees', icon: '👥', label: 'พนักงาน' },
     { id: 'products', icon: '📦', label: 'สินค้า' },
     { id: 'customers', icon: '🔄', label: 'ลูกค้า' },
@@ -2036,6 +2038,13 @@ export default function BossDashboard() {
                   </div>
                 </>
               })()}
+            </div>
+          )}
+
+          {/* ═══════ SALES COMPARE ═══════ */}
+          {section === 'sales_compare' && (
+            <div className="fade-in">
+              <SalesCompare orders={orders} teams={teams} productMap={productMap} />
             </div>
           )}
 
