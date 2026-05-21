@@ -129,6 +129,9 @@ export default function SalesCompare({ teams = [], productMap = {} }) {
   const [monthA, setMonthA] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; });
   const [monthB, setMonthB] = useState(() => { const d = new Date(); d.setMonth(d.getMonth() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; });
 
+  // Daily single month
+  const [dailyMonth, setDailyMonth] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; });
+
   // Dimension compare
   const [dimension, setDimension] = useState('employee'); // for dimension mode
   const [selectedItemsA, setSelectedItemsA] = useState([]);
@@ -139,6 +142,12 @@ export default function SalesCompare({ teams = [], productMap = {} }) {
     if (['employee', 'product', 'channel'].includes(compareMode)) {
       return { from: null, to: null }; // fetch all
     }
+    if (compareMode === 'daily') {
+      const [y, m] = dailyMonth.split('-').map(Number);
+      const from = `${y}-${String(m).padStart(2, '0')}-01`;
+      const to = new Date(y, m, 0).toISOString().split('T')[0];
+      return { from, to };
+    }
     if (compareMode === 'month') {
       const [yA, mA] = monthA.split('-').map(Number);
       const [yB, mB] = monthB.split('-').map(Number);
@@ -148,11 +157,11 @@ export default function SalesCompare({ teams = [], productMap = {} }) {
       const toB = new Date(yB, mB, 0).toISOString().split('T')[0];
       return { from: fromA < fromB ? fromA : fromB, to: toA > toB ? toA : toB };
     }
-    // custom or daily
+    // custom
     const allDates = [dateA_from, dateA_to, dateB_from, dateB_to].filter(Boolean);
     if (allDates.length === 0) return { from: null, to: null };
     return { from: allDates.sort()[0], to: allDates.sort().pop() };
-  }, [compareMode, dateA_from, dateA_to, dateB_from, dateB_to, monthA, monthB]);
+  }, [compareMode, dateA_from, dateA_to, dateB_from, dateB_to, monthA, monthB, dailyMonth]);
 
   // ─── Fetch orders from Supabase ───
   const selectFields = 'id,order_date,sale_price,cod_amount,payment_type,remark,employee_name,team_id,sales_channel,province,created_at';
@@ -258,7 +267,15 @@ export default function SalesCompare({ teams = [], productMap = {} }) {
 
   // ─── Computed data based on mode ───
   const result = useMemo(() => {
-    if (compareMode === 'custom' || compareMode === 'daily') {
+    if (compareMode === 'daily') {
+      const [y, m] = dailyMonth.split('-').map(Number);
+      const from = `${y}-${String(m).padStart(2, '0')}-01`;
+      const to = new Date(y, m, 0).toISOString().split('T')[0];
+      const a = computeRange(from, to);
+      const monthLabel = new Date(from).toLocaleDateString('th-TH', { month: 'long', year: 'numeric' });
+      return { a, b: null, labelA: monthLabel };
+    }
+    if (compareMode === 'custom') {
       const a = computeRange(dateA_from, dateA_to);
       const b = computeRange(dateB_from, dateB_to);
       return { a, b, labelA: `${fmtDateFull(dateA_from)} – ${fmtDateFull(dateA_to)}`, labelB: `${fmtDateFull(dateB_from)} – ${fmtDateFull(dateB_to)}` };
@@ -280,7 +297,7 @@ export default function SalesCompare({ teams = [], productMap = {} }) {
       return { a, b: null };
     }
     return { a: computeRange(dateA_from, dateA_to), b: computeRange(dateB_from, dateB_to), labelA: 'ช่วง A', labelB: 'ช่วง B' };
-  }, [allOrders, compareMode, dateA_from, dateA_to, dateB_from, dateB_to, monthA, monthB, productMap]);
+  }, [allOrders, compareMode, dateA_from, dateA_to, dateB_from, dateB_to, monthA, monthB, dailyMonth, productMap]);
 
   // ─── Dimension comparison chart data ───
   const dimensionData = useMemo(() => {
@@ -324,71 +341,72 @@ export default function SalesCompare({ teams = [], productMap = {} }) {
     })).sort((a, b) => b.curSales - a.curSales);
   }, [result, compareMode]);
 
-  // ─── Daily comparison table data ───
-  const dailyCompare = useMemo(() => {
-    if (compareMode !== 'daily' || !result.a || !result.b) return [];
-    // Build map of dateA dates → sales
-    const mapA = {}, mapB = {};
-    result.a.byDate.forEach(d => { mapA[d.date] = d; });
-    result.b.byDate.forEach(d => { mapB[d.date] = d; });
+  // ─── Daily table data (single month) ───
+  const dailyData = useMemo(() => {
+    if (compareMode !== 'daily' || !result.a) return [];
+    const [y, m] = dailyMonth.split('-').map(Number);
+    const daysInMonth = new Date(y, m, 0).getDate();
+    const mapByDate = {};
+    result.a.byDate.forEach(d => { mapByDate[d.date] = d; });
 
-    // Generate all dates in range A
-    const datesA = [];
-    if (dateA_from && dateA_to) {
-      const cur = new Date(dateA_from);
-      const end = new Date(dateA_to);
-      while (cur <= end) { datesA.push(cur.toISOString().split('T')[0]); cur.setDate(cur.getDate() + 1); }
-    }
-    // Generate all dates in range B
-    const datesB = [];
-    if (dateB_from && dateB_to) {
-      const cur = new Date(dateB_from);
-      const end = new Date(dateB_to);
-      while (cur <= end) { datesB.push(cur.toISOString().split('T')[0]); cur.setDate(cur.getDate() + 1); }
-    }
+    // Build map by employee per day
+    const empByDate = {};
+    allOrders.forEach(o => {
+      const d = (o.order_date || '').substring(0, 10);
+      const emp = o.employee_name || '—';
+      const amt = parseFloat(o.sale_price) || 0;
+      if (!empByDate[d]) empByDate[d] = {};
+      if (!empByDate[d][emp]) empByDate[d][emp] = { sales: 0, count: 0 };
+      empByDate[d][emp].sales += amt;
+      empByDate[d][emp].count++;
+    });
 
-    const maxLen = Math.max(datesA.length, datesB.length);
     const rows = [];
-    let cumA = 0, cumB = 0;
-    for (let i = 0; i < maxLen; i++) {
-      const dA = datesA[i] || null;
-      const dB = datesB[i] || null;
-      const salesA = dA && mapA[dA] ? mapA[dA].sales : 0;
-      const salesB = dB && mapB[dB] ? mapB[dB].sales : 0;
-      const countA = dA && mapA[dA] ? mapA[dA].count : 0;
-      const countB = dB && mapB[dB] ? mapB[dB].count : 0;
-      cumA += salesA;
-      cumB += salesB;
+    let cumSales = 0, cumOrders = 0;
+    let maxSales = 0, maxDay = null;
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const data = mapByDate[dateStr];
+      const sales = data ? data.sales : 0;
+      const count = data ? data.count : 0;
+      cumSales += sales;
+      cumOrders += count;
+      const isFuture = dateStr > todayStr;
+      if (sales > maxSales) { maxSales = sales; maxDay = dateStr; }
+      // top employee of the day
+      const dayEmps = empByDate[dateStr] || {};
+      const topEmp = Object.entries(dayEmps).sort((a, b) => b[1].sales - a[1].sales)[0];
       rows.push({
-        idx: i + 1,
-        dateA: dA, dateB: dB,
-        dayNameA: dA ? getDayName(dA) : '',
-        dayNameB: dB ? getDayName(dB) : '',
-        salesA, salesB, countA, countB,
-        diff: salesA - salesB,
-        cumA, cumB,
+        day, dateStr, dayName: getDayName(dateStr),
+        sales, count, cumSales, cumOrders,
+        avg: count > 0 ? sales / count : 0,
+        isFuture, isToday: dateStr === todayStr,
+        isBest: false, // set after loop
+        topEmp: topEmp ? topEmp[0] : '—',
+        topEmpSales: topEmp ? topEmp[1].sales : 0,
       });
     }
+    // Mark best day
+    rows.forEach(r => { if (r.dateStr === maxDay) r.isBest = true; });
     return rows;
-  }, [result, compareMode, dateA_from, dateA_to, dateB_from, dateB_to]);
+  }, [result, compareMode, dailyMonth, allOrders, todayStr]);
 
   // ─── Daily chart data ───
   const dailyChartData = useMemo(() => {
-    return dailyCompare.map(r => ({
-      day: r.dateA ? fmtDateShort(r.dateA) : `#${r.idx}`,
-      'ช่วง A': r.salesA,
-      'ช่วง B': r.salesB,
+    return dailyData.filter(r => !r.isFuture).map(r => ({
+      day: `${r.day}`,
+      ยอดขาย: r.sales,
+      ออเดอร์: r.count,
     }));
-  }, [dailyCompare]);
+  }, [dailyData]);
 
   // ─── Cumulative chart data ───
   const cumulativeData = useMemo(() => {
-    return dailyCompare.map(r => ({
-      day: r.dateA ? fmtDateShort(r.dateA) : `#${r.idx}`,
-      'สะสม A': r.cumA,
-      'สะสม B': r.cumB,
+    return dailyData.filter(r => !r.isFuture).map(r => ({
+      day: `${r.day}`,
+      ยอดสะสม: r.cumSales,
     }));
-  }, [dailyCompare]);
+  }, [dailyData]);
 
   // ═══════════════════════════════════════════
   //  Styles
@@ -453,7 +471,7 @@ export default function SalesCompare({ teams = [], productMap = {} }) {
       </div>
 
       {/* ─── Custom Date Selector ─── */}
-      {(compareMode === 'custom' || compareMode === 'daily') && (
+      {compareMode === 'custom' && (
         <div className="fade-in" style={{ ...card, padding: 16, marginBottom: 16 }}>
           <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: C.textMuted, letterSpacing: 1, display: 'flex', alignItems: 'center', marginRight: 8 }}>⚡ ด่วน:</div>
@@ -739,117 +757,139 @@ export default function SalesCompare({ teams = [], productMap = {} }) {
       )}
 
       {/* ════════════════════════════════════════ */}
-      {/*  DAILY COMPARISON                        */}
+      {/*  DAILY — SINGLE MONTH VIEW               */}
       {/* ════════════════════════════════════════ */}
-      {compareMode === 'daily' && result.a && result.b && dailyCompare.length > 0 && (
+      {compareMode === 'daily' && (
         <div className="fade-in">
-          {/* Summary Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 20 }}>
-            {[
-              { label: 'ยอดขาย A', value: `฿${fmt(result.a.sales)}`, sub: `${result.a.count} ออเดอร์`, color: C.accent },
-              { label: 'ยอดขาย B', value: `฿${fmt(result.b.sales)}`, sub: `${result.b.count} ออเดอร์`, color: C.navy },
-              { label: 'ผลต่าง', value: `${result.a.sales >= result.b.sales ? '+' : ''}฿${fmt(result.a.sales - result.b.sales)}`, color: result.a.sales >= result.b.sales ? C.success : C.danger },
-              { label: 'เฉลี่ย/วัน', value: `฿${fmt(result.a.sales / (dailyCompare.length || 1))}`, sub: `vs ฿${fmt(result.b.sales / (dailyCompare.length || 1))}`, color: C.gold },
-            ].map((k, i) => (
-              <div key={i} style={{ ...card, padding: 18, borderTop: `3px solid ${k.color}` }}>
-                <div style={{ fontSize: 10, color: C.textMuted, fontWeight: 500, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 6 }}>{k.label}</div>
-                <div style={{ fontSize: 22, fontWeight: 800, fontFamily: C.font, color: C.text }}>{k.value}</div>
-                {k.sub && <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>{k.sub}</div>}
+          {/* Month Picker */}
+          <div style={{ ...card, padding: 16, marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: C.textMuted, letterSpacing: 1, textTransform: 'uppercase' }}>เลือกเดือน:</div>
+              <input type="month" value={dailyMonth} onChange={e => setDailyMonth(e.target.value)} style={inputStyle} />
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button onClick={() => { const d = new Date(); setDailyMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`); }} style={presetBtn}>เดือนนี้</button>
+                <button onClick={() => { const d = new Date(); d.setMonth(d.getMonth() - 1); setDailyMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`); }} style={presetBtn}>เดือนก่อน</button>
+                <button onClick={() => { const d = new Date(); d.setMonth(d.getMonth() - 2); setDailyMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`); }} style={presetBtn}>2 เดือนก่อน</button>
               </div>
-            ))}
+            </div>
           </div>
+
+          {result.a && dailyData.length > 0 && (<>
+          {/* Summary Cards */}
+          {(() => {
+            const pastDays = dailyData.filter(r => !r.isFuture);
+            const daysWithSales = pastDays.filter(r => r.sales > 0);
+            const bestDay = dailyData.find(r => r.isBest);
+            return (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 20 }}>
+                <div style={{ ...card, padding: 18, borderTop: `3px solid ${C.accent}` }}>
+                  <div style={{ fontSize: 10, color: C.textMuted, fontWeight: 500, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 6 }}>ยอดขายรวม</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, fontFamily: C.font, color: C.text }}>฿{fmt(result.a.sales)}</div>
+                  <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>{result.a.count} ออเดอร์</div>
+                </div>
+                <div style={{ ...card, padding: 18, borderTop: `3px solid ${C.gold}` }}>
+                  <div style={{ fontSize: 10, color: C.textMuted, fontWeight: 500, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 6 }}>เฉลี่ย/วัน</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, fontFamily: C.font, color: C.text }}>฿{fmt(daysWithSales.length > 0 ? result.a.sales / daysWithSales.length : 0)}</div>
+                  <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>{daysWithSales.length} วันที่มียอด</div>
+                </div>
+                <div style={{ ...card, padding: 18, borderTop: `3px solid ${C.success}` }}>
+                  <div style={{ fontSize: 10, color: C.textMuted, fontWeight: 500, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 6 }}>วันที่ขายดีสุด</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, fontFamily: C.font, color: C.text }}>{bestDay && bestDay.sales > 0 ? `฿${fmt(bestDay.sales)}` : '—'}</div>
+                  <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>{bestDay && bestDay.sales > 0 ? `${fmtDateShort(bestDay.dateStr)} (${bestDay.dayName})` : ''}</div>
+                </div>
+                <div style={{ ...card, padding: 18, borderTop: `3px solid ${C.navy}` }}>
+                  <div style={{ fontSize: 10, color: C.textMuted, fontWeight: 500, letterSpacing: 0.5, textTransform: 'uppercase', marginBottom: 6 }}>เฉลี่ย/ออเดอร์</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, fontFamily: C.font, color: C.text }}>฿{fmt(result.a.avg)}</div>
+                  <div style={{ fontSize: 11, color: C.textDim, marginTop: 4 }}>COD {result.a.cod} / โอน {result.a.trans}</div>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Daily Bar Chart */}
           <div style={{ ...card, padding: 20, marginBottom: 20 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 4, fontFamily: C.font }}>📊 ยอดขายรายวัน เปรียบเทียบ</div>
-            <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 12 }}>
-              <span style={{ display: 'inline-block', width: 10, height: 10, background: C.accent, borderRadius: 1, marginRight: 4, verticalAlign: 'middle' }}></span> {result.labelA} &nbsp;&nbsp;
-              <span style={{ display: 'inline-block', width: 10, height: 10, background: C.navy, borderRadius: 1, marginRight: 4, verticalAlign: 'middle' }}></span> {result.labelB}
-            </div>
-            <ResponsiveContainer width="100%" height={Math.min(350, Math.max(200, dailyChartData.length * 16))}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12, fontFamily: C.font }}>📊 ยอดขายรายวัน — {result.labelA}</div>
+            <ResponsiveContainer width="100%" height={300}>
               <BarChart data={dailyChartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
-                <XAxis dataKey="day" tick={{ fontSize: 9, fill: C.textDim }} interval={dailyChartData.length > 15 ? 1 : 0} angle={dailyChartData.length > 10 ? -45 : 0} textAnchor={dailyChartData.length > 10 ? 'end' : 'middle'} height={dailyChartData.length > 10 ? 60 : 30} />
+                <XAxis dataKey="day" tick={{ fontSize: 10, fill: C.textDim }} />
                 <YAxis tick={{ fontSize: 10, fill: C.textDim }} tickFormatter={v => `฿${fmt(v)}`} />
                 <Tooltip content={<ClassicTooltip />} />
-                <Legend />
-                <Bar dataKey="ช่วง A" fill={C.accent} radius={[3, 3, 0, 0]} />
-                <Bar dataKey="ช่วง B" fill={C.navy} radius={[3, 3, 0, 0]} opacity={0.6} />
+                <Bar dataKey="ยอดขาย" fill={C.accent} radius={[3, 3, 0, 0]}>
+                  {dailyChartData.map((entry, i) => {
+                    const orig = dailyData[i];
+                    return <Cell key={i} fill={orig && orig.isBest ? C.gold : orig && orig.isToday ? C.success : C.accent} />;
+                  })}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
+            <div style={{ display: 'flex', gap: 16, justifyContent: 'center', marginTop: 8, fontSize: 11, color: C.textDim }}>
+              <span><span style={{ display: 'inline-block', width: 10, height: 10, background: C.accent, borderRadius: 1, marginRight: 4, verticalAlign: 'middle' }}></span> ปกติ</span>
+              <span><span style={{ display: 'inline-block', width: 10, height: 10, background: C.gold, borderRadius: 1, marginRight: 4, verticalAlign: 'middle' }}></span> สูงสุด</span>
+              <span><span style={{ display: 'inline-block', width: 10, height: 10, background: C.success, borderRadius: 1, marginRight: 4, verticalAlign: 'middle' }}></span> วันนี้</span>
+            </div>
           </div>
 
           {/* Cumulative Chart */}
           <div style={{ ...card, padding: 20, marginBottom: 20 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 4, fontFamily: C.font }}>📈 ยอดสะสม (Cumulative)</div>
-            <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 12 }}>เปรียบเทียบยอดสะสมแต่ละวัน — ช่วง A ตามทัน/แซง ช่วง B เมื่อไหร่</div>
-            <ResponsiveContainer width="100%" height={280}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12, fontFamily: C.font }}>📈 ยอดสะสม — {result.labelA}</div>
+            <ResponsiveContainer width="100%" height={250}>
               <AreaChart data={cumulativeData}>
                 <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
-                <XAxis dataKey="day" tick={{ fontSize: 9, fill: C.textDim }} interval={cumulativeData.length > 15 ? 1 : 0} angle={cumulativeData.length > 10 ? -45 : 0} textAnchor={cumulativeData.length > 10 ? 'end' : 'middle'} height={cumulativeData.length > 10 ? 60 : 30} />
+                <XAxis dataKey="day" tick={{ fontSize: 10, fill: C.textDim }} />
                 <YAxis tick={{ fontSize: 10, fill: C.textDim }} tickFormatter={v => `฿${fmt(v)}`} />
                 <Tooltip content={<ClassicTooltip />} />
-                <Legend />
-                <Area type="monotone" dataKey="สะสม A" fill={C.accent} fillOpacity={0.2} stroke={C.accent} strokeWidth={2.5} />
-                <Area type="monotone" dataKey="สะสม B" fill={C.navy} fillOpacity={0.1} stroke={C.navy} strokeWidth={2.5} strokeDasharray="5 3" />
+                <Area type="monotone" dataKey="ยอดสะสม" fill={C.accent} fillOpacity={0.15} stroke={C.accent} strokeWidth={2.5} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
 
-          {/* Daily Comparison Table */}
-          <div style={{ ...card, padding: 20, marginBottom: 20 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: C.font }}>📋 ตารางเปรียบเทียบรายวัน ({dailyCompare.length} วัน)</div>
-            </div>
+          {/* Daily Table */}
+          <div style={{ ...card, padding: 20 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12, fontFamily: C.font }}>📋 รายละเอียดรายวัน — {result.labelA}</div>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr>
-                    <th style={{ ...th, width: 40, textAlign: 'center' }}>#</th>
-                    <th style={{ ...th, background: '#fef7ed' }} colSpan={3}>🅰 ช่วง A</th>
-                    <th style={{ ...th, background: '#f0f4ff' }} colSpan={3}>🅱 ช่วง B</th>
-                    <th style={{ ...th, textAlign: 'center' }}>ผลต่าง</th>
-                    <th style={{ ...th, textAlign: 'center' }}>%</th>
-                  </tr>
-                  <tr>
-                    <th style={th}></th>
-                    <th style={{ ...th, background: '#fef7ed', fontSize: 10 }}>วันที่</th>
-                    <th style={{ ...th, background: '#fef7ed', textAlign: 'center', fontSize: 10 }}>ออเดอร์</th>
-                    <th style={{ ...th, background: '#fef7ed', textAlign: 'right', fontSize: 10 }}>ยอดขาย</th>
-                    <th style={{ ...th, background: '#f0f4ff', fontSize: 10 }}>วันที่</th>
-                    <th style={{ ...th, background: '#f0f4ff', textAlign: 'center', fontSize: 10 }}>ออเดอร์</th>
-                    <th style={{ ...th, background: '#f0f4ff', textAlign: 'right', fontSize: 10 }}>ยอดขาย</th>
-                    <th style={{ ...th, textAlign: 'right', fontSize: 10 }}>฿</th>
-                    <th style={{ ...th, textAlign: 'center', fontSize: 10 }}></th>
+                    <th style={{ ...th, textAlign: 'center', width: 40 }}>วันที่</th>
+                    <th style={th}>วัน</th>
+                    <th style={{ ...th, textAlign: 'center' }}>ออเดอร์</th>
+                    <th style={{ ...th, textAlign: 'right' }}>ยอดขาย</th>
+                    <th style={{ ...th, textAlign: 'right' }}>เฉลี่ย/ออเดอร์</th>
+                    <th style={{ ...th, textAlign: 'right' }}>ยอดสะสม</th>
+                    <th style={th}>ขายดีสุด</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {dailyCompare.map(r => {
-                    const up = r.diff >= 0;
-                    const bestA = r.salesA > 0 && r.salesA > r.salesB;
-                    const bestB = r.salesB > 0 && r.salesB > r.salesA;
+                  {dailyData.map(r => {
+                    const isWeekend = r.dayName === 'ส.' || r.dayName === 'อา.';
                     return (
-                      <tr key={r.idx} style={{ background: r.salesA === 0 && r.salesB === 0 ? '#fafafa' : 'transparent' }}>
-                        <td style={{ ...td, textAlign: 'center', fontSize: 11, color: C.textMuted }}>{r.idx}</td>
-                        <td style={{ ...td, background: bestA ? '#fef7ed' : 'transparent' }}>
-                          {r.dateA ? <><span style={{ fontWeight: 600, fontSize: 12 }}>{fmtDateShort(r.dateA)}</span> <span style={{ fontSize: 10, color: C.textMuted }}>({r.dayNameA})</span></> : '—'}
+                      <tr key={r.day} style={{
+                        background: r.isBest ? '#fffbf0' : r.isToday ? '#f0fdf4' : r.isFuture ? '#fafafa' : 'transparent',
+                        opacity: r.isFuture ? 0.4 : 1,
+                      }}>
+                        <td style={{ ...td, textAlign: 'center', fontWeight: 700, color: r.isBest ? C.gold : r.isToday ? C.success : C.text }}>
+                          {r.day}
                         </td>
-                        <td style={{ ...td, textAlign: 'center', fontWeight: 700, color: C.accent, background: bestA ? '#fef7ed' : 'transparent' }}>{r.countA || '—'}</td>
-                        <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: bestA ? C.success : C.text, background: bestA ? '#fef7ed' : 'transparent' }}>
-                          {r.salesA > 0 ? `฿${fmt(r.salesA)}` : '—'}
+                        <td style={{ ...td, fontSize: 12, color: isWeekend ? C.danger : C.textDim, fontWeight: isWeekend ? 600 : 400 }}>
+                          {r.dayName}
+                          {r.isToday && <span style={{ marginLeft: 6, fontSize: 9, background: C.success, color: '#fff', padding: '1px 5px', borderRadius: 2, fontWeight: 700 }}>วันนี้</span>}
+                          {r.isBest && <span style={{ marginLeft: 6, fontSize: 9, background: C.gold, color: '#fff', padding: '1px 5px', borderRadius: 2, fontWeight: 700 }}>🏆</span>}
                         </td>
-                        <td style={{ ...td, background: bestB ? '#f0f4ff' : 'transparent' }}>
-                          {r.dateB ? <><span style={{ fontWeight: 600, fontSize: 12 }}>{fmtDateShort(r.dateB)}</span> <span style={{ fontSize: 10, color: C.textMuted }}>({r.dayNameB})</span></> : '—'}
+                        <td style={{ ...td, textAlign: 'center', fontWeight: 700, color: r.count > 0 ? C.accent : C.textMuted }}>
+                          {r.count > 0 ? r.count : '—'}
                         </td>
-                        <td style={{ ...td, textAlign: 'center', fontWeight: 700, color: C.navy, background: bestB ? '#f0f4ff' : 'transparent' }}>{r.countB || '—'}</td>
-                        <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: bestB ? C.success : C.textDim, background: bestB ? '#f0f4ff' : 'transparent' }}>
-                          {r.salesB > 0 ? `฿${fmt(r.salesB)}` : '—'}
+                        <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: r.sales > 0 ? C.success : C.textMuted }}>
+                          {r.sales > 0 ? `฿${fmt(r.sales)}` : '—'}
                         </td>
-                        <td style={{ ...td, textAlign: 'right', fontWeight: 600, color: up ? C.success : C.danger, fontSize: 12 }}>
-                          {r.salesA > 0 || r.salesB > 0 ? `${up ? '+' : ''}฿${fmt(r.diff)}` : '—'}
+                        <td style={{ ...td, textAlign: 'right', fontSize: 12, color: C.textDim }}>
+                          {r.count > 0 ? `฿${fmt(r.avg)}` : '—'}
                         </td>
-                        <td style={{ ...td, textAlign: 'center' }}>
-                          {r.salesB > 0 ? <GrowthBadge cur={r.salesA} prev={r.salesB} /> : r.salesA > 0 ? <span style={{ fontSize: 10, color: C.success, fontWeight: 600 }}>ใหม่</span> : ''}
+                        <td style={{ ...td, textAlign: 'right', fontSize: 12, color: C.textDim }}>
+                          {r.cumSales > 0 ? `฿${fmt(r.cumSales)}` : '—'}
+                        </td>
+                        <td style={{ ...td, fontSize: 11, color: C.textDim }}>
+                          {r.topEmp !== '—' && r.count > 0 ? <><span style={{ fontWeight: 600, color: C.text }}>{r.topEmp}</span> <span style={{ color: C.textMuted }}>฿{fmt(r.topEmpSales)}</span></> : '—'}
                         </td>
                       </tr>
                     );
@@ -857,60 +897,18 @@ export default function SalesCompare({ teams = [], productMap = {} }) {
                 </tbody>
                 <tfoot>
                   <tr style={{ background: C.surfaceAlt }}>
-                    <td style={{ ...td, fontWeight: 800 }} colSpan={2}>รวม</td>
+                    <td colSpan={2} style={{ ...td, fontWeight: 800 }}>รวม</td>
                     <td style={{ ...td, textAlign: 'center', fontWeight: 800, color: C.accent }}>{result.a.count}</td>
-                    <td style={{ ...td, textAlign: 'right', fontWeight: 800, color: C.accent }}>฿{fmt(result.a.sales)}</td>
+                    <td style={{ ...td, textAlign: 'right', fontWeight: 800, color: C.success }}>฿{fmt(result.a.sales)}</td>
+                    <td style={{ ...td, textAlign: 'right', fontWeight: 700, color: C.textDim }}>฿{fmt(result.a.avg)}</td>
+                    <td style={{ ...td, textAlign: 'right' }}></td>
                     <td style={td}></td>
-                    <td style={{ ...td, textAlign: 'center', fontWeight: 800, color: C.navy }}>{result.b.count}</td>
-                    <td style={{ ...td, textAlign: 'right', fontWeight: 800, color: C.navy }}>฿{fmt(result.b.sales)}</td>
-                    <td style={{ ...td, textAlign: 'right', fontWeight: 800, color: result.a.sales >= result.b.sales ? C.success : C.danger }}>
-                      {result.a.sales >= result.b.sales ? '+' : ''}฿{fmt(result.a.sales - result.b.sales)}
-                    </td>
-                    <td style={{ ...td, textAlign: 'center' }}><GrowthBadge cur={result.a.sales} prev={result.b.sales} /></td>
                   </tr>
                 </tfoot>
               </table>
             </div>
           </div>
-
-          {/* Day-of-week summary */}
-          <div style={{ ...card, padding: 20 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12, fontFamily: C.font }}>📅 เฉลี่ยตามวันในสัปดาห์</div>
-            {(() => {
-              const dowA = {}, dowB = {};
-              dailyCompare.forEach(r => {
-                if (r.dateA) {
-                  const d = r.dayNameA;
-                  if (!dowA[d]) dowA[d] = { sales: 0, count: 0, days: 0 };
-                  dowA[d].sales += r.salesA; dowA[d].count += r.countA; dowA[d].days++;
-                }
-                if (r.dateB) {
-                  const d = r.dayNameB;
-                  if (!dowB[d]) dowB[d] = { sales: 0, count: 0, days: 0 };
-                  dowB[d].sales += r.salesB; dowB[d].count += r.countB; dowB[d].days++;
-                }
-              });
-              const dowOrder = ['จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.', 'อา.'];
-              const dowData = dowOrder.filter(d => dowA[d] || dowB[d]).map(d => ({
-                day: d,
-                'เฉลี่ย A': dowA[d] ? Math.round(dowA[d].sales / dowA[d].days) : 0,
-                'เฉลี่ย B': dowB[d] ? Math.round(dowB[d].sales / dowB[d].days) : 0,
-              }));
-              return (
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={dowData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={C.border} />
-                    <XAxis dataKey="day" tick={{ fontSize: 11, fill: C.textDim }} />
-                    <YAxis tick={{ fontSize: 10, fill: C.textDim }} tickFormatter={v => `฿${fmt(v)}`} />
-                    <Tooltip content={<ClassicTooltip />} />
-                    <Legend />
-                    <Bar dataKey="เฉลี่ย A" fill={C.accent} radius={[3, 3, 0, 0]} />
-                    <Bar dataKey="เฉลี่ย B" fill={C.navy} radius={[3, 3, 0, 0]} opacity={0.6} />
-                  </BarChart>
-                </ResponsiveContainer>
-              );
-            })()}
-          </div>
+          </>)}
         </div>
       )}
 
