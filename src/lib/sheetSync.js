@@ -22,58 +22,40 @@ function orderToRow(o, profiles) {
   }
 }
 
-export function syncOrderToSheet(order, employeeName) {
+// Fix #8: ลบ mode: 'no-cors' + เพิ่ม async/await + error logging
+async function postSheet(payload) {
   if (!SHEET_URL) return
   try {
-    fetch(SHEET_URL, {
-      method: 'POST', mode: 'no-cors',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'sync', orders: [orderToRow(order)] })
+    const res = await fetch(SHEET_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(payload)
     })
-  } catch {}
+    if (!res.ok) console.warn('Sheet sync HTTP error:', res.status)
+  } catch (err) {
+    console.warn('Sheet sync failed:', err.message)
+  }
+}
+
+export function syncOrderToSheet(order, employeeName) {
+  postSheet({ action: 'sync', orders: [orderToRow(order)] })
 }
 
 export function updateOrderInSheet(order) {
-  if (!SHEET_URL) return
-  try {
-    fetch(SHEET_URL, {
-      method: 'POST', mode: 'no-cors',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'update', orders: [orderToRow(order)] })
-    })
-  } catch {}
+  postSheet({ action: 'update', orders: [orderToRow(order)] })
 }
 
 export function deleteOrderFromSheet(orderNumber) {
-  if (!SHEET_URL || !orderNumber) return
-  try {
-    fetch(SHEET_URL, {
-      method: 'POST', mode: 'no-cors',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'delete', order_number: orderNumber })
-    })
-  } catch {}
+  if (!orderNumber) return
+  postSheet({ action: 'delete', order_number: orderNumber })
 }
 
 export function syncAllToSheet(orders, profiles) {
-  if (!SHEET_URL || !orders.length) return
-  try {
-    fetch(SHEET_URL, {
-      method: 'POST', mode: 'no-cors',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'sync', orders: orders.map(o => orderToRow(o, profiles)) })
-    })
-  } catch {}
+  if (!orders.length) return
+  postSheet({ action: 'sync', orders: orders.map(o => orderToRow(o, profiles)) })
 }
 
 export function resetSheet(orders, profiles) {
-  if (!SHEET_URL) return
-  try {
-    const sorted = [...orders].sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
-    fetch(SHEET_URL, {
-      method: 'POST', mode: 'no-cors',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'reset', orders: sorted.map(o => orderToRow(o, profiles)) })
-    })
-  } catch {}
+  const sorted = [...orders].sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+  postSheet({ action: 'reset', orders: sorted.map(o => orderToRow(o, profiles)) })
 }

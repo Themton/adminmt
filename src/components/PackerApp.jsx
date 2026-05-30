@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
-import { createFlashOrder, trackFlashOrder, pingFlash } from '../lib/flashApi'
+import { createFlashOrder, trackFlashOrder, pingFlash, cancelFlashOrder } from '../lib/flashApi'
 import { T, fmt, LiveDot, Toast, Empty, Pagination, Modal } from './ui'
 import { exportProshipExcel } from '../lib/exportProship'
 
@@ -156,6 +156,14 @@ export default function PackerApp({ profile, onLogout }) {
     const { id, ...fields } = editModal
     fields.sale_price = parseFloat(fields.sale_price) || 0
     fields.cod_amount = parseFloat(fields.cod_amount || fields.sale_price) || 0
+
+    // Fix #6: เตือนหากแก้ที่อยู่ แต่มีเลขพัสดุ Flash อยู่แล้ว
+    const orig = orders.find(o => o.id === id)
+    if (orig?.flash_pno) {
+      const addrChanged = orig.customer_address !== fields.customer_address || orig.sub_district !== fields.sub_district || orig.district !== fields.district || orig.province !== fields.province || orig.zip_code !== fields.zip_code || orig.customer_phone !== fields.customer_phone || orig.customer_name !== fields.customer_name
+      if (addrChanged && !confirm('⚠️ ออเดอร์นี้มีเลขพัสดุ Flash แล้ว (' + orig.flash_pno + ')\n\nที่อยู่ใน Flash Express จะยังเป็นที่อยู่เดิม!\nแนะนำ: ยกเลิกเลขพัสดุเดิม → สร้างใหม่\n\nต้องการบันทึกต่อหรือไม่?')) return
+    }
+
     const { error } = await supabase.from('mt_orders').update(fields).eq('id', id)
     if (error) { flash('❌ ' + error.message); return }
     setOrders(prev => prev.map(o => o.id === id ? { ...o, ...fields } : o))
@@ -178,19 +186,19 @@ export default function PackerApp({ profile, onLogout }) {
     if (!ids.length) return
     if (!confirm(`🗑 ลบ ${ids.length} ออเดอร์?\n\n⚠️ ลบถาวร — ไม่สามารถกู้คืนได้`)) return
     setGProgress({ label: '🗑 กำลังลบ', done: 0, total: ids.length, color: '#E74C3C' })
-    let done = 0, fail = 0
-    for (let i = 0; i < ids.length; i++) {
-      setGProgress(p => ({ ...p, done: i + 1 }))
-      const { error } = await supabase.from('mt_orders').delete().eq('id', ids[i])
-      if (!error) { setOrders(prev => prev.filter(x => x.id !== ids[i])); done++ } else { fail++ }
-      if (i < ids.length - 1) await new Promise(r => setTimeout(r, 100))
-    }
+    // Fix #10: ใช้ batch delete แทนลูป
+    const { error } = await supabase.from('mt_orders').delete().in('id', ids)
     setGProgress(null); setSelectedIds(new Set())
-    flash(`✅ ลบสำเร็จ ${done} รายการ` + (fail ? ` | ❌ ไม่สำเร็จ ${fail}` : ''))
-    logActivity('delete', `ลบ ${done} รายการ`, done)
+    if (error) {
+      flash('❌ ลบไม่สำเร็จ: ' + error.message)
+    } else {
+      setOrders(prev => prev.filter(x => !ids.includes(x.id)))
+      flash(`✅ ลบสำเร็จ ${ids.length} รายการ`)
+      logActivity('delete', `ลบ ${ids.length} รายการ`, ids.length)
+    }
   }
 
-  const cancelFlash = async (o) => { if(!confirm('ยกเลิก '+o.flash_pno+'?\nต้องยกเลิกใน Flash portal ด้วย'))return; await supabase.from('mt_orders').update({flash_pno:'',flash_status:'cancelled',flash_sort_code:'',shipping_status:'waiting'}).eq('id',o.id); setOrders(prev=>prev.map(x=>x.id===o.id?{...x,flash_pno:'',flash_status:'cancelled',flash_sort_code:'',shipping_status:'waiting'}:x)); flash('ลบแล้ว'); logActivity('cancel', `ยกเลิก ${o.flash_pno} - ${o.customer_name}`, 1, { pno: o.flash_pno }) }
+  const cancelFlash = async (o) => { if(!confirm('ยกเลิก '+o.flash_pno+'?\n\nระบบจะลองยกเลิกกับ Flash Express ให้'))return; flash('⏳ กำลังยกเลิก...'); const cancelResult = await cancelFlashOrder(o.flash_pno); await supabase.from('mt_orders').update({flash_pno:'',flash_status:'cancelled',flash_sort_code:'',shipping_status:'waiting'}).eq('id',o.id); setOrders(prev=>prev.map(x=>x.id===o.id?{...x,flash_pno:'',flash_status:'cancelled',flash_sort_code:'',shipping_status:'waiting'}:x)); flash(cancelResult.code===1?'✅ ยกเลิกสำเร็จทั้งระบบและ Flash':'⚠️ ลบออกจากระบบแล้ว แต่ยกเลิก Flash ไม่สำเร็จ — ยกเลิกใน portal เอง'); logActivity('cancel', `ยกเลิก ${o.flash_pno} - ${o.customer_name}`, 1, { pno: o.flash_pno }) }
 
   // ═══ Smart Paste — วางข้อมูลแล้วจับอัตโนมัติ ═══
   const applyPaste = (text) => {
@@ -215,6 +223,21 @@ export default function PackerApp({ profile, onLogout }) {
     const n = newOrder
     if (!n.customer_name || !n.customer_phone) { flash('กรุณาใส่ชื่อและเบอร์โทร'); return }
     if (!n.district || !n.province || !n.zip_code) { flash('กรุณาใส่ อำเภอ จังหวัด รหัสไปรษณีย์'); return }
+
+    // Fix #1: เช็คออเดอร์ซ้ำ (เบอร์เดียวกัน ย้อนหลัง 3 วัน)
+    flash('⏳ กำลังตรวจสอบ...')
+    const threeDaysAgo = new Date(); threeDaysAgo.setDate(threeDaysAgo.getDate() - 3)
+    const fromDate = threeDaysAgo.toISOString().split('T')[0]
+    const { data: dupCheck } = await supabase.from('mt_orders')
+      .select('id, customer_name, created_at')
+      .eq('customer_phone', n.customer_phone.trim())
+      .gte('order_date', fromDate)
+    if (dupCheck && dupCheck.length > 0) {
+      const dup = dupCheck[0]
+      const dupDate = new Date(dup.created_at).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+      if (!confirm(`⚠️ พบออเดอร์ซ้ำ!\n\nเบอร์ ${n.customer_phone} (${dup.customer_name})\nสั่งแล้วเมื่อ ${dupDate}\n\nต้องการสร้างซ้ำหรือไม่?`)) return
+    }
+
     flash('⏳ กำลังบันทึก...')
     const orderData = {
       customer_name: n.customer_name.trim(),
@@ -230,6 +253,8 @@ export default function PackerApp({ profile, onLogout }) {
       remark: n.remark.trim(),
       order_date: new Date().toISOString().split('T')[0],
       employee_name: profile.full_name || '',
+      employee_id: profile.id || null,
+      team_id: profile.team_id || null,
       shipping_status: 'waiting',
     }
     const { data, error } = await supabase.from('mt_orders').insert(orderData).select().single()

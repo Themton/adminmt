@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { supabase } from '../lib/supabase'
 import { syncOrderToSheet, updateOrderInSheet, deleteOrderFromSheet, syncAllToSheet, resetSheet } from '../lib/sheetSync'
-import { createFlashOrder, trackFlashOrder, notifyFlashCourier, pingFlash } from '../lib/flashApi'
+import { createFlashOrder, trackFlashOrder, notifyFlashCourier, pingFlash, cancelFlashOrder } from '../lib/flashApi'
 import { exportProshipExcel, exportProshipCSV, fetchExportLogs } from '../lib/exportProship'
 import OrderForm from './OrderForm'
 import { T, glass, fmt, fmtDate, fmtDateFull, fmtDateTime, sameDay, withinDays, thisMonth, Stat, Tabs, Btn, Toast, Modal, Empty, LiveDot, Pagination } from './ui'
@@ -74,6 +74,15 @@ export default function ManagerApp({ profile, onLogout }) {
     if (!u.customer_social) missing.push('ชื่อเฟส/ไลน์')
     if (!u.sales_channel) missing.push('ชื่อเพจ')
     if (missing.length > 0) { flash('❌ กรุณากรอก: ' + missing.join(', ')); return }
+
+    // ⚠️ Fix #6: เตือนหากแก้ที่อยู่ แต่มีเลขพัสดุ Flash อยู่แล้ว
+    if (u.flash_pno) {
+      const orig = orders.find(o => o.id === u.id)
+      if (orig) {
+        const addrChanged = orig.customer_address !== u.customer_address || orig.sub_district !== u.sub_district || orig.district !== u.district || orig.province !== u.province || orig.zip_code !== u.zip_code || orig.customer_phone !== u.customer_phone || orig.customer_name !== u.customer_name
+        if (addrChanged && !confirm('⚠️ ออเดอร์นี้มีเลขพัสดุ Flash แล้ว (' + u.flash_pno + ')\n\nที่อยู่ใน Flash Express จะยังเป็นที่อยู่เดิม!\nแก้เฉพาะในระบบเท่านั้น\n\nแนะนำ: ยกเลิกเลขพัสดุเดิม → สร้างใหม่\n\nต้องการบันทึกต่อหรือไม่?')) return
+      }
+    }
 
     const { id, ...updates } = u
     const { data: updated, error } = await supabase.from('mt_orders').update({
@@ -165,8 +174,8 @@ export default function ManagerApp({ profile, onLogout }) {
     const result = await createFlashOrder(order, flashSrcInfo)
     if (result.code === 1 && result.data?.pno) {
       // บันทึก tracking number ใน Supabase
-      await supabase.from('mt_orders').update({ flash_pno: result.data.pno, flash_status: 'created', flash_sort_code: result.data.sortCode || '' }).eq('id', order.id)
-      setOrders(prev => prev.map(o => o.id === order.id ? { ...o, flash_pno: result.data.pno, flash_status: 'created', flash_sort_code: result.data.sortCode || '' } : o))
+      await supabase.from('mt_orders').update({ flash_pno: result.data.pno, flash_status: 'created', shipping_status: 'printed', flash_sort_code: result.data.sortCode || '' }).eq('id', order.id)
+      setOrders(prev => prev.map(o => o.id === order.id ? { ...o, flash_pno: result.data.pno, flash_status: 'created', shipping_status: 'printed', flash_sort_code: result.data.sortCode || '' } : o))
       flash('✅ ส่ง Flash สำเร็จ! ' + result.data.pno)
       setFlashModal({ order, result: result.data })
     } else {
@@ -231,22 +240,33 @@ export default function ManagerApp({ profile, onLogout }) {
   const cancelFlash = async (order) => {
     const pno = order.flash_pno
     if (!pno) { flash('❌ ไม่มีเลขพัสดุ'); return }
-    if (!confirm(`⚠️ ยกเลิกเลขพัสดุ ${pno}?\n\nลูกค้า: ${order.customer_name}\n\n📌 ลบออกจากระบบ + ต้องยกเลิกใน Flash portal ด้วย`)) return
+    if (!confirm(`⚠️ ยกเลิกเลขพัสดุ ${pno}?\n\nลูกค้า: ${order.customer_name}\n\n📌 ระบบจะยกเลิกกับ Flash Express + ลบออกจากระบบ`)) return
+    flash('⏳ กำลังยกเลิกกับ Flash Express...')
+    const cancelResult = await cancelFlashOrder(pno)
+    if (cancelResult.code !== 1) {
+      flash('⚠️ ยกเลิกกับ Flash ไม่สำเร็จ: ' + (cancelResult.message || 'error') + ' — ลบออกจากระบบแล้ว ต้องยกเลิกใน Flash portal เอง')
+    }
     await supabase.from('mt_orders').update({ flash_pno: '', flash_status: 'cancelled', flash_sort_code: '', shipping_status: 'waiting' }).eq('id', order.id)
     setOrders(prev => prev.map(o => o.id === order.id ? { ...o, flash_pno: '', flash_status: 'cancelled', flash_sort_code: '', shipping_status: 'waiting' } : o))
-    flash(`✅ ลบเลขพัสดุ ${pno} แล้ว — อย่าลืมยกเลิกใน Flash portal ด้วย`)
+    if (cancelResult.code === 1) flash(`✅ ยกเลิกเลขพัสดุ ${pno} สำเร็จทั้งระบบและ Flash`)
   }
 
   // ═══ Bulk ยกเลิก ═══
   const bulkCancelFlash = async (selectedOrders) => {
     const withPno = selectedOrders.filter(o => o.flash_pno)
     if (!withPno.length) { flash('❌ ไม่มีรายการที่มีเลขพัสดุ'); return }
-    if (!confirm(`⚠️ ยกเลิก ${withPno.length} รายการ?\n\nลบเลขพัสดุออกจากระบบ\n📌 ต้องยกเลิกใน Flash portal ด้วย`)) return
+    if (!confirm(`⚠️ ยกเลิก ${withPno.length} รายการ?\n\nระบบจะลองยกเลิกกับ Flash Express ทุกรายการ`)) return
+    flash('⏳ กำลังยกเลิก...')
+    let apiOk = 0, apiFail = 0
+    for (const o of withPno) {
+      const r = await cancelFlashOrder(o.flash_pno)
+      if (r.code === 1) apiOk++; else apiFail++
+    }
     const ids = withPno.map(o => o.id)
     await supabase.from('mt_orders').update({ flash_pno: '', flash_status: 'cancelled', flash_sort_code: '', shipping_status: 'waiting' }).in('id', ids)
     setOrders(prev => prev.map(o => ids.includes(o.id) ? { ...o, flash_pno: '', flash_status: 'cancelled', flash_sort_code: '', shipping_status: 'waiting' } : o))
     setShipSelected(new Set())
-    flash(`✅ ยกเลิก ${withPno.length} รายการแล้ว — อย่าลืมยกเลิกใน Flash portal`)
+    flash(`✅ ยกเลิก ${withPno.length} รายการ (Flash API สำเร็จ ${apiOk}` + (apiFail ? ` | ไม่สำเร็จ ${apiFail} — ยกเลิกใน portal เอง` : '') + ')')
   }
 
   // ═══ Flash Status Map ═══

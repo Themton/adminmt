@@ -7,23 +7,39 @@ function getProxyUrl() {
   catch { return FLASH_PROXY_URL }
 }
 
-async function callProxy(payload) {
+async function callProxy(payload, retries = 2) {
   const url = getProxyUrl()
   if (!url) return { code: -1, message: 'กรุณาตั้งค่า Flash Express URL\n⚙️ ตั้งค่า Flash → ใส่ URL ของ Apps Script' }
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    })
-    return await res.json()
-  } catch (err) {
-    return { code: -1, message: err.message }
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      return await res.json()
+    } catch (err) {
+      if (attempt < retries) {
+        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)))
+        continue
+      }
+      return { code: -1, message: 'เชื่อมต่อไม่ได้หลังลอง ' + (retries + 1) + ' ครั้ง: ' + err.message }
+    }
   }
 }
 
 // 1. Create Order — สร้างรายการจัดส่ง → ได้ tracking number (pno)
 export async function createFlashOrder(order, srcInfo) {
+  const phone = (order.customer_phone || '').replace(/\D/g, '')
+  if (!phone || phone.length !== 10 || !/^0[689]/.test(phone)) {
+    return { code: -1, message: 'เบอร์โทรไม่ถูกต้อง: ต้อง 10 หลัก เริ่มด้วย 06/08/09 (' + (order.customer_phone || 'ว่าง') + ')' }
+  }
+  if (!order.customer_name?.trim()) {
+    return { code: -1, message: 'ไม่มีชื่อลูกค้า' }
+  }
+  if (!order.province?.trim() || !order.district?.trim()) {
+    return { code: -1, message: 'ที่อยู่ไม่ครบ: ต้องมีจังหวัดและอำเภอ' }
+  }
   return callProxy({
     action: 'create',
     outTradeNo: order.order_number || ('ORD' + Date.now()),

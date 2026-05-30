@@ -89,6 +89,7 @@ export async function exportProshipExcel(orders, filename, profile, filterInfo) 
   a.href = URL.createObjectURL(blob)
   a.download = filename || 'Orders_' + new Date().toISOString().split('T')[0] + '.xlsx'
   a.click()
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000)
 
   await logExport(profile, 'Excel', a.download, orders.length, filterInfo)
 }
@@ -102,6 +103,7 @@ export async function exportProshipCSV(orders, filename, profile, filterInfo) {
   a.href = URL.createObjectURL(blob)
   a.download = filename || 'Orders_' + new Date().toISOString().split('T')[0] + '.csv'
   a.click()
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000)
 
   await logExport(profile, 'CSV', a.download, orders.length, filterInfo)
 }
