@@ -118,19 +118,23 @@ export default function OrderForm({ profile, onSuccess }) {
     setSubmitting(true)
 
     // เช็คซ้ำ: เบอร์เดียวกัน + เพจเดียวกัน + ย้อนหลัง 3 วัน
-    // หัวหน้า (manager) / แอดมิน (admin) ข้ามการเช็คซ้ำได้ — ลงออเดอร์ซ้ำได้เลย
     const isBoss = profile.role === 'manager' || profile.role === 'admin'
-    if (!isBoss) {
-      const threeDaysAgo = new Date(); threeDaysAgo.setDate(threeDaysAgo.getDate() - 3)
-      const fromDate = threeDaysAgo.toISOString().split('T')[0]
-      const { data: dupCheck } = await supabase.from('mt_orders')
-        .select('id, customer_name, order_date, created_at')
-        .eq('customer_phone', form.customerPhone)
-        .eq('sales_channel', form.salesChannel || '')
-        .gte('order_date', fromDate)
-      if (dupCheck && dupCheck.length > 0) {
-        const dup = dupCheck[0]
-        const dupDate = new Date(dup.created_at).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    const threeDaysAgo = new Date(); threeDaysAgo.setDate(threeDaysAgo.getDate() - 3)
+    const fromDate = threeDaysAgo.toISOString().split('T')[0]
+    const { data: dupCheck } = await supabase.from('mt_orders')
+      .select('id, customer_name, order_date, created_at')
+      .eq('customer_phone', form.customerPhone)
+      .eq('sales_channel', form.salesChannel || '')
+      .gte('order_date', fromDate)
+    if (dupCheck && dupCheck.length > 0) {
+      const dup = dupCheck[0]
+      const dupDate = new Date(dup.created_at).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+      if (isBoss) {
+        // หัวหน้า/แอดมิน: แจ้งเตือนว่ามีออเดอร์แล้ว — กดยืนยันเพื่อลงซ้ำได้
+        const ok = window.confirm('⚠️ เบอร์ ' + form.customerPhone + ' (' + dup.customer_name + ') มีออเดอร์ลงไปแล้วเมื่อ ' + dupDate + ' เพจ: ' + (form.salesChannel || '—') + '\n\nต้องการลงออเดอร์ซ้ำหรือไม่?')
+        if (!ok) { setSubmitting(false); return }
+      } else {
+        // พนักงานทั่วไป: บล็อก ไม่ให้ลงซ้ำ
         flash('❌ ออเดอร์ซ้ำ! เบอร์ ' + form.customerPhone + ' (' + dup.customer_name + ') สั่งแล้วเมื่อ ' + dupDate + ' เพจ: ' + (form.salesChannel || '—'))
         setSubmitting(false)
         return
