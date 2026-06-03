@@ -3,38 +3,11 @@ import { supabase } from '../lib/supabase'
 import { createFlashOrder, trackFlashOrder, pingFlash, cancelFlashOrder } from '../lib/flashApi'
 import { T, fmt, LiveDot, Toast, Empty, Pagination, Modal } from './ui'
 import { exportProshipExcel } from '../lib/exportProship'
+import { parseSmartPaste } from '../lib/smartPaste'
 
 let _addrCache = null
 async function getAddresses() { if (_addrCache) return _addrCache; const mod = await import('../data/addresses.json'); _addrCache = mod.default; return _addrCache }
 
-function parseSmartPaste(text, ad = []) {
-  const r = {}, lines = text.split('\n').map(s=>s.trim()).filter(Boolean)
-  const fl = lines.map(l=>l.replace(/อ\.เภอ/g,'อำเภอ').replace(/=/g,' '))
-  const all = fl.join(' ')
-  const cleaned = all.replace(/(\d)\s*[-–—]\s*(\d)/g,'$1$2')
-  const pm = cleaned.match(/(?<!\d)(0[689]\d{8})(?!\d)/); if(pm) r.customerPhone=pm[1]
-  const zc = all.match(/[1-9]\d{4}/g)||[]; for(const z of zc){ if(r.customerPhone&&r.customerPhone.includes(z))continue; if(parseInt(z)>=10000&&parseInt(z)<=96000){r.zipCode=z;break} }
-  const am = all.match(/(?:COD|ปลายทาง)\s*(\d+)/i); if(am) r.amount=am[1]
-  for(const l of fl){const m=l.match(/^(?:FB|Facebook)[:\s]+(.+)/i);if(m)r.customerSocial=m[1].trim();const m2=l.match(/^(?:Line|ไลน์)[:\s]+(.+)/i);if(m2)r.customerSocial=m2[1].trim()}
-  for(const l of fl){const m=l.match(/^@\s*(.+)/i);if(m){r.remark=m[1].trim();break}}
-  const td=all.match(/(?:^|\s)(?:ต\.|ตำบล|แขวง)\s*([ก-๙ะ-์]+?)(?=\s|อ\.|อำเภอ|เขต|จ\.|จังหวัด|\d|$)/u);if(td)r.subDistrict=td[1]
-  const dt=all.match(/(?:^|\s)(?:อ\.|อำเภอ|เขต)\s*([ก-๙ะ-์]+?)(?=\s|จ\.|จังหวัด|กรุงเทพ|\d|$)/u);if(dt)r.district=dt[1]
-  const pv=all.match(/(?:^|\s)(?:จ\.|จังหวัด)\s*([ก-๙ะ-์]+?)(?=\s|\d|$)/u);if(pv)r.province=pv[1]
-  if(!r.subDistrict){for(const l of fl){const m=l.match(/^แขวง\s*(.+)/);if(m){r.subDistrict=m[1].trim();break}}}
-  if(!r.district){for(const l of fl){const m=l.match(/^เขต\s*(.+)/);if(m){r.district=m[1].trim();break}}}
-  if(!r.province){const pn=['กรุงเทพ','กรุงเทพมหานคร','กทม','นนทบุรี','ปทุมธานี','สมุทรปราการ','สมุทรสาคร','นครปฐม','เชียงใหม่','เชียงราย','ภูเก็ต','ขอนแก่น','อุดรธานี','นครราชสีมา','สงขลา','สุราษฎร์ธานี','อุบลราชธานี','ชลบุรี','พิษณุโลก','ระยอง','นครศรีธรรมราช'];for(const l of fl){if(pn.some(p=>l.includes(p))){r.province=l.replace(/จ\.|จังหวัด/g,'').trim();break}}}
-  if(ad.length>0){
-    if(r.zipCode&&!r.subDistrict){const m=ad.filter(a=>a.z===r.zipCode);if(m.length>0){const b=m.find(a=>all.includes(a.s))||m[0];r.subDistrict=b.s;r.district=b.d;r.province=b.p}}
-    if(!r.zipCode&&r.subDistrict){const f=ad.find(a=>a.s===r.subDistrict&&(r.district?a.d.includes(r.district):true));if(f){r.zipCode=f.z;if(!r.district)r.district=f.d;if(!r.province)r.province=f.p}}
-    if(r.zipCode&&!r.province){const m=ad.find(a=>a.z===r.zipCode);if(m)r.province=m.p}
-    if(r.zipCode){const zm=ad.filter(a=>a.z===r.zipCode);if(zm.length>0){const ex=zm.find(a=>a.s===r.subDistrict);if(ex){r.district=ex.d;r.province=ex.p}else{const b=zm.find(a=>all.includes(a.s))||zm[0];r.subDistrict=b.s;r.district=b.d;r.province=b.p}}}
-  }
-  const skip=/\d{3,}|ม\.\d|ต\.|ตำบล|แขวง|อำเภอ|เขต|จ\.|จังหวัด|^COD|^FB|^P:|^R\d|^@|^Line|หมู่|ซอย|ถนน|บ้านเลขที่|^โทร|กรุงเทพ/i
-  for(const l of fl){const m=l.match(/^ชื่อ[.\s:]+(.+)/i);if(m){r.customerName=m[1].trim().replace(/-/g,' ');break}}
-  if(!r.customerName){for(const l of fl){if(/^@|^FB|^P:|^R\d|^Line|^COD|^โทร|^ชื่อ/i.test(l))continue;const c=l.replace(/-/g,' ').trim();if(c.length>=3&&c.length<=60&&!skip.test(c)&&!/\d{5}/.test(c)&&(/[ก-๙]/.test(c)||/^[A-Za-z\s'.]+$/.test(c))){r.customerName=c;break}}}
-  if(!r.customerAddress){const ap=[];let pn=false;for(const l of fl){if(/^@|^FB|^P:|^R\d|^Line|^COD|^โทร|^ชื่อ/i.test(l))continue;if(l.replace(/-/g,' ').trim()===r.customerName){pn=true;continue};if(/^(?:ต\.|ตำบล|แขวง|อ\.|อำเภอ|เขต|จ\.|จังหวัด|กรุงเทพ)/i.test(l))break;if(/^\d{5}/.test(l))break;if(pn&&l.length>=3){let a=l;if(r.subDistrict)a=a.replace(new RegExp('(?:ต\\.|ตำบล|แขวง)\\s*'+r.subDistrict,'g'),'');if(r.district)a=a.replace(new RegExp('(?:อ\\.|อำเภอ|เขต)\\s*'+r.district,'g'),'');a=a.replace(/(?:จ\.|จังหวัด)\s*[ก-๙ะ-์]+/gu,'').replace(/\d{5}/,'').trim();if(a.length>=2)ap.push(a)}else if(!pn&&/บ้านเลขที่|\d+\/\d|ซอย|ซ\.|หมู่|ม\.|ถนน|ร้าน|\d+/.test(l)){pn=true;let a=l;a=a.replace(/(?:จ\.|จังหวัด)\s*[ก-๙ะ-์]+/gu,'').replace(/\d{5}/,'').trim();if(a.length>=2)ap.push(a)}};if(ap.length>0)r.customerAddress=ap.join(' ')}
-  return r
-}
 
 export default function PackerApp({ profile, onLogout }) {
   const [orders, setOrders] = useState([])
