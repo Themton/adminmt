@@ -246,28 +246,29 @@ export default function BossDashboard() {
     fetchAll()
   }, [status, dateFrom, dateTo])
 
-  // Realtime
+  // Realtime — patch เฉพาะแถวที่เปลี่ยนจาก payload (ไม่ refetch ทั้งชุด เพื่อลด egress)
   useEffect(() => {
     if (status !== 'ready') return
-    const refetch = async () => {
-      let countQ = supabase.from('mt_orders').select('id', { count: 'exact', head: true })
-      if (dateFrom) countQ = countQ.gte('order_date', dateFrom)
-      if (dateTo) countQ = countQ.lte('order_date', dateTo)
-      const { count } = await countQ
-      if (!count || count === 0) { setOrders([]); return }
-      const pageSize = 1000
-      const pages = Math.ceil(count / pageSize)
-      const promises = Array.from({ length: pages }, (_, i) => {
-        let q = supabase.from('mt_orders').select(selectFields).order('created_at', { ascending: false }).range(i * pageSize, (i + 1) * pageSize - 1)
-        if (dateFrom) q = q.gte('order_date', dateFrom)
-        if (dateTo) q = q.lte('order_date', dateTo)
-        return q
-      })
-      const results = await Promise.all(promises)
-      setOrders(results.flatMap(r => r.data || []))
+    // เช็คว่าออเดอร์อยู่ในช่วงวันที่ที่กำลังดูอยู่ไหม (order_date = 'YYYY-MM-DD...')
+    const inRange = (od) => {
+      const d = String(od || '').slice(0, 10)
+      if (dateFrom && d < dateFrom) return false
+      if (dateTo && d > dateTo) return false
+      return true
     }
+    const upsert = (row) => setOrders(prev => {
+      // ถ้าออเดอร์ออกนอกช่วงวันที่ที่ดูอยู่ -> เอาออกถ้ามีอยู่
+      if (!inRange(row.order_date)) {
+        return prev.some(o => o.id === row.id) ? prev.filter(o => o.id !== row.id) : prev
+      }
+      const i = prev.findIndex(o => o.id === row.id)
+      if (i === -1) return [row, ...prev]      // ใหม่ -> เพิ่มหน้าสุด
+      const next = prev.slice(); next[i] = row; return next   // เดิม -> แทนที่
+    })
     const ch = supabase.channel('boss-orders')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'mt_orders' }, () => refetch())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'mt_orders' }, p => upsert(p.new))
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'mt_orders' }, p => upsert(p.new))
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'mt_orders' }, p => setOrders(prev => prev.filter(o => o.id !== p.old.id)))
       .subscribe()
     return () => supabase.removeChannel(ch)
   }, [status, dateFrom, dateTo])
