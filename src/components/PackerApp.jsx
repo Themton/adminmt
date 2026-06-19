@@ -14,6 +14,7 @@ export default function PackerApp({ profile, onLogout }) {
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState(null)
   const [shipFilter, setShipFilter] = useState('all')
+  const [priceFilter, setPriceFilter] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [page, setPage] = useState(1)
@@ -364,7 +365,8 @@ export default function PackerApp({ profile, onLogout }) {
     if(shipFilter==='returned')return o.flash_status==='flash_6'||o.flash_status==='cancelled'
     return true
   }).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))
-  const searchFiltered = shipOrders.filter(o => { if(!searchQuery)return true; const q=searchQuery.toLowerCase(); return(o.customer_name||'').toLowerCase().includes(q)||(o.customer_phone||'').includes(q)||(o.flash_pno||'').includes(q)||(o.remark||'').toLowerCase().includes(q) })
+  const priceOptions = [...new Set(shipOrders.map(o => parseFloat(o.cod_amount||o.sale_price)||0).filter(v => v>0))].sort((a,b)=>a-b)
+  const searchFiltered = shipOrders.filter(o => { if(!searchQuery)return true; const q=searchQuery.toLowerCase(); return(o.customer_name||'').toLowerCase().includes(q)||(o.customer_phone||'').includes(q)||(o.flash_pno||'').includes(q)||(o.remark||'').toLowerCase().includes(q) }).filter(o => priceFilter==='all' ? true : String(parseFloat(o.cod_amount||o.sale_price)||0)===priceFilter)
   // ═══ Confirm Modal ═══
   const [confirmModal, setConfirmModal] = useState(null) // { title, message, color, icon, onConfirm }
 
@@ -600,6 +602,11 @@ export default function PackerApp({ profile, onLogout }) {
               <input type="date" value={dateFilterEnd} onChange={e=>{setDateFilterEnd(e.target.value);setQuickFilter('');setPage(1)}} style={{padding:'7px 10px',borderRadius:6,background:'#fff',border:'1px solid #DEE2E6',fontSize:12,fontFamily:T.font}} />
               {[{id:'today',label:'วันนี้',fn:()=>{setDateFilter(todayStr);setDateFilterEnd(todayStr)}},{id:'7days',label:'7 วัน',fn:()=>{const d=new Date();d.setDate(d.getDate()-6);setDateFilter(d.toISOString().split('T')[0]);setDateFilterEnd(todayStr)}},{id:'month',label:'เดือนนี้',fn:()=>{setDateFilter(new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0')+'-01');setDateFilterEnd(todayStr)}}].map(b=><button key={b.id} onClick={()=>{b.fn();setQuickFilter(b.id);setPage(1)}} style={{padding:'7px 14px',borderRadius:6,border:quickFilter===b.id?'none':'1px solid #DEE2E6',background:quickFilter===b.id?'#E67E22':'#fff',color:quickFilter===b.id?'#fff':'#85929E',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>{b.label}</button>)}
               <div style={{flex:1}} />
+              <select value={priceFilter} onChange={e=>{setPriceFilter(e.target.value);setPage(1);setSelectedIds(new Set())}} title="กรองตามราคา/ปลายทาง (COD)" style={{padding:'7px 10px',borderRadius:6,border:'1px solid #DEE2E6',fontSize:12,fontFamily:T.font,background:priceFilter==='all'?'#fff':'#FEF5E7',color:priceFilter==='all'?'#85929E':'#E67E22',fontWeight:priceFilter==='all'?400:700,cursor:'pointer'}}>
+                <option value="all">💰 ทุกราคา</option>
+                {priceOptions.map(p=><option key={p} value={String(p)}>฿{fmt(p)}</option>)}
+              </select>
+              {priceFilter!=='all'&&<button onClick={()=>{const rows=searchFiltered;if(!rows.length){flash('ไม่มีรายการ');return}exportProshipExcel(rows,`Export_${priceFilter}_${rows.length}.xlsx`,profile,'shipping');flash(`✅ Export ฿${priceFilter} — ${rows.length} รายการ`);logActivity('export',`Export ราคา ฿${priceFilter} จำนวน ${rows.length} รายการ`,rows.length)}} style={{padding:'7px 12px',borderRadius:6,border:'none',background:'#27AE60',color:'#fff',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>📊 Export ฿{priceFilter} ({searchFiltered.length})</button>}
               <input placeholder="ค้นหา ชื่อ เบอร์ เลขพัสดุ..." value={searchQuery} onChange={e=>{setSearchQuery(e.target.value);setPage(1)}} style={{padding:'7px 12px',borderRadius:6,border:'1px solid #DEE2E6',fontSize:12,fontFamily:T.font,width:220}} />
             </div>
 
