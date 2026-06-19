@@ -29,26 +29,28 @@ function validatePhone(phone) {
 }
 
 function AddressSearch({ onSelect, currentValue, addresses = [] }) {
-  const [query, setQuery] = useState(currentValue || '')
+  // ── ช่องค้นหานี้ใช้ "ค้นหา" อย่างเดียว ไม่เอาไปปนกับการแสดงค่าที่เลือกแล้ว ──
+  //    (เดิม sync currentValue เข้า query ทำให้พอแก้/ลบในช่องค้นหาแล้วค่าฟอร์มรวน)
+  const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
   const [show, setShow] = useState(false)
-  useEffect(() => { setQuery(currentValue || '') }, [currentValue])
   const search = (q) => {
     setQuery(q)
-    if (q.length < 2) { setResults([]); return }
+    if (q.length < 2) { setResults([]); setShow(false); return }
     setResults(addresses.filter(a => a.s.includes(q) || a.d.includes(q) || a.p.includes(q) || a.z.includes(q)).slice(0, 8))
     setShow(true)
   }
   return (
     <div style={{ position: 'relative', marginBottom: 14 }}>
       <label style={{ display: 'block', fontSize: 12, color: T.textDim, fontWeight: 500, marginBottom: 6 }}>🔍 ค้นหาตำบล/อำเภอ/รหัสไปรษณีย์</label>
+      {currentValue && <div style={{ padding: '10px 14px', borderRadius: T.radiusSm, background: 'rgba(184,134,11,0.08)', marginBottom: 8, fontSize: 13, fontWeight: 600, color: T.text }}>📍 {currentValue}</div>}
       <input value={query} onChange={e => search(e.target.value)} onFocus={() => results.length > 0 && setShow(true)} onBlur={() => setTimeout(() => setShow(false), 200)}
         placeholder="พิมพ์ตำบล อำเภอ หรือ รหัสไปรษณีย์"
         style={{ width: '100%', padding: '13px 16px', borderRadius: T.radiusSm, border: `1px solid ${T.border}`, background: T.surfaceAlt, color: T.text, fontSize: 15, fontFamily: T.font, outline: 'none', boxSizing: 'border-box' }} />
       {show && results.length > 0 && (
         <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50, background: '#fff', border: `1px solid ${T.border}`, borderRadius: T.radiusSm, maxHeight: 240, overflowY: 'auto', boxShadow: '0 12px 40px rgba(0,0,0,0.12)' }}>
           {results.map((a, i) => (
-            <div key={i} onClick={() => { onSelect(a); setQuery(`${a.s} > ${a.d} > ${a.p} ${a.z}`); setShow(false) }}
+            <div key={i} onClick={() => { onSelect(a); setQuery(''); setResults([]); setShow(false) }}
               style={{ padding: '12px 16px', cursor: 'pointer', borderBottom: `1px solid ${T.border}`, fontSize: 13 }}
               onMouseEnter={e => e.currentTarget.style.background = 'rgba(184,134,11,0.08)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
               <div style={{ fontWeight: 600, marginBottom: 2 }}>{a.s} → {a.d}</div>
