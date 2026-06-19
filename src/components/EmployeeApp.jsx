@@ -352,9 +352,19 @@ export default function EmployeeApp({ profile, onLogout }) {
                 onChange={e => setPasteText(e.target.value)}
                 onPaste={e => {
                   const pasted = e.clipboardData.getData('text')
-                  if (pasted && pasted.length >= 10) {
-                    e.preventDefault()
-                    setPasteText(pasted)
+                  if (!pasted) return
+                  e.preventDefault()
+                  // ── แทรกข้อความที่วางตรงตำแหน่งเคอร์เซอร์ / แทนที่เฉพาะส่วนที่เลือก ──
+                  //    (เดิม setPasteText(pasted) แทนที่ทั้งช่อง ทำให้ข้อความเดิมหายเมื่อวางทับ)
+                  const el = e.target
+                  const start = el.selectionStart ?? pasteText.length
+                  const end = el.selectionEnd ?? pasteText.length
+                  const newText = pasteText.slice(0, start) + pasted + pasteText.slice(end)
+                  setPasteText(newText)
+                  const caret = start + pasted.length
+                  requestAnimationFrame(() => { try { el.selectionStart = el.selectionEnd = caret } catch {} })
+                  // แยกข้อมูลเฉพาะเมื่อวางบล็อกข้อมูลจริง (>=10 ตัวอักษร)
+                  if (pasted.length >= 10) {
                     const p = parseSmartPaste(pasted, addresses)
                     setForm(prev => ({
                       ...prev,

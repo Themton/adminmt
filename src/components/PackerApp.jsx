@@ -490,7 +490,7 @@ export default function PackerApp({ profile, onLogout }) {
           <div style={{marginBottom:12,padding:10,borderRadius:8,background:'rgba(230,126,34,0.04)',border:'1px solid rgba(230,126,34,0.15)'}}>
             <div style={{fontSize:12,fontWeight:700,color:'#E67E22',marginBottom:6}}>📋 Smart Paste — วางข้อมูลจาก Line/Facebook</div>
             <textarea value={pasteText} onChange={e=>setPasteText(e.target.value)}
-              onPaste={e=>{const t=e.clipboardData.getData('text');if(t&&t.length>=5){e.preventDefault();setPasteText(t);applyPaste(t);flash('✅ Smart Paste — แยกข้อมูลแล้ว!')}}}
+              onPaste={e=>{const t=e.clipboardData.getData('text');if(!t)return;e.preventDefault();const el=e.target,start=el.selectionStart??pasteText.length,end=el.selectionEnd??pasteText.length;const newText=pasteText.slice(0,start)+t+pasteText.slice(end);setPasteText(newText);const caret=start+t.length;requestAnimationFrame(()=>{try{el.selectionStart=el.selectionEnd=caret}catch{}});if(t.length>=5){applyPaste(t);flash('✅ Smart Paste — แยกข้อมูลแล้ว!')}}}
               placeholder={"วางข้อมูลตรงนี้...\n\nตัวอย่าง:\nสมชาย ใจดี\n123/4 หมู่ 5\nต.วังทอง อ.วังทอง\nจ.พิษณุโลก 65130\n0812345678\nCOD 399"}
               rows={4} style={{width:'100%',padding:'8px 10px',borderRadius:6,border:'1px solid #DEE2E6',fontSize:12,fontFamily:T.font,resize:'vertical'}} />
             {pasteText&&<div style={{display:'flex',gap:6,marginTop:6}}>

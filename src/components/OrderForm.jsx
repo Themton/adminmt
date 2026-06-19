@@ -178,7 +178,7 @@ export default function OrderForm({ profile, onSuccess }) {
       <div style={{ marginBottom: 16 }}>
         <label style={{ display: 'block', fontSize: 13, fontWeight: 700, marginBottom: 8, color: T.gold }}>📋 Smart Paste — วางข้อมูลจาก Line/Facebook</label>
         <textarea value={pasteText} onChange={e => setPasteText(e.target.value)}
-          onPaste={e => { const t = e.clipboardData.getData('text'); if (t && t.length >= 10) { e.preventDefault(); setPasteText(t); applyPaste(t); setPasteDetected(true); setTimeout(() => setPasteDetected(false), 3000); flash('✅ Smart Paste สำเร็จ!') } }}
+          onPaste={e => { const t = e.clipboardData.getData('text'); if (!t) return; e.preventDefault(); const el = e.target; const start = el.selectionStart ?? pasteText.length; const end = el.selectionEnd ?? pasteText.length; const newText = pasteText.slice(0, start) + t + pasteText.slice(end); setPasteText(newText); const caret = start + t.length; requestAnimationFrame(() => { try { el.selectionStart = el.selectionEnd = caret } catch {} }); if (t.length >= 10) { applyPaste(t); setPasteDetected(true); setTimeout(() => setPasteDetected(false), 3000); flash('✅ Smart Paste สำเร็จ!') } }}
           placeholder={"วางข้อมูลตรงนี้..."} rows={4}
           style={{ width: '100%', padding: '12px 14px', borderRadius: T.radiusSm, border: '1px solid rgba(184,134,11,0.15)', background: 'rgba(184,134,11,0.03)', color: T.text, fontSize: 14, fontFamily: T.font, outline: 'none', boxSizing: 'border-box', resize: 'vertical', lineHeight: 1.7 }} />
         {pasteText && <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
