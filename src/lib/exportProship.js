@@ -17,6 +17,7 @@ const HEADERS = [
   { key: 'price', label: 'SalePrice\nราคาขาย', width: 12, required: false },
   { key: 'cod', label: 'COD*\nยอดเก็บเงินปลายทาง', width: 16, required: true },
   { key: 'remark', label: 'Remark\nหมายเหตุ', width: 22, required: false },
+  { key: 'productType', label: 'ProductType\nประเภทสินค้า', width: 18, required: false },
 ]
 
 function orderToRow(o) {
@@ -34,6 +35,15 @@ function orderToRow(o) {
     cod: o.cod_amount ? Number(o.cod_amount) || o.cod_amount : '',
     remark: o.remark || '',
   }
+}
+
+async function buildPageGroupMap() {
+  const map = {}
+  try {
+    const { data } = await supabase.from('mt_product_groups').select('name,pages')
+    ;(data || []).forEach(g => (g.pages || []).forEach(p => { map[String(p).trim()] = g.name }))
+  } catch {}
+  return map
 }
 
 async function logExport(profile, type, filename, count, filterInfo) {
@@ -55,7 +65,7 @@ export async function exportProshipExcel(orders, filename, profile, filterInfo) 
 
   HEADERS.forEach((h, i) => { ws.getColumn(i + 1).width = h.width })
 
-  ws.mergeCells('A1:L1')
+  ws.mergeCells('A1:M1')
   const noteCell = ws.getCell('A1')
   noteCell.value = NOTE_TEXT
   noteCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFA5A5A5' } }
@@ -73,8 +83,10 @@ export async function exportProshipExcel(orders, filename, profile, filterInfo) 
   })
   ws.getRow(2).height = 30
 
+  const pgMap = await buildPageGroupMap()
   orders.forEach((o, idx) => {
     const row = orderToRow(o)
+    row.productType = pgMap[(o.sales_channel || '').trim()] || ''
     HEADERS.forEach((h, i) => {
       const cell = ws.getCell(idx + 3, i + 1)
       cell.value = row[h.key]
@@ -95,8 +107,9 @@ export async function exportProshipExcel(orders, filename, profile, filterInfo) 
 }
 
 export async function exportProshipCSV(orders, filename, profile, filterInfo) {
+  const pgMap = await buildPageGroupMap()
   const headerRow = HEADERS.map(h => h.label.split('\n')[0])
-  const rows = [headerRow, ...orders.map(o => { const r = orderToRow(o); return HEADERS.map(h => r[h.key]) })]
+  const rows = [headerRow, ...orders.map(o => { const r = orderToRow(o); r.productType = pgMap[(o.sales_channel || '').trim()] || ''; return HEADERS.map(h => r[h.key]) })]
   const csv = '\uFEFF' + rows.map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(',')).join('\n')
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
   const a = document.createElement('a')
