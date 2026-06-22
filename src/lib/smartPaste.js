@@ -8,6 +8,9 @@
 const NAME_SKIP = /\d{3,}|ม\.\d|ต\.|ตำบล|แขวง|อำเภอ|เขต|จ\.|จังหวัด|^COD|^FB|^P:|^R\d|^@|^Line|หมู่|ซอย|ถนน|บ้านเลขที่|^โทร|กรุงเทพ/i
 const LINE_LABEL = /^@|^FB|^P:|^R\d|^Line|^COD|^โทร|^ชื่อ/i
 
+// ข้อความโปร/คำพูด/เวลาจัดส่ง ที่ไม่ใช่ที่อยู่ (กันไม่ให้หลุดเข้าช่องที่อยู่ หรือถูกตีความเป็นจังหวัด)
+const PROMO = /รอรับ|รับสินค้า|รอสินค้า|จัดส่ง|นำส่ง|ก่อนส่ง|ก่อนนำส่ง|โทรหา|โทรแจ้ง|วันหยุด|ไม่รวม|ทักแชท|ทักมา|ขอบคุณ|สอบถาม|ติดตามพัสดุ|เลขพัสดุ|เวลาทำการ|ต่างจังหวัด|นะคะ|นะครับ|\d\s*[-–—]?\s*\d?\s*วัน/u
+
 function looksLikeName(s) {
   const c = (s || '').trim()
   if (c.length < 2 || c.length > 60) return false   // รับชื่อเล่นสั้น 2 ตัวอักษร เช่น กบ ปู เป้
@@ -18,7 +21,7 @@ function looksLikeName(s) {
 
 // ลบเบอร์โทร (รวมแบบมีขีดคั่น) ออกจากข้อความ
 function stripPhone(s) {
-  return s.replace(/(?<!\d)0[689][\d\s-]{8,12}(?!\d)/g, ' ')
+  return s.replace(/(?<!\d)0[689](?:[\s-]?\d){8}(?!\d)/g, ' ')
 }
 
 export function parseSmartPaste(text, addressData = []) {
@@ -93,6 +96,7 @@ export function parseSmartPaste(text, addressData = []) {
     const provNames = ['กรุงเทพ','กรุงเทพมหานคร','กทม','นนทบุรี','ปทุมธานี','สมุทรปราการ','สมุทรสาคร','นครปฐม','เชียงใหม่','เชียงราย','ภูเก็ต','ขอนแก่น','อุดรธานี','นครราชสีมา','สงขลา','สุราษฎร์ธานี','อุบลราชธานี','ชลบุรี','พิษณุโลก','ลำปาง','ลำพูน','ระยอง','ตรัง','นครศรีธรรมราช']
     for (const line of fixedLines) {
       const trimmed = line.trim()
+      if (PROMO.test(trimmed)) continue
       if (provNames.some(p => trimmed.includes(p))) {
         result.province = trimmed.replace(/จ\.|จังหวัด/g, '').trim()
         break
@@ -161,17 +165,35 @@ export function parseSmartPaste(text, addressData = []) {
     }
   }
 
+  //  (c) ชื่ออยู่ต้นบรรทัดเดียวกับที่อยู่ (เช่น "วรรณิษา วงงาม 65 ม.2 ต.xxx")
+  if (!result.customerName) {
+    for (const line of fixedLines) {
+      if (LINE_LABEL.test(line)) continue
+      const lead = line.match(/^\s*([ก-๙][ก-๙\s]*?)\s*(?=\d|ม\.\d|ต\.|ตำบล|แขวง|อ\.|อำเภอ|เขต|จ\.|จังหวัด|หมู่|ซอย|ถนน|บ้านเลขที่|รหัส)/u)
+      if (lead) {
+        const cand = lead[1].replace(/^(?:คุณ|ลูกค้า|ผู้รับ|พี่|น้อง|เจ๊|เฮีย)\s*/i, '').replace(/\s+/g, ' ').trim()
+        if (looksLikeName(cand)) { result.customerName = cand; break }
+      }
+    }
+  }
+  //  (d) ใช้ชื่อ FB/Line เป็นชื่อลูกค้า ถ้ายังหาไม่เจอ
+  if (!result.customerName && result.customerSocial && looksLikeName(result.customerSocial)) {
+    result.customerName = result.customerSocial
+  }
+
   // 10. ที่อยู่ ──────────────────────────────────────────
   //  เก็บเฉพาะส่วนที่อยู่จริง — ตัดเบอร์/ยอดเงิน/รหัส ปณ./ตำบล-อำเภอ-จังหวัด ออก
   if (!result.customerAddress) {
     const parts = []
     for (const line of fixedLines) {
       if (LINE_LABEL.test(line)) continue
+      if (PROMO.test(line)) continue   // ข้ามข้อความโปร/คำพูด/เวลาจัดส่ง
       if (result.customerName && line.replace(/-/g, ' ').trim() === result.customerName) continue
 
       let a = line
+      a = a.replace(/^\s*(?:ที่อยู่|address|addr|จัดส่งที่)[.\s:]+/i, ' ')   // ตัดป้าย "ที่อยู่:" นำหน้า
       a = stripPhone(a)                                                  // ตัดเบอร์โทร
-      if (result.customerName) a = a.replace(result.customerName, ' ')   // ตัดชื่อที่ปนมา
+      if (result.customerName) { const _nre = new RegExp(result.customerName.split(/\s+/).map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+'), 'g'); a = a.replace(_nre, ' ') }   // ตัดชื่อที่ปนมา (ยืดหยุ่นช่องว่าง)
       a = a.replace(/(?:ต\.|ตำบล|แขวง|อ\.|อำเภอ|เขต|จ\.|จังหวัด).*$/u, ' ') // ตัดตั้งแต่ตำบลเป็นต้นไป
       a = a.replace(/(?:COD|ปลายทาง)\s*\d+/ig, ' ')                       // ตัดยอดเงิน
       a = a.replace(/\b[1-9]\d{4}\b/g, ' ')                               // ตัดรหัส ปณ.
