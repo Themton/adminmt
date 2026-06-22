@@ -9,6 +9,65 @@ let _addrCache = null
 async function getAddresses() { if (_addrCache) return _addrCache; const mod = await import('../data/addresses.json'); _addrCache = mod.default; return _addrCache }
 
 
+function ProductGroupManager({ pageOptions, groups, onClose, onChanged, flash }) {
+  const [items, setItems] = useState(() => groups.map(g => ({ id: g.id, name: g.name, pages: [...(g.pages || [])] })))
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
+  const addGroup = () => setItems(prev => [...prev, { id: null, name: '', pages: [] }])
+  const setName = (i, name) => setItems(prev => prev.map((it, idx) => idx === i ? { ...it, name } : it))
+  const togglePage = (i, page) => setItems(prev => prev.map((it, idx) => idx !== i ? it : { ...it, pages: it.pages.includes(page) ? it.pages.filter(p => p !== page) : [...it.pages, page] }))
+  const removeGroup = async (i) => {
+    const it = items[i]
+    if (it.id) { try { await supabase.from('mt_product_groups').delete().eq('id', it.id) } catch (e) {} }
+    setItems(prev => prev.filter((_, idx) => idx !== i))
+  }
+  const save = async () => {
+    setSaving(true); setErr('')
+    try {
+      for (const it of items) {
+        if (!it.name.trim()) continue
+        if (it.id) { const { error } = await supabase.from('mt_product_groups').update({ name: it.name.trim(), pages: it.pages }).eq('id', it.id); if (error) throw error }
+        else { const { error } = await supabase.from('mt_product_groups').insert({ name: it.name.trim(), pages: it.pages }); if (error) throw error }
+      }
+      await onChanged(); flash('✅ บันทึกกลุ่มแล้ว'); onClose()
+    } catch (e) { setErr('บันทึกไม่สำเร็จ — ตรวจว่าได้รัน SQL สร้างตาราง mt_product_groups ใน Supabase แล้วหรือยัง') }
+    setSaving(false)
+  }
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 640, maxHeight: '85vh', overflowY: 'auto', padding: 20, fontFamily: T.font }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <div style={{ fontSize: 17, fontWeight: 800, color: '#2C3E50' }}>🏷️ จัดการกลุ่มประเภทสินค้า</div>
+          <button onClick={onClose} style={{ border: 'none', background: 'transparent', fontSize: 20, cursor: 'pointer', color: '#85929E' }}>✕</button>
+        </div>
+        <div style={{ fontSize: 12, color: '#85929E', marginBottom: 14 }}>สร้างกลุ่ม แล้วติ๊กเพจที่อยู่ในกลุ่มนั้น — ตอน Export เลือกกลุ่มได้เลย ทุกคนเห็นเหมือนกัน</div>
+        {items.length === 0 && <div style={{ textAlign: 'center', color: '#B2BABB', padding: 20, fontSize: 13 }}>ยังไม่มีกลุ่ม กด "+ เพิ่มกลุ่ม" ด้านล่าง</div>}
+        {items.map((it, i) => (
+          <div key={i} style={{ border: '1px solid #E5E8E8', borderRadius: 10, padding: 12, marginBottom: 12 }}>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+              <input value={it.name} onChange={e => setName(i, e.target.value)} placeholder="ชื่อประเภทสินค้า เช่น ครีมหน้าขาว" style={{ flex: 1, padding: '8px 12px', borderRadius: 6, border: '1px solid #DEE2E6', fontSize: 14, fontFamily: T.font }} />
+              <button onClick={() => removeGroup(i)} style={{ padding: '8px 12px', borderRadius: 6, border: 'none', background: '#FADBD8', color: '#C0392B', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: T.font }}>ลบกลุ่ม</button>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {pageOptions.length === 0 && <span style={{ fontSize: 12, color: '#B2BABB' }}>ยังไม่มีเพจในรายการ (เพจจะขึ้นเมื่อมีออเดอร์)</span>}
+              {pageOptions.map(p => { const on = it.pages.includes(p); return (
+                <button key={p} onClick={() => togglePage(i, p)} style={{ padding: '5px 10px', borderRadius: 20, border: on ? 'none' : '1px solid #DEE2E6', background: on ? '#8E44AD' : '#fff', color: on ? '#fff' : '#5D6D7E', fontSize: 11, fontWeight: on ? 700 : 400, cursor: 'pointer', fontFamily: T.font }}>{on ? '✓ ' : ''}{p}</button>
+              ) })}
+            </div>
+          </div>
+        ))}
+        {err && <div style={{ color: '#C0392B', fontSize: 12, marginBottom: 10 }}>⚠️ {err}</div>}
+        <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+          <button onClick={addGroup} style={{ padding: '9px 14px', borderRadius: 6, border: '1px dashed #8E44AD', background: '#fff', color: '#8E44AD', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: T.font }}>+ เพิ่มกลุ่ม</button>
+          <div style={{ flex: 1 }} />
+          <button onClick={onClose} style={{ padding: '9px 16px', borderRadius: 6, border: '1px solid #DEE2E6', background: '#fff', color: '#85929E', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: T.font }}>ยกเลิก</button>
+          <button onClick={save} disabled={saving} style={{ padding: '9px 18px', borderRadius: 6, border: 'none', background: '#27AE60', color: '#fff', fontSize: 13, fontWeight: 700, cursor: saving ? 'wait' : 'pointer', fontFamily: T.font, opacity: saving ? 0.6 : 1 }}>{saving ? 'กำลังบันทึก...' : '💾 บันทึก'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function PackerApp({ profile, onLogout }) {
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
@@ -16,6 +75,9 @@ export default function PackerApp({ profile, onLogout }) {
   const [shipFilter, setShipFilter] = useState('all')
   const [priceFilter, setPriceFilter] = useState('all')
   const [pageFilter, setPageFilter] = useState('all')
+  const [productGroups, setProductGroups] = useState([])
+  const [groupFilter, setGroupFilter] = useState('all')
+  const [showGroupMgr, setShowGroupMgr] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [page, setPage] = useState(1)
@@ -36,6 +98,8 @@ export default function PackerApp({ profile, onLogout }) {
   const [pasteText, setPasteText] = useState('')
   const [addresses, setAddresses] = useState([])
   useEffect(() => { getAddresses().then(setAddresses) }, [])
+  const loadGroups = async () => { try { const { data, error } = await supabase.from('mt_product_groups').select('*').order('name'); if (!error && data) setProductGroups(data) } catch (e) {} }
+  useEffect(() => { loadGroups() }, [])
   const [pnoInput, setPnoInput] = useState('')
   const [sidebarPage, setSidebarPage] = useState('shipping')
   const [trackSearchQuery, setTrackSearchQuery] = useState('')
@@ -368,7 +432,9 @@ export default function PackerApp({ profile, onLogout }) {
   }).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))
   const priceOptions = [...new Set(shipOrders.map(o => parseFloat(o.cod_amount||o.sale_price)||0).filter(v => v>0))].sort((a,b)=>a-b)
   const pageOptions = [...new Set(shipOrders.map(o => (o.sales_channel||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'th'))
-  const searchFiltered = shipOrders.filter(o => { if(!searchQuery)return true; const q=searchQuery.toLowerCase(); return(o.customer_name||'').toLowerCase().includes(q)||(o.customer_phone||'').includes(q)||(o.flash_pno||'').includes(q)||(o.remark||'').toLowerCase().includes(q) }).filter(o => priceFilter==='all' ? true : String(parseFloat(o.cod_amount||o.sale_price)||0)===priceFilter).filter(o => pageFilter==='all' ? true : (o.sales_channel||'').trim()===pageFilter)
+  const selectedGroup = groupFilter==='all' ? null : productGroups.find(g => g.id===groupFilter)
+  const groupPageSet = selectedGroup ? new Set((selectedGroup.pages||[]).map(s => String(s).trim())) : null
+  const searchFiltered = shipOrders.filter(o => { if(!searchQuery)return true; const q=searchQuery.toLowerCase(); return(o.customer_name||'').toLowerCase().includes(q)||(o.customer_phone||'').includes(q)||(o.flash_pno||'').includes(q)||(o.remark||'').toLowerCase().includes(q) }).filter(o => priceFilter==='all' ? true : String(parseFloat(o.cod_amount||o.sale_price)||0)===priceFilter).filter(o => pageFilter==='all' ? true : (o.sales_channel||'').trim()===pageFilter).filter(o => !groupPageSet ? true : groupPageSet.has((o.sales_channel||'').trim()))
   // ═══ Confirm Modal ═══
   const [confirmModal, setConfirmModal] = useState(null) // { title, message, color, icon, onConfirm }
 
@@ -405,6 +471,7 @@ export default function PackerApp({ profile, onLogout }) {
   return (
     <div style={{fontFamily:T.font,minHeight:'100vh',background:'#F4F6F7',color:T.text,paddingBottom:40}}>
       <Toast message={toast} />
+      {showGroupMgr && <ProductGroupManager pageOptions={pageOptions} groups={productGroups} onClose={() => setShowGroupMgr(false)} onChanged={loadGroups} flash={flash} />}
       {/* ═══ Global Progress Bar (fixed top) ═══ */}
       {gProgress&&<div style={{position:'fixed',top:52,left:220,right:0,zIndex:199,padding:'8px 20px',background:'rgba(255,255,255,0.97)',borderBottom:'1px solid #EAECEE',boxShadow:'0 2px 8px rgba(0,0,0,0.06)'}}>
         <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
@@ -604,6 +671,11 @@ export default function PackerApp({ profile, onLogout }) {
               <input type="date" value={dateFilterEnd} onChange={e=>{setDateFilterEnd(e.target.value);setQuickFilter('');setPage(1)}} style={{padding:'7px 10px',borderRadius:6,background:'#fff',border:'1px solid #DEE2E6',fontSize:12,fontFamily:T.font}} />
               {[{id:'today',label:'วันนี้',fn:()=>{setDateFilter(todayStr);setDateFilterEnd(todayStr)}},{id:'7days',label:'7 วัน',fn:()=>{const d=new Date();d.setDate(d.getDate()-6);setDateFilter(d.toISOString().split('T')[0]);setDateFilterEnd(todayStr)}},{id:'month',label:'เดือนนี้',fn:()=>{setDateFilter(new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0')+'-01');setDateFilterEnd(todayStr)}}].map(b=><button key={b.id} onClick={()=>{b.fn();setQuickFilter(b.id);setPage(1)}} style={{padding:'7px 14px',borderRadius:6,border:quickFilter===b.id?'none':'1px solid #DEE2E6',background:quickFilter===b.id?'#E67E22':'#fff',color:quickFilter===b.id?'#fff':'#85929E',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>{b.label}</button>)}
               <div style={{flex:1}} />
+              <select value={groupFilter} onChange={e=>{setGroupFilter(e.target.value);setPage(1);setSelectedIds(new Set())}} title="กรองตามกลุ่มประเภทสินค้า" style={{padding:'7px 10px',borderRadius:6,border:'1px solid #DEE2E6',fontSize:12,fontFamily:T.font,maxWidth:200,background:groupFilter==='all'?'#fff':'#F4ECF7',color:groupFilter==='all'?'#85929E':'#8E44AD',fontWeight:groupFilter==='all'?400:700,cursor:'pointer'}}>
+                <option value="all">🏷️ ทุกประเภท</option>
+                {productGroups.map(g=><option key={g.id} value={g.id}>{g.name} ({(g.pages||[]).length} เพจ)</option>)}
+              </select>
+              <button onClick={()=>setShowGroupMgr(true)} title="จัดการกลุ่มประเภทสินค้า" style={{padding:'7px 10px',borderRadius:6,border:'1px solid #DEE2E6',background:'#fff',color:'#8E44AD',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font,whiteSpace:'nowrap'}}>⚙️ จัดการกลุ่ม</button>
               <select value={pageFilter} onChange={e=>{setPageFilter(e.target.value);setPage(1);setSelectedIds(new Set())}} title="กรองตามชื่อเพจ" style={{padding:'7px 10px',borderRadius:6,border:'1px solid #DEE2E6',fontSize:12,fontFamily:T.font,maxWidth:180,background:pageFilter==='all'?'#fff':'#EAF2F8',color:pageFilter==='all'?'#85929E':'#2E86C1',fontWeight:pageFilter==='all'?400:700,cursor:'pointer'}}>
                 <option value="all">📦 ทุกเพจ</option>
                 {pageOptions.map(p=><option key={p} value={p}>{p}</option>)}
@@ -612,7 +684,7 @@ export default function PackerApp({ profile, onLogout }) {
                 <option value="all">💰 ทุกราคา</option>
                 {priceOptions.map(p=><option key={p} value={String(p)}>฿{fmt(p)}</option>)}
               </select>
-              {(priceFilter!=='all'||pageFilter!=='all')&&(()=>{const tags=[pageFilter!=='all'?pageFilter:null,priceFilter!=='all'?('฿'+priceFilter):null].filter(Boolean);const label=tags.join(' · ');return <button onClick={()=>{const rows=searchFiltered;if(!rows.length){flash('ไม่มีรายการให้ Export');return}const safe=label.replace(/[^\w฿ก-๙]+/g,'_');exportProshipExcel(rows,`Export_${safe}_${rows.length}.xlsx`,profile,'shipping');flash(`✅ Export ${label} — ${rows.length} รายการ`);logActivity('export',`Export (${label}) จำนวน ${rows.length} รายการ`,rows.length)}} style={{padding:'7px 12px',borderRadius:6,border:'none',background:'#27AE60',color:'#fff',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font,whiteSpace:'nowrap'}}>📊 Export {label} ({searchFiltered.length})</button>})()}
+              {(priceFilter!=='all'||pageFilter!=='all'||groupFilter!=='all')&&(()=>{const tags=[selectedGroup?('🏷️'+selectedGroup.name):null,pageFilter!=='all'?pageFilter:null,priceFilter!=='all'?('฿'+priceFilter):null].filter(Boolean);const label=tags.join(' · ');return <button onClick={()=>{const rows=searchFiltered;if(!rows.length){flash('ไม่มีรายการให้ Export');return}const safe=label.replace(/[^\w฿ก-๙]+/g,'_');exportProshipExcel(rows,`Export_${safe}_${rows.length}.xlsx`,profile,'shipping');flash(`✅ Export ${label} — ${rows.length} รายการ`);logActivity('export',`Export (${label}) จำนวน ${rows.length} รายการ`,rows.length)}} style={{padding:'7px 12px',borderRadius:6,border:'none',background:'#27AE60',color:'#fff',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font,whiteSpace:'nowrap'}}>📊 Export {label} ({searchFiltered.length})</button>})()}
               <input placeholder="ค้นหา ชื่อ เบอร์ เลขพัสดุ..." value={searchQuery} onChange={e=>{setSearchQuery(e.target.value);setPage(1)}} style={{padding:'7px 12px',borderRadius:6,border:'1px solid #DEE2E6',fontSize:12,fontFamily:T.font,width:220}} />
             </div>
 
