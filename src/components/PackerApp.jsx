@@ -40,22 +40,27 @@ function ProductGroupManager({ pageOptions, groups, onClose, onChanged, flash })
           <div style={{ fontSize: 17, fontWeight: 800, color: '#2C3E50' }}>🏷️ จัดการกลุ่มประเภทสินค้า</div>
           <button onClick={onClose} style={{ border: 'none', background: 'transparent', fontSize: 20, cursor: 'pointer', color: '#85929E' }}>✕</button>
         </div>
-        <div style={{ fontSize: 12, color: '#85929E', marginBottom: 14 }}>สร้างกลุ่ม แล้วติ๊กเพจที่อยู่ในกลุ่มนั้น — ตอน Export เลือกกลุ่มได้เลย ทุกคนเห็นเหมือนกัน</div>
+        <div style={{ fontSize: 12, color: '#85929E', marginBottom: 6 }}>สร้างกลุ่ม แล้วเลือกเพจที่อยู่ในกลุ่มนั้น · เพจที่จัดกลุ่มแล้วจะไม่โผล่ในกลุ่มอื่น</div>
+        {(() => { const assigned = new Set(items.flatMap(g => g.pages)); const remain = pageOptions.filter(p => !assigned.has(p)).length; return <div style={{ fontSize: 11, color: '#B2BABB', marginBottom: 14 }}>เพจทั้งหมด {pageOptions.length} · จัดแล้ว {assigned.size} · ยังไม่จัด {remain}</div> })()}
         {items.length === 0 && <div style={{ textAlign: 'center', color: '#B2BABB', padding: 20, fontSize: 13 }}>ยังไม่มีกลุ่ม กด "+ เพิ่มกลุ่ม" ด้านล่าง</div>}
-        {items.map((it, i) => (
+        {items.map((it, i) => {
+          const usedElsewhere = new Set(items.filter((_, idx) => idx !== i).flatMap(g => g.pages))
+          const choices = pageOptions.filter(p => !usedElsewhere.has(p))
+          return (
           <div key={i} style={{ border: '1px solid #E5E8E8', borderRadius: 10, padding: 12, marginBottom: 12 }}>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center' }}>
               <input value={it.name} onChange={e => setName(i, e.target.value)} placeholder="ชื่อประเภทสินค้า เช่น ครีมหน้าขาว" style={{ flex: 1, padding: '8px 12px', borderRadius: 6, border: '1px solid #DEE2E6', fontSize: 14, fontFamily: T.font }} />
-              <button onClick={() => removeGroup(i)} style={{ padding: '8px 12px', borderRadius: 6, border: 'none', background: '#FADBD8', color: '#C0392B', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: T.font }}>ลบกลุ่ม</button>
+              <span style={{ fontSize: 11, color: '#8E44AD', fontWeight: 700, whiteSpace: 'nowrap' }}>{it.pages.length} เพจ</span>
+              <button onClick={() => removeGroup(i)} style={{ padding: '8px 12px', borderRadius: 6, border: 'none', background: '#FADBD8', color: '#C0392B', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: T.font }}>ลบ</button>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {pageOptions.length === 0 && <span style={{ fontSize: 12, color: '#B2BABB' }}>ยังไม่มีเพจในรายการ (เพจจะขึ้นเมื่อมีออเดอร์)</span>}
-              {pageOptions.map(p => { const on = it.pages.includes(p); return (
+              {choices.length === 0 && <span style={{ fontSize: 12, color: '#B2BABB' }}>ไม่มีเพจให้เลือก (ถูกจัดกลุ่มอื่นหมดแล้ว)</span>}
+              {choices.map(p => { const on = it.pages.includes(p); return (
                 <button key={p} onClick={() => togglePage(i, p)} style={{ padding: '5px 10px', borderRadius: 20, border: on ? 'none' : '1px solid #DEE2E6', background: on ? '#8E44AD' : '#fff', color: on ? '#fff' : '#5D6D7E', fontSize: 11, fontWeight: on ? 700 : 400, cursor: 'pointer', fontFamily: T.font }}>{on ? '✓ ' : ''}{p}</button>
               ) })}
             </div>
           </div>
-        ))}
+        )})}
         {err && <div style={{ color: '#C0392B', fontSize: 12, marginBottom: 10 }}>⚠️ {err}</div>}
         <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
           <button onClick={addGroup} style={{ padding: '9px 14px', borderRadius: 6, border: '1px dashed #8E44AD', background: '#fff', color: '#8E44AD', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: T.font }}>+ เพิ่มกลุ่ม</button>
