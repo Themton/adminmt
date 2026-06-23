@@ -34,15 +34,42 @@ export default function App() {
   const [profile, setProfile] = useState(null)
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user) {
+    let active = true
+
+    const fetchProfile = async (uid) => {
+      const { data, error } = await supabase.from('mt_profiles').select('*, mt_teams(id, name)').eq('id', uid).single()
+      if (data) return { profile: data }
+      if (error && error.code === 'PGRST116') return { missing: true }   // ไม่มีโปรไฟล์จริงๆ
+      throw error || new Error('profile fetch failed')
+    }
+
+    const restore = async () => {
+      let session = null
+      try { session = (await supabase.auth.getSession()).data.session } catch (e) {}
+      if (!active) return
+      if (!session?.user) { setStatus('login'); return }
+      // session ยังอยู่ → โหลดโปรไฟล์ ลองซ้ำถ้าเน็ตมือถือสะดุด (ไม่เด้งออกทันทีเหมือนเดิม)
+      for (let i = 0; i < 5 && active; i++) {
         try {
-          const { data } = await supabase.from('mt_profiles').select('*, mt_teams(id, name)').eq('id', session.user.id).single()
-          if (data) { setProfile(data); setStatus('ready'); return }
-        } catch (e) { console.error('Profile fetch error:', e) }
+          const res = await fetchProfile(session.user.id)
+          if (!active) return
+          if (res.missing) { await supabase.auth.signOut(); setStatus('login'); return }
+          setProfile(res.profile); setStatus('ready'); return
+        } catch (e) {
+          console.error('Profile fetch error (retry ' + (i + 1) + '):', e)
+          if (i < 4) await new Promise(r => setTimeout(r, 1000 * (i + 1)))   // backoff 1-4s
+        }
       }
-      setStatus('login')
-    }).catch(() => setStatus('login'))
+      if (active) setStatus('login')
+    }
+    restore()
+
+    // sync เมื่อ session เปลี่ยน (เช่น token refresh สำเร็จ/ล้มเหลว)
+    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+      if (!active) return
+      if (event === 'SIGNED_OUT') { setProfile(null); setStatus('login') }
+    })
+    return () => { active = false; sub?.subscription?.unsubscribe() }
   }, [])
 
   async function handleLogin(email, password) {
