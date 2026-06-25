@@ -294,7 +294,24 @@ export default function BossDashboard() {
     if (productMap[r]) return productMap[r]
     return r
   }
-  const saveProductMap = (m) => { setProductMap(m); localStorage.setItem('boss_product_map', JSON.stringify(m)) }
+  const saveProductMap = (m) => {
+    setProductMap(m)
+    localStorage.setItem('boss_product_map', JSON.stringify(m))   // cache เร็วในเครื่อง
+    supabase.from('mt_settings').upsert({ key: 'product_map', value: m, updated_at: new Date().toISOString() }, { onConflict: 'key' }).then(() => {}, () => {})   // ซิงค์ขึ้น DB
+  }
+  // โหลดการจัดกลุ่มสินค้าจาก DB (ซิงค์ทุกเครื่อง) + migrate ของเดิมในเครื่องขึ้น DB ครั้งแรก
+  useEffect(() => {
+    supabase.from('mt_settings').select('value').eq('key', 'product_map').maybeSingle().then(({ data }) => {
+      if (data && data.value && typeof data.value === 'object' && Object.keys(data.value).length) {
+        setProductMap(data.value)
+        localStorage.setItem('boss_product_map', JSON.stringify(data.value))
+      } else {
+        let local = {}
+        try { local = JSON.parse(localStorage.getItem('boss_product_map') || '{}') } catch (e) {}
+        if (Object.keys(local).length) supabase.from('mt_settings').upsert({ key: 'product_map', value: local }, { onConflict: 'key' }).then(() => {}, () => {})
+      }
+    }, () => {})
+  }, [])
 
   const stats = useMemo(() => {
     let _totalSales = 0, _codCount = 0, _transCount = 0, _codTotal = 0, _transTotal = 0
