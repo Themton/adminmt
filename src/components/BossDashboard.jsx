@@ -312,6 +312,19 @@ export default function BossDashboard() {
       }
     }, () => {})
   }, [])
+  // เรียลไทม์: เครื่องอื่นแก้การจัดกลุ่มสินค้า → เด้งอัปเดตทันทีไม่ต้องรีเฟรช
+  useEffect(() => {
+    const ch = supabase.channel('boss-settings')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'mt_settings' }, payload => {
+        const row = payload.new
+        if (row && row.key === 'product_map' && row.value && typeof row.value === 'object') {
+          setProductMap(row.value)
+          localStorage.setItem('boss_product_map', JSON.stringify(row.value))
+        }
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [])
 
   const stats = useMemo(() => {
     let _totalSales = 0, _codCount = 0, _transCount = 0, _codTotal = 0, _transTotal = 0

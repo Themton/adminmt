@@ -24,3 +24,8 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN
   CREATE POLICY "mt_settings_update" ON mt_settings FOR UPDATE USING (auth.uid() IS NOT NULL);
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- เปิด realtime ให้ตารางนี้ (เพื่อให้ซิงค์สดทุกเครื่อง)
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE mt_settings;
+EXCEPTION WHEN others THEN NULL; END $$;
