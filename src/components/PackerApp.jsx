@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { createFlashOrder, trackFlashOrder, pingFlash, cancelFlashOrder } from '../lib/flashApi'
 import { T, fmt, LiveDot, Toast, Empty, Pagination, Modal } from './ui'
 import { exportProshipExcel } from '../lib/exportProship'
+import { exportJntExcel } from '../lib/exportJnt'
 import { parseSmartPaste } from '../lib/smartPaste'
 
 let _addrCache = null
@@ -439,6 +440,12 @@ export default function PackerApp({ profile, onLogout }) {
   const pageOptions = [...new Set(shipOrders.map(o => (o.sales_channel||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'th'))
   const selectedGroup = groupFilter==='all' ? null : productGroups.find(g => g.id===groupFilter)
   const groupPageSet = selectedGroup ? new Set((selectedGroup.pages||[]).map(s => String(s).trim())) : null
+  const runJnt = (rows) => {
+    if (!rows.length) { flash('ไม่มีรายการให้ส่งออก'); return }
+    exportJntExcel(rows, 'JT_' + new Date().toISOString().split('T')[0] + '_' + rows.length + '.xlsx', profile, 'shipping')
+      .then(r => { flash(r.unmatched ? `⚠️ ส่งออก J&T ${r.count} รายการ — ที่อยู่ไม่ตรง ${r.unmatched} รายการ (ช่องสีแดง)` : `✅ ส่งออกข้อมูล J&T EXPRESS สำเร็จ — ${r.count} รายการ`); logActivity('export', `ส่งออก J&T ${r.count} รายการ`, r.count) })
+      .catch(e => flash('❌ ' + e.message))
+  }
   const searchFiltered = shipOrders.filter(o => { if(!searchQuery)return true; const q=searchQuery.toLowerCase(); return(o.customer_name||'').toLowerCase().includes(q)||(o.customer_phone||'').includes(q)||(o.flash_pno||'').includes(q)||(o.remark||'').toLowerCase().includes(q) }).filter(o => priceFilter==='all' ? true : String(parseFloat(o.cod_amount||o.sale_price)||0)===priceFilter).filter(o => pageFilter==='all' ? true : (o.sales_channel||'').trim()===pageFilter).filter(o => !groupPageSet ? true : groupPageSet.has((o.sales_channel||'').trim()))
   // ═══ Confirm Modal ═══
   const [confirmModal, setConfirmModal] = useState(null) // { title, message, color, icon, onConfirm }
@@ -691,6 +698,7 @@ export default function PackerApp({ profile, onLogout }) {
               </select>
               {(priceFilter!=='all'||pageFilter!=='all'||groupFilter!=='all')&&(()=>{const tags=[selectedGroup?('🏷️'+selectedGroup.name):null,pageFilter!=='all'?pageFilter:null,priceFilter!=='all'?('฿'+priceFilter):null].filter(Boolean);const label=tags.join(' · ');return <button onClick={()=>{const rows=searchFiltered;if(!rows.length){flash('ไม่มีรายการให้ Export');return}const safe=label.replace(/[^\w฿ก-๙]+/g,'_');exportProshipExcel(rows,`Export_${safe}_${rows.length}.xlsx`,profile,'shipping');flash(`✅ Export ${label} — ${rows.length} รายการ`);logActivity('export',`Export (${label}) จำนวน ${rows.length} รายการ`,rows.length)}} style={{padding:'7px 12px',borderRadius:6,border:'none',background:'#27AE60',color:'#fff',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font,whiteSpace:'nowrap'}}>📊 Export {label} ({searchFiltered.length})</button>})()}
               <input placeholder="ค้นหา ชื่อ เบอร์ เลขพัสดุ..." value={searchQuery} onChange={e=>{setSearchQuery(e.target.value);setPage(1)}} style={{padding:'7px 12px',borderRadius:6,border:'1px solid #DEE2E6',fontSize:12,fontFamily:T.font,width:220}} />
+              <button onClick={()=>runJnt(searchFiltered)} style={{padding:'7px 12px',borderRadius:6,border:'none',background:'#E3000F',color:'#fff',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font,whiteSpace:'nowrap'}}>🚚 ส่งออกข้อมูล J&T EXPRESS ({searchFiltered.length})</button>
             </div>
 
             {/* Status tabs */}
@@ -706,6 +714,7 @@ export default function PackerApp({ profile, onLogout }) {
               <button onClick={()=>bulkCreateFlash(orders.filter(o=>selectedIds.has(o.id)))} disabled={bulkCreating} style={{padding:'6px 14px',borderRadius:6,border:'none',background:bulkCreating?'#BDC3C7':'#E67E22',color:'#fff',fontSize:11,fontWeight:700,cursor:bulkCreating?'wait':'pointer',fontFamily:T.font}}>{bulkCreating?'⏳ '+bulkProgress.done+'/'+bulkProgress.total:'⚡ สร้างเลขพัสดุ ('+selectedIds.size+')'}</button>
               <button onClick={()=>printLabels(orders.filter(o=>selectedIds.has(o.id)))} style={{padding:'6px 12px',borderRadius:6,border:'1px solid #E67E22',background:'#FEF5E7',color:'#E67E22',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>🖨 ปริ้นใบปะหน้า</button>
               <button onClick={()=>{exportProshipExcel(orders.filter(o=>selectedIds.has(o.id)),'Selected.xlsx',profile,'shipping');flash('Export OK'); logActivity('export', `Export ${orders.filter(o=>selectedIds.has(o.id)).length} รายการ`, selectedIds.size)}} style={{padding:'6px 12px',borderRadius:6,border:'1px solid #2980B9',background:'#EBF5FB',color:'#2980B9',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>📊 Export</button>
+              <button onClick={()=>runJnt(orders.filter(o=>selectedIds.has(o.id)))} style={{padding:'6px 12px',borderRadius:6,border:'none',background:'#E3000F',color:'#fff',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font,whiteSpace:'nowrap'}}>🚚 ส่งออกข้อมูล J&T EXPRESS ({selectedIds.size})</button>
               {(()=>{const wp=orders.filter(o=>selectedIds.has(o.id)&&o.flash_pno);return wp.length>0&&<button onClick={()=>markStatus([...selectedIds].filter(id=>orders.find(o=>o.id===id)?.flash_pno),'upsell')} style={{padding:'6px 12px',borderRadius:6,border:'1px solid #8E44AD',background:'#F4ECF7',color:'#8E44AD',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>💰 รออัพเซล ({wp.length})</button>})()}
               <button onClick={()=>bulkDeleteOrders([...selectedIds])} disabled={!!gProgress} style={{padding:'6px 12px',borderRadius:6,border:'1px solid #E74C3C',background:'#FDEDEC',color:'#E74C3C',fontSize:11,fontWeight:700,cursor:gProgress?'wait':'pointer',fontFamily:T.font}}>🗑 ลบ ({selectedIds.size})</button>
               <button onClick={()=>setSelectedIds(new Set())} style={{padding:'6px 8px',borderRadius:6,border:'1px solid #DEE2E6',background:'#fff',color:'#85929E',fontSize:11,cursor:'pointer'}}>✕</button>
