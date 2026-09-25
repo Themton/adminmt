@@ -171,7 +171,7 @@ export default function ExportApp({ profile, onLogout }) {
               <div style={{flex:1}} />
               <span style={{fontSize:12,color:'#85929E'}}>{filtered.length} รายการ | ฿{fmt(totalSales)}</span>
               <button onClick={()=>doExport('xlsx')} style={{padding:'7px 16px',borderRadius:6,border:'none',background:'#27AE60',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>📊 Excel ({selectedIds.size>0?selectedIds.size:filtered.length})</button>
-              <button onClick={()=>doExport('jnt')} style={{padding:'7px 16px',borderRadius:6,border:'none',background:'#E3000F',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>🚚 J&T ({selectedIds.size>0?selectedIds.size:filtered.length})</button>
+              <button onClick={()=>doExport('jnt')} style={{padding:'7px 16px',borderRadius:6,border:'none',background:'#E3000F',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>🚚 ส่งออกข้อมูล J&T EXPRESS ({selectedIds.size>0?selectedIds.size:filtered.length})</button>
               <button onClick={()=>doExport('csv')} style={{padding:'7px 16px',borderRadius:6,border:'1px solid #27AE60',background:'#EAFAF1',color:'#27AE60',fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>📥 CSV</button>
             </div>
 

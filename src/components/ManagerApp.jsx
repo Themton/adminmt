@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { syncOrderToSheet, updateOrderInSheet, deleteOrderFromSheet, syncAllToSheet, resetSheet } from '../lib/sheetSync'
 import { createFlashOrder, trackFlashOrder, notifyFlashCourier, pingFlash, cancelFlashOrder } from '../lib/flashApi'
 import { exportProshipExcel, exportProshipCSV, fetchExportLogs } from '../lib/exportProship'
+import { exportJntExcel } from '../lib/exportJnt'
 import OrderForm from './OrderForm'
 import { T, glass, fmt, fmtDate, fmtDateFull, fmtDateTime, sameDay, withinDays, thisMonth, Stat, Tabs, Btn, Toast, Modal, Empty, LiveDot, Pagination } from './ui'
 
@@ -1655,12 +1656,20 @@ export default function ManagerApp({ profile, onLogout }) {
             flash('✅ เปลี่ยนกลับเป็นรอส่ง ' + ids.length + ' รายการ')
           }
 
+          const runJnt = (rows) => {
+            if (!rows.length) { flash('ไม่มีรายการให้ส่งออก'); return }
+            exportJntExcel(rows, 'JT_' + (dateFilter||'all') + '_' + rows.length + '.xlsx', profile, 'shipping')
+              .then(r => flash(r.unmatched ? `⚠️ ส่งออก J&T ${r.count} รายการ — ที่อยู่ไม่ตรง ${r.unmatched} รายการ (ช่องสีแดง)` : `✅ ส่งออกข้อมูล J&T EXPRESS สำเร็จ — ${r.count} รายการ`))
+              .catch(e => flash('❌ ' + e.message))
+          }
+
           const exportShip = (type) => {
             const rows = shipOrders.filter(o => {
               if (!searchQuery) return true
               const q = searchQuery.toLowerCase()
               return (o.customer_name||'').toLowerCase().includes(q) || (o.customer_phone||'').includes(q) || (o.employee_name||'').toLowerCase().includes(q) || (o.flash_pno||'').toLowerCase().includes(q)
             })
+            if (type === 'jnt') { runJnt(rows); return }
             if (type === 'csv') { exportProshipCSV(rows, 'Orders_' + (dateFilter||'all') + '.csv', profile, 'shipping'); flash('✅ Export CSV สำเร็จ!') }
             else { exportProshipExcel(rows, 'Orders_' + (dateFilter||'all') + '.xlsx', profile, 'shipping').then(() => flash('✅ Export Excel สำเร็จ!')) }
           }
@@ -1694,6 +1703,7 @@ export default function ManagerApp({ profile, onLogout }) {
               <button onClick={() => setShowFlashSrc(true)} style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid #D5D8DC', background: '#fff', color: '#5D6D7E', fontSize: 13, cursor: 'pointer', fontFamily: T.font }}>⚙️</button>
               <button onClick={() => exportShip('excel')} style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid #27AE60', background: '#EAFAF1', color: '#27AE60', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>📊 Excel</button>
               <button onClick={() => exportShip('csv')} style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid #D5D8DC', background: '#fff', color: '#5D6D7E', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: T.font }}>📥 CSV</button>
+              <button onClick={() => exportShip('jnt')} style={{ padding: '8px 14px', borderRadius: 6, border: 'none', background: '#E3000F', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: T.font, whiteSpace: 'nowrap' }}>🚚 ส่งออกข้อมูล J&T EXPRESS</button>
               {(() => { const p = shipOrders.filter(o => o.flash_pno); return p.length > 0 && <button onClick={() => notifyCourier(p.map(o => o.flash_pno))} style={{ padding: '8px 16px', borderRadius: 6, border: 'none', background: '#27AE60', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: T.font, whiteSpace: 'nowrap' }}>📞 เรียกรับพัสดุ</button> })()}
             </div>
 
@@ -1773,6 +1783,7 @@ export default function ManagerApp({ profile, onLogout }) {
                   const sel = orders.filter(o => shipSelected.has(o.id))
                   exportProshipExcel(sel, 'Selected_' + sel.length + '.xlsx', profile, 'shipping').then(() => flash('✅ Export สำเร็จ'))
                 }} style={{ padding: '7px 14px', borderRadius: 6, border: '1px solid #2980B9', background: '#EBF5FB', color: '#2980B9', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: T.font }}>📊 Export ที่เลือก</button>
+                <button onClick={() => runJnt(orders.filter(o => shipSelected.has(o.id)))} style={{ padding: '7px 14px', borderRadius: 6, border: 'none', background: '#E3000F', color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: T.font, whiteSpace: 'nowrap' }}>🚚 ส่งออกข้อมูล J&T EXPRESS ({shipSelected.size})</button>
                 {/* ปริ้นใบปะหน้า */}
                 {(() => { const pnos = orders.filter(o => shipSelected.has(o.id) && o.flash_pno).map(o => o.flash_pno); return pnos.length > 0 && (
                   <button onClick={() => bulkPrintLabels(pnos)} style={{ padding: '7px 14px', borderRadius: 6, border: '1px solid #E67E22', background: '#FEF5E7', color: '#E67E22', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: T.font }}>🖨 ปริ้นใบปะหน้า ({pnos.length})</button>
