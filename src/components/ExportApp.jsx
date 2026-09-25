@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { T, fmt, LiveDot, Toast, Empty, Pagination } from './ui'
 import { exportProshipExcel, exportProshipCSV } from '../lib/exportProship'
+import { exportJntExcel } from '../lib/exportJnt'
 
 export default function ExportApp({ profile, onLogout }) {
   const [orders, setOrders] = useState([])
@@ -81,6 +82,12 @@ export default function ExportApp({ profile, onLogout }) {
   const doExport = (type, data) => {
     const exportData = data || (selectedIds.size > 0 ? filtered.filter(o => selectedIds.has(o.id)) : filtered)
     const fileName = `Export_${dateFilter||'all'}_${exportData.length}`
+    if (type === 'jnt') {
+      exportJntExcel(exportData, `JT_${dateFilter||'all'}_${exportData.length}.xlsx`, profile, 'export')
+        .then(r => flash(r.unmatched ? `⚠️ Export J&T แล้ว ${r.count} รายการ — ที่อยู่ไม่ตรงรายชื่อ J&T ${r.unmatched} รายการ (ช่องสีแดง ตรวจก่อนอัปโหลด)` : `✅ Export J&T สำเร็จ — ${r.count} รายการ`))
+        .catch(e => flash('❌ ' + e.message))
+      return
+    }
     if (type === 'csv') { exportProshipCSV(exportData, fileName + '.csv', profile, 'export'); flash('✅ Export CSV สำเร็จ — ' + exportData.length + ' รายการ') }
     else { exportProshipExcel(exportData, fileName + '.xlsx', profile, 'export').then(() => flash('✅ Export Excel สำเร็จ — ' + exportData.length + ' รายการ')) }
   }
@@ -164,6 +171,7 @@ export default function ExportApp({ profile, onLogout }) {
               <div style={{flex:1}} />
               <span style={{fontSize:12,color:'#85929E'}}>{filtered.length} รายการ | ฿{fmt(totalSales)}</span>
               <button onClick={()=>doExport('xlsx')} style={{padding:'7px 16px',borderRadius:6,border:'none',background:'#27AE60',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>📊 Excel ({selectedIds.size>0?selectedIds.size:filtered.length})</button>
+              <button onClick={()=>doExport('jnt')} style={{padding:'7px 16px',borderRadius:6,border:'none',background:'#E3000F',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>🚚 J&T ({selectedIds.size>0?selectedIds.size:filtered.length})</button>
               <button onClick={()=>doExport('csv')} style={{padding:'7px 16px',borderRadius:6,border:'1px solid #27AE60',background:'#EAFAF1',color:'#27AE60',fontSize:12,fontWeight:700,cursor:'pointer',fontFamily:T.font}}>📥 CSV</button>
             </div>
 
