@@ -130,7 +130,10 @@ export async function exportJntExcel(orders, filename, profile, filterInfo) {
     r.getCell(COL.subDistrict).value = a.sub
     r.getCell(COL.zip).value = String(o.zip_code || '')
     r.getCell(COL.address).value = o.customer_address || ''
-    r.getCell(COL.item).value = pgMap[(o.sales_channel || '').trim()] || ''
+    // รายละเอียดพัสดุ: กลุ่มสินค้า (ถ้าตั้งไว้) + หมายเหตุ เช่น "ครีมหน้าขาว Rong2ปลายทาง190"
+    const group = pgMap[(o.sales_channel || '').trim()] || ''
+    const rem = String(o.remark || '').trim()
+    r.getCell(COL.item).value = [group, rem].filter(Boolean).join(' ') || (o.sales_channel || '').trim() || 'สินค้า'
     r.getCell(COL.remark).value = o.remark || ''
     r.getCell(COL.cod).value = cod
 
