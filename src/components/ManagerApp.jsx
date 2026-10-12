@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { supabase } from '../lib/supabase'
+import { mergeSecrets } from '../lib/profileSecrets'
 import { syncOrderToSheet, updateOrderInSheet, deleteOrderFromSheet, syncAllToSheet, resetSheet } from '../lib/sheetSync'
 import { createFlashOrder, trackFlashOrder, notifyFlashCourier, pingFlash, cancelFlashOrder } from '../lib/flashApi'
 import { exportProshipExcel, exportProshipCSV, fetchExportLogs } from '../lib/exportProship'
@@ -454,7 +455,7 @@ export default function ManagerApp({ profile, onLogout }) {
           supabase.from('mt_profiles').select('*, mt_teams(id, name)').order('created_at', { ascending: false }),
         ])
         setTeams(teamsRes.data || [])
-        setProfiles(profilesRes.data || [])
+        setProfiles(await mergeSecrets(profilesRes.data || []))
       } catch (e) { console.error('Load error:', e) }
     }
     loadAll()
@@ -477,7 +478,7 @@ export default function ManagerApp({ profile, onLogout }) {
     // Realtime — profiles + teams
     const ch2 = supabase.channel('mgr-profiles')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'mt_profiles' },
-        () => { supabase.from('mt_profiles').select('*, mt_teams(name)').then(({ data }) => { if (data) setProfiles(data) }) }
+        () => { supabase.from('mt_profiles').select('*, mt_teams(name)').then(async ({ data }) => { if (data) setProfiles(await mergeSecrets(data)) }) }
       )
       .on('postgres_changes', { event: '*', schema: 'public', table: 'mt_teams' },
         () => { supabase.from('mt_teams').select('*').order('name').then(({ data }) => { if (data) setTeams(data) }) }
@@ -603,7 +604,7 @@ export default function ManagerApp({ profile, onLogout }) {
       }
 
       const { data: profs } = await supabase.from('mt_profiles').select('*, mt_teams(id, name)').order('created_at', { ascending: false })
-      setProfiles(profs || [])
+      setProfiles(await mergeSecrets(profs || []))
       setShowUserModal(false); setUserForm({ email: '', password: '', fullName: '', role: 'employee', teamId: '' })
     } catch (e) {
       flash('❌ เกิดข้อผิดพลาด: ' + e.message)
@@ -622,7 +623,7 @@ export default function ManagerApp({ profile, onLogout }) {
     }).eq('id', u.id)
     if (error) { flash('❌ ' + error.message); return }
     const { data: profs } = await supabase.from('mt_profiles').select('*, mt_teams(id, name)').order('created_at', { ascending: false })
-    setProfiles(profs || [])
+    setProfiles(await mergeSecrets(profs || []))
     setEditUserData(null); flash('✅ แก้ไขสำเร็จ')
   }
 
@@ -639,7 +640,7 @@ export default function ManagerApp({ profile, onLogout }) {
     if (!editUser) return
     await supabase.from('mt_profiles').update({ team_id: editUserTeam || null }).eq('id', editUser.id)
     const { data: profs } = await supabase.from('mt_profiles').select('*, mt_teams(id, name)').order('created_at', { ascending: false })
-    setProfiles(profs || [])
+    setProfiles(await mergeSecrets(profs || []))
     setEditUser(null); flash('✅ เปลี่ยนทีมสำเร็จ')
   }
 

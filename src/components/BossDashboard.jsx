@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { supabase } from '../lib/supabase'
+import { mergeSecrets } from '../lib/profileSecrets'
 import SalesCompare from './SalesCompare'
 
 // ═══════════════════════════════════════════
@@ -240,7 +241,7 @@ export default function BossDashboard() {
       setOrders(ords)
       setPrevOrders(prev)
       if (teamRes.data) setTeams(teamRes.data)
-      if (profRes.data) setProfiles(profRes.data)
+      if (profRes.data) setProfiles(await mergeSecrets(profRes.data))
       setDataLoading(false)
     }
     fetchAll()
@@ -479,7 +480,7 @@ export default function BossDashboard() {
 
   const refreshProfiles = async () => {
     const { data } = await supabase.from('mt_profiles').select('*, mt_teams(id, name)').order('created_at', { ascending: false })
-    if (data) setProfiles(data)
+    if (data) setProfiles(await mergeSecrets(data))
   }
   const refreshTeams = async () => {
     const { data } = await supabase.from('mt_teams').select('*').order('name')
