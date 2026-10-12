@@ -5,6 +5,7 @@ import { syncOrderToSheet } from '../lib/sheetSync'
 import { trackFlashOrder } from '../lib/flashApi'
 import { T, glass, fmt, fmtDate, fmtDateFull, fmtDateTime, sameDay, withinDays, thisMonth, Stat, Tabs, Btn, Toast, Empty, LiveDot } from './ui'
 import { parseSmartPaste } from '../lib/smartPaste'
+import { findDuplicateOrder, normalizePhone, normalizePage, fmtDupDate } from '../lib/dupCheck'
 
 // โหลด addresses แบบ lazy — ไม่บล็อคหน้าเว็บ
 let _addrCache = null
@@ -252,18 +253,17 @@ export default function EmployeeApp({ profile, onLogout }) {
     setSubmitting(true)
     const amt = parseFloat(form.amount) || 0
 
-    // เช็คซ้ำ: เบอร์เดียวกัน + เพจเดียวกัน + ย้อนหลัง 3 วัน
-    const threeDaysAgo = new Date(); threeDaysAgo.setDate(threeDaysAgo.getDate() - 3)
-    const fromDate = threeDaysAgo.toISOString().split('T')[0]
-    const { data: dupCheck } = await supabase.from('mt_orders')
-      .select('id, customer_name, order_date, created_at')
-      .eq('customer_phone', form.customerPhone)
-      .eq('sales_channel', form.salesChannel || '')
-      .gte('order_date', fromDate)
-    if (dupCheck && dupCheck.length > 0) {
-      const dup = dupCheck[0]
-      const dupDate = new Date(dup.created_at).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-      setToast('❌ ออเดอร์ซ้ำ! เบอร์ ' + form.customerPhone + ' (' + dup.customer_name + ') สั่งแล้วเมื่อ ' + dupDate + ' เพจ: ' + (form.salesChannel || '—'))
+    // เช็คซ้ำ: เบอร์เดียวกัน + เพจเดียวกัน + ย้อนหลัง 3 วัน (พนักงานลงซ้ำไม่ได้)
+    const phone = normalizePhone(form.customerPhone)
+    const page = normalizePage(form.salesChannel)
+    const chk = await findDuplicateOrder(phone, page)
+    if (chk.error) {
+      setToast('❌ ตรวจสอบออเดอร์ซ้ำไม่สำเร็จ (เน็ตสะดุด?) กรุณากดบันทึกอีกครั้ง')
+      setSubmitting(false); setTimeout(() => setToast(null), 4000); return
+    }
+    if (chk.dup) {
+      const dup = chk.dup
+      setToast('❌ ออเดอร์ซ้ำ! เบอร์ ' + phone + ' (' + dup.customer_name + ') สั่งแล้วเมื่อ ' + fmtDupDate(dup.created_at) + ' เพจ: ' + (dup.sales_channel || '—'))
       setSubmitting(false); setTimeout(() => setToast(null), 5000)
       return
     }
@@ -280,17 +280,17 @@ export default function EmployeeApp({ profile, onLogout }) {
 
     const { data: newOrder, error } = await supabase.from('mt_orders').insert({
       order_date: new Date().toISOString().split('T')[0],
-      customer_phone: form.customerPhone, customer_name: form.customerName,
+      customer_phone: phone, customer_name: form.customerName.trim(),
       customer_address: form.customerAddress, sub_district: form.subDistrict,
       district: form.district, zip_code: form.zipCode, province: form.province,
       customer_social: form.customerSocial,
-      sales_channel: form.salesChannel, sale_price: amt,
+      sales_channel: page, sale_price: amt,
       cod_amount: paymentType === 'cod' ? amt : 0,
       payment_type: paymentType,
       slip_url: slipUrl,
       remark: form.remark, employee_id: profile.id, team_id: profile.team_id, employee_name: profile.full_name,
     }).select().single()
-    if (error) { setToast(`❌ ${error.message}`) } else {
+    if (error) { setToast(error.message?.includes('DUPLICATE_ORDER') ? '❌ ออเดอร์ซ้ำ! เบอร์นี้ลงในเพจนี้ไปแล้วภายใน 3 วัน' : `❌ ${error.message}`) } else {
       syncOrderToSheet(newOrder, profile.full_name)
       setToast('✅ บันทึกออเดอร์สำเร็จ!'); clearForm()
     }

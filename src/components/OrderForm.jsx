@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { syncOrderToSheet } from '../lib/sheetSync'
 import { T, glass, Btn, Toast } from './ui'
 import { parseSmartPaste, validatePhone } from '../lib/smartPaste'
+import { findDuplicateOrder, normalizePhone, normalizePage, fmtDupDate } from '../lib/dupCheck'
 
 // ════════════════════════════════════════════
 //  Shared: getAddresses, parseSmartPaste, validatePhone, AddressSearch
@@ -118,24 +119,19 @@ export default function OrderForm({ profile, onSuccess }) {
     setSubmitting(true)
 
     // เช็คซ้ำ: เบอร์เดียวกัน + เพจเดียวกัน + ย้อนหลัง 3 วัน
-    const isBoss = profile.role === 'manager' || profile.role === 'admin'
-    const threeDaysAgo = new Date(); threeDaysAgo.setDate(threeDaysAgo.getDate() - 3)
-    const fromDate = threeDaysAgo.toISOString().split('T')[0]
-    const { data: dupCheck } = await supabase.from('mt_orders')
-      .select('id, customer_name, order_date, created_at')
-      .eq('customer_phone', form.customerPhone)
-      .eq('sales_channel', form.salesChannel || '')
-      .gte('order_date', fromDate)
-    if (dupCheck && dupCheck.length > 0) {
-      const dup = dupCheck[0]
-      const dupDate = new Date(dup.created_at).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-      if (isBoss) {
-        // หัวหน้า/แอดมิน: แจ้งเตือนว่ามีออเดอร์แล้ว — กดยืนยันเพื่อลงซ้ำได้
-        const ok = window.confirm('⚠️ เบอร์ ' + form.customerPhone + ' (' + dup.customer_name + ') มีออเดอร์ลงไปแล้วเมื่อ ' + dupDate + ' เพจ: ' + (form.salesChannel || '—') + '\n\nต้องการลงออเดอร์ซ้ำหรือไม่?')
-        if (!ok) { setSubmitting(false); return }
+    // แอดมิน = บล็อกเหมือนพนักงาน | หัวหน้า (manager) = เตือนแล้วกดยืนยันลงซ้ำได้
+    const isManager = profile.role === 'manager'
+    const phone = normalizePhone(form.customerPhone)
+    const page = normalizePage(form.salesChannel)
+    const chk = await findDuplicateOrder(phone, page)
+    if (chk.error) { flash('❌ ตรวจสอบออเดอร์ซ้ำไม่สำเร็จ (เน็ตสะดุด?) กรุณากดบันทึกอีกครั้ง'); setSubmitting(false); return }
+    if (chk.dup) {
+      const dup = chk.dup
+      const msg = 'เบอร์ ' + phone + ' (' + dup.customer_name + ') มีออเดอร์แล้วเมื่อ ' + fmtDupDate(dup.created_at) + ' เพจ: ' + (dup.sales_channel || '—')
+      if (isManager) {
+        if (!window.confirm('⚠️ ' + msg + '\n\nต้องการลงออเดอร์ซ้ำหรือไม่?')) { setSubmitting(false); return }
       } else {
-        // พนักงานทั่วไป: บล็อก ไม่ให้ลงซ้ำ
-        flash('❌ ออเดอร์ซ้ำ! เบอร์ ' + form.customerPhone + ' (' + dup.customer_name + ') สั่งแล้วเมื่อ ' + dupDate + ' เพจ: ' + (form.salesChannel || '—'))
+        flash('❌ ออเดอร์ซ้ำ! ' + msg)
         setSubmitting(false)
         return
       }
@@ -152,16 +148,16 @@ export default function OrderForm({ profile, onSuccess }) {
 
     const { data: newOrder, error } = await supabase.from('mt_orders').insert({
       order_date: new Date().toISOString().split('T')[0],
-      customer_phone: form.customerPhone, customer_name: form.customerName,
+      customer_phone: phone, customer_name: form.customerName.trim(),
       customer_address: form.customerAddress, sub_district: form.subDistrict,
       district: form.district, zip_code: form.zipCode, province: form.province,
-      customer_social: form.customerSocial, sales_channel: form.salesChannel,
+      customer_social: form.customerSocial, sales_channel: page,
       sale_price: amt, cod_amount: paymentType === 'cod' ? amt : 0,
       payment_type: paymentType, slip_url: slipUrl,
       remark: form.remark, employee_id: profile.id, team_id: profile.team_id || null, employee_name: profile.full_name,
     }).select().single()
 
-    if (error) { flash('❌ ' + error.message) } else {
+    if (error) { flash(error.message?.includes('DUPLICATE_ORDER') ? '❌ ออเดอร์ซ้ำ! เบอร์นี้ลงในเพจนี้ไปแล้วภายใน 3 วัน' : '❌ ' + error.message) } else {
       syncOrderToSheet(newOrder, profile.full_name)
       flash('✅ บันทึกออเดอร์สำเร็จ!'); clearForm()
       if (onSuccess) onSuccess(newOrder)
