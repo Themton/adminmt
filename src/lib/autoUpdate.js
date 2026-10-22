@@ -3,26 +3,32 @@ export function createUpdateController({ currentVersion, fetchVersion, safeToRel
   let checking = false
   let pending = null
   let reloading = false
-  return async function check() {
+  const applyPending = () => {
+    if (!pending || reloading || !safeToReload()) return
+    let previous
+    try { previous = JSON.parse(storage?.getItem('adminmt-update-attempt') || 'null') } catch {}
+    if (previous?.version === pending && now() - previous.at < 300000) return
+    try { storage?.setItem('adminmt-update-attempt', JSON.stringify({ version: pending, at: now() })) } catch {}
+    reloading = true
+    reload()
+  }
+  const check = async () => {
     if (checking || reloading) return
     checking = true
     try {
       const version = await fetchVersion()
-      if (!version || version === currentVersion) { pending = null; notify(false); return }
+      if (!version) return
+      if (version === currentVersion) { pending = null; notify(false); return }
       pending = version
       notify(true)
-      if (!safeToReload()) return
-      // Avoid reload loops while a CDN edge is still serving the previous build.
-      let previous
-      try { previous = JSON.parse(storage?.getItem('adminmt-update-attempt') || 'null') } catch {}
-      if (previous?.version === pending && now() - previous.at < 300000) return
-      try { storage?.setItem('adminmt-update-attempt', JSON.stringify({ version: pending, at: now() })) } catch {}
-      reloading = true
-      reload()
+      applyPending()
     } catch {
-      // Offline, transient failures and incomplete deployments leave the page usable.
+      // A missed event is recovered on the next connection or return to the tab.
     } finally { checking = false }
   }
+  check.applyPending = applyPending
+  check.hasPending = () => Boolean(pending) && !reloading
+  return check
 }
 
 export function createInputGuard(doc, now = Date.now) {
@@ -63,7 +69,7 @@ export function createInputGuard(doc, now = Date.now) {
   }
 }
 
-export function startAutoUpdate({ currentVersion, versionUrl, intervalMs = 30000, idleMs = 15000, win = window, doc = document } = {}) {
+export function startAutoUpdate({ currentVersion, versionUrl, client, idleMs = 15000, win = window, doc = document } = {}) {
   const guard = createInputGuard(doc)
   let notice
   let stopped = false
@@ -91,16 +97,42 @@ export function startAutoUpdate({ currentVersion, versionUrl, intervalMs = 30000
     notify,
     storage: { getItem: key => win.sessionStorage.getItem(key), setItem: (key, val) => win.sessionStorage.setItem(key, val) },
   })
-  const onVisible = () => { if (doc.visibilityState === 'visible') void check() }
-  win.addEventListener('online', onVisible)
+  // Only local safety checks repeat while a known update is waiting: no HTTP polling.
+  let pendingTimer
+  let releaseTimer
+  let lastCheck = 0
+  const applyWhenSafe = () => {
+    win.clearTimeout(pendingTimer)
+    if (stopped) return
+    check.applyPending()
+    if (check.hasPending()) pendingTimer = win.setTimeout(applyWhenSafe, 2000)
+  }
+  const checkRelease = async () => {
+    if (stopped || Date.now() - lastCheck < 3000) return
+    lastCheck = Date.now()
+    await check()
+    applyWhenSafe()
+  }
+  const onVisible = () => {
+    if (doc.visibilityState === 'visible') void checkRelease()
+  }
+  // The notification contains only a commit ID. Always verify the same-origin
+  // deployment manifest; never execute code or navigate to URLs from an event.
+  const channel = client?.channel('adminmt-releases')
+    .on('broadcast', { event: 'deployed' }, ({ payload }) => {
+      if (typeof payload?.version === 'string' && payload.version !== currentVersion) {
+        win.clearTimeout(releaseTimer)
+        releaseTimer = win.setTimeout(checkRelease, 3100)
+      }
+    })
+    .subscribe(status => { if (status === 'SUBSCRIBED') void checkRelease() })
   doc.addEventListener('visibilitychange', onVisible)
-  const timer = win.setInterval(onVisible, intervalMs)
-  const first = win.setTimeout(onVisible, idleMs + 1000)
+  const first = channel ? null : win.setTimeout(checkRelease, idleMs + 1000)
   return () => {
     stopped = true
-    win.clearInterval(timer); win.clearTimeout(first)
-    win.removeEventListener('online', onVisible)
+    win.clearTimeout(pendingTimer); win.clearTimeout(releaseTimer); win.clearTimeout(first)
     doc.removeEventListener('visibilitychange', onVisible)
+    if (channel) void client.removeChannel(channel)
     guard.dispose(); notice?.remove()
   }
 }
