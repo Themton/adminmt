@@ -253,7 +253,7 @@ export default function EmployeeApp({ profile, onLogout }) {
     setSubmitting(true)
     const amt = parseFloat(form.amount) || 0
 
-    // เช็คซ้ำ: เบอร์เดียวกัน + เพจเดียวกัน + ย้อนหลัง 3 วัน (พนักงานลงซ้ำไม่ได้)
+    // เช็คซ้ำ: เบอร์เดียวกัน ทุกแอดมิน ทุกเพจ ภายใน 7 วัน (พนักงานลงซ้ำไม่ได้)
     const phone = normalizePhone(form.customerPhone)
     const page = normalizePage(form.salesChannel)
     const chk = await findDuplicateOrder(phone, page)
@@ -290,7 +290,7 @@ export default function EmployeeApp({ profile, onLogout }) {
       slip_url: slipUrl,
       remark: form.remark, employee_id: profile.id, team_id: profile.team_id, employee_name: profile.full_name,
     }).select().single()
-    if (error) { setToast(error.message?.includes('DUPLICATE_ORDER') ? '❌ ออเดอร์ซ้ำ! เบอร์นี้ลงในเพจนี้ไปแล้วภายใน 3 วัน' : `❌ ${error.message}`) } else {
+    if (error) { setToast(`❌ ${error.message}`) } else {
       syncOrderToSheet(newOrder, profile.full_name)
       setToast('✅ บันทึกออเดอร์สำเร็จ!'); clearForm()
     }
