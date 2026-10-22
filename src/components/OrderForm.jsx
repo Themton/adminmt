@@ -118,9 +118,7 @@ export default function OrderForm({ profile, onSuccess }) {
     }
     setSubmitting(true)
 
-    // เช็คซ้ำ: เบอร์เดียวกัน + เพจเดียวกัน + ย้อนหลัง 3 วัน
-    // แอดมิน = บล็อกเหมือนพนักงาน | หัวหน้า (manager) = เตือนแล้วกดยืนยันลงซ้ำได้
-    const isManager = profile.role === 'manager'
+    // บล็อกเบอร์เดียวกันทุกแอดมินและทุกเพจภายใน 7 วัน
     const phone = normalizePhone(form.customerPhone)
     const page = normalizePage(form.salesChannel)
     const chk = await findDuplicateOrder(phone, page)
@@ -128,13 +126,9 @@ export default function OrderForm({ profile, onSuccess }) {
     if (chk.dup) {
       const dup = chk.dup
       const msg = 'เบอร์ ' + phone + ' (' + dup.customer_name + ') มีออเดอร์แล้วเมื่อ ' + fmtDupDate(dup.created_at) + ' เพจ: ' + (dup.sales_channel || '—')
-      if (isManager) {
-        if (!window.confirm('⚠️ ' + msg + '\n\nต้องการลงออเดอร์ซ้ำหรือไม่?')) { setSubmitting(false); return }
-      } else {
-        flash('❌ ออเดอร์ซ้ำ! ' + msg)
-        setSubmitting(false)
-        return
-      }
+      flash('❌ ออเดอร์ซ้ำ! ' + msg + ' ไม่สามารถลงซ้ำภายใน 7 วัน')
+      setSubmitting(false)
+      return
     }
 
     let slipUrl = ''
@@ -157,7 +151,7 @@ export default function OrderForm({ profile, onSuccess }) {
       remark: form.remark, employee_id: profile.id, team_id: profile.team_id || null, employee_name: profile.full_name,
     }).select().single()
 
-    if (error) { flash(error.message?.includes('DUPLICATE_ORDER') ? '❌ ออเดอร์ซ้ำ! เบอร์นี้ลงในเพจนี้ไปแล้วภายใน 3 วัน' : '❌ ' + error.message) } else {
+    if (error) { flash('❌ ' + error.message) } else {
       syncOrderToSheet(newOrder, profile.full_name)
       flash('✅ บันทึกออเดอร์สำเร็จ!'); clearForm()
       if (onSuccess) onSuccess(newOrder)
