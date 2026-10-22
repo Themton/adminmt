@@ -38,6 +38,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Test update behavior
+        run: node --test tests/autoUpdate.test.mjs
+
       - name: Build
         run: npm run build
         env:
@@ -55,3 +58,10 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Notify connected apps after deployment
+        run: node scripts/notify-deployment.mjs
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
