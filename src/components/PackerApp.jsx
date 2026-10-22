@@ -5,6 +5,7 @@ import { T, fmt, LiveDot, Toast, Empty, Pagination, Modal } from './ui'
 import { exportProshipExcel } from '../lib/exportProship'
 import { exportJntExcel } from '../lib/exportJnt'
 import { parseSmartPaste } from '../lib/smartPaste'
+import { findDuplicateOrder, normalizePhone, fmtDupDate } from '../lib/dupCheck'
 
 let _addrCache = null
 async function getAddresses() { if (_addrCache) return _addrCache; const mod = await import('../data/addresses.json'); _addrCache = mod.default; return _addrCache }
@@ -269,24 +270,14 @@ export default function PackerApp({ profile, onLogout }) {
     if (!n.customer_name || !n.customer_phone) { flash('กรุณาใส่ชื่อและเบอร์โทร'); return }
     if (!n.district || !n.province || !n.zip_code) { flash('กรุณาใส่ อำเภอ จังหวัด รหัสไปรษณีย์'); return }
 
-    // Fix #1: เช็คออเดอร์ซ้ำ (เบอร์เดียวกัน ย้อนหลัง 3 วัน)
-    flash('⏳ กำลังตรวจสอบ...')
-    const threeDaysAgo = new Date(); threeDaysAgo.setDate(threeDaysAgo.getDate() - 3)
-    const fromDate = threeDaysAgo.toISOString().split('T')[0]
-    const { data: dupCheck } = await supabase.from('mt_orders')
-      .select('id, customer_name, created_at')
-      .eq('customer_phone', n.customer_phone.trim())
-      .gte('order_date', fromDate)
-    if (dupCheck && dupCheck.length > 0) {
-      const dup = dupCheck[0]
-      const dupDate = new Date(dup.created_at).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
-      if (!confirm(`⚠️ พบออเดอร์ซ้ำ!\n\nเบอร์ ${n.customer_phone} (${dup.customer_name})\nสั่งแล้วเมื่อ ${dupDate}\n\nต้องการสร้างซ้ำหรือไม่?`)) return
-    }
+    const chk = await findDuplicateOrder(n.customer_phone)
+    if (chk.error) { flash('❌ ตรวจสอบออเดอร์ซ้ำไม่สำเร็จ กรุณาลองใหม่'); return }
+    if (chk.dup) { flash('❌ เบอร์นี้มีการลงออเดอร์ไปแล้ว วันที่ ' + fmtDupDate(chk.dup.created_at) + ' ไม่สามารถลงซ้ำภายใน 7 วัน'); return }
 
     flash('⏳ กำลังบันทึก...')
     const orderData = {
       customer_name: n.customer_name.trim(),
-      customer_phone: n.customer_phone.trim(),
+      customer_phone: normalizePhone(n.customer_phone),
       customer_address: n.customer_address.trim(),
       sub_district: n.sub_district.trim(),
       district: n.district.trim(),
